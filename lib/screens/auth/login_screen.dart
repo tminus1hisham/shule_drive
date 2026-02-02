@@ -1,3 +1,4 @@
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/bus_illustration.dart';
@@ -9,7 +10,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passcodeController = TextEditingController();
   bool _obscurePasscode = true;
@@ -49,6 +51,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _login() async {
     setState(() => _isLoading = true);
+    HapticFeedback.lightImpact();
     await Future.delayed(const Duration(seconds: 1));
     if (mounted) {
       Navigator.pushReplacementNamed(context, '/landing');
@@ -69,8 +72,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               // Welcome Text
               _buildWelcomeText(),
               
-              // Bus Illustration
-              const BusIllustration(height: 180),
+              // Animated Bus Illustration
+              const BusIllustration(height: 200),
               
               // Login Form
               FadeTransition(
@@ -90,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.only(left: 24, top: 20),
+      padding: const EdgeInsets.only(left: 24, top: 20, right: 24),
       child: Row(
         children: [
           Container(
@@ -235,7 +238,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   borderRadius: BorderRadius.circular(16),
                 ),
                 elevation: 0,
-                disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                disabledBackgroundColor:
+                    const Color(0xFF6B9B5B).withValues(alpha: 0.5),
               ),
               child: _isLoading
                   ? const SizedBox(
