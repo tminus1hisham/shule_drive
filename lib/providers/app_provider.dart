@@ -7,10 +7,27 @@ class AppProvider extends ChangeNotifier {
   bool _isDarkMode = false;
   bool get isDarkMode => _isDarkMode;
 
+  // Theme colors
+  static const Color primaryGreen = Color(0xFF6B9B5B);
+  static const Color lightBackground = Color(0xFFF5F5F0);
+  static const Color darkBackground = Color(0xFF121212);
+  static const Color cardLight = Colors.white;
+  static const Color cardDark = Color(0xFF1E1E1E);
+  static const Color textPrimary = Color(0xFF1A1A1A);
+  static const Color textSecondary = Color(0xFF666666);
+  static const Color accentGreen = Color(0xFFE8F5E9);
+
+  ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
+
   void toggleTheme() {
     _isDarkMode = !_isDarkMode;
     notifyListeners();
   }
+
+  Color get backgroundColor => _isDarkMode ? darkBackground : lightBackground;
+  Color get cardColor => _isDarkMode ? cardDark : cardLight;
+  Color get textColor => _isDarkMode ? Colors.white : textPrimary;
+  Color get textMutedColor => _isDarkMode ? Colors.white70 : textSecondary;
 
   // User data
   Map<String, dynamic> userData = {
@@ -193,4 +210,9 @@ class AppProvider extends ChangeNotifier {
     userData = {...userData, ...newData};
     notifyListeners();
   }
+
+  // Quick stats
+  int get totalTrips => trips.length;
+  int get completedTrips => trips.where((t) => t.status == TripStatus.completed).length;
+  double get totalDistance => trips.fold(0, (sum, t) => sum + t.distance);
 }

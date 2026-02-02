@@ -1,0 +1,701 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../models/chat_message.dart';
+import '../../providers/app_provider.dart';
+import '../../providers/chat_provider.dart';
+
+class ChatScreen extends StatefulWidget {
+  final String? receiverId;
+  final String? receiverName;
+  final String? receiverAvatar;
+
+  const ChatScreen({
+    super.key,
+    this.receiverId,
+    this.receiverName,
+    this.receiverAvatar,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  ChatProvider? _chatProvider;
+  bool _isInitializing = true;
+  String? _initError;
+  bool _showScrollToBottom = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeChat();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      final showButton = maxScroll - currentScroll > 200;
+      
+      if (showButton != _showScrollToBottom) {
+        setState(() => _showScrollToBottom = showButton);
+      }
+    }
+  }
+
+  Future<void> _initializeChat() async {
+    try {
+      final receiverId = widget.receiverId ?? 'user2';
+      final currentUserId = 'user1';
+
+      _chatProvider = ChatProvider();
+      await _chatProvider!.initialize(currentUserId, receiverId);
+
+      if (mounted) {
+        setState(() => _isInitializing = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _initError = 'Failed to connect: $e';
+        });
+      }
+    }
+  }
+
+  void _scrollToBottom({bool animated = true}) {
+    if (_scrollController.hasClients) {
+      if (animated) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    if (_chatProvider == null) return;
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
+
+    _messageController.clear();
+    HapticFeedback.lightImpact();
+    await _chatProvider!.sendMessage(content);
+    _scrollToBottom();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    _chatProvider?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appProvider = Provider.of<AppProvider>(context);
+    final isDarkMode = appProvider.isDarkMode;
+    final receiverName = widget.receiverName ?? 'Chat';
+
+    if (_isInitializing) {
+      return _buildLoadingScreen(isDarkMode);
+    }
+
+    if (_initError != null) {
+      return _buildErrorScreen(isDarkMode, receiverName);
+    }
+
+    return ChangeNotifierProvider<ChatProvider>.value(
+      value: _chatProvider!,
+      child: Scaffold(
+        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+        extendBodyBehindAppBar: true,
+        appBar: _buildAppBar(isDarkMode, receiverName),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  color: isDarkMode ? const Color(0xFF121212) : const Color(0xFFE8E8E8),
+                ),
+              ),
+            ),
+            Column(
+              children: [
+                _buildErrorBanner(),
+                Expanded(
+                  child: _buildMessagesList(isDarkMode),
+                ),
+                _buildMessageInput(isDarkMode),
+              ],
+            ),
+            if (_showScrollToBottom)
+              Positioned(
+                right: 16,
+                bottom: 100,
+                child: _buildScrollToBottomButton(isDarkMode),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(bool isDarkMode, String receiverName) {
+    return AppBar(
+      backgroundColor: isDarkMode
+          ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
+          : Colors.white.withValues(alpha: 0.95),
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(
+          Icons.arrow_back_rounded,
+          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Row(
+        children: [
+          Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF6B9B5B),
+                    width: 2,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundImage: widget.receiverAvatar != null
+                      ? NetworkImage(widget.receiverAvatar!)
+                      : null,
+                  backgroundColor: const Color(0xFF6B9B5B),
+                  child: widget.receiverAvatar == null
+                      ? Text(
+                          receiverName.isNotEmpty ? receiverName[0].toUpperCase() : 'C',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        )
+                      : null,
+                ),
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Consumer<ChatProvider>(
+                  builder: (context, chatProvider, child) {
+                    return Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: chatProvider.isConnected ? const Color(0xFF4CAF50) : Colors.grey,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                          width: 2,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  receiverName,
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Consumer<ChatProvider>(
+                  builder: (context, chatProvider, child) {
+                    return Text(
+                      chatProvider.isConnected
+                          ? 'Online'
+                          : chatProvider.isConnecting
+                              ? 'Connecting...'
+                              : 'Offline',
+                      style: TextStyle(
+                        color: chatProvider.isConnected
+                            ? const Color(0xFF6B9B5B)
+                            : Colors.grey,
+                        fontSize: 12,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.more_vert_rounded, color: isDarkMode ? Colors.white70 : const Color(0xFF666666)),
+          onPressed: () {},
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildMessagesList(bool isDarkMode) {
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, child) {
+        final messages = chatProvider.messages;
+
+        if (messages.isEmpty) {
+          return _buildEmptyState(isDarkMode);
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_showScrollToBottom) {
+            _scrollToBottom(animated: false);
+          }
+        });
+
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final message = messages[index];
+            final isMe = message.senderId == 'user1';
+            final showDate = index == 0 || !_isSameDay(messages[index - 1].timestamp, message.timestamp);
+
+            return Column(
+              children: [
+                if (showDate) _buildDateSeparator(message.timestamp, isDarkMode),
+                _buildMessageBubble(message, isMe, isDarkMode),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(ChatMessage message, bool isMe, bool isDarkMode) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: isMe
+              ? const LinearGradient(
+                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isMe
+              ? null
+              : isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isMe ? 20 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 20),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isMe
+                  ? const Color(0xFF6B9B5B).withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              message.content,
+              style: TextStyle(
+                color: isMe ? Colors.white : isDarkMode ? Colors.white.withValues(alpha: 0.95) : const Color(0xFF1A1A1A),
+                fontSize: 15,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  DateFormat('h:mm a').format(message.timestamp),
+                  style: TextStyle(
+                    color: isMe
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : isDarkMode
+                            ? Colors.white.withValues(alpha: 0.54)
+                            : const Color(0xFF666666),
+                    fontSize: 10,
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    message.isRead ? Icons.done_all : Icons.done,
+                    size: 14,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageInput(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? const Color(0xFF1E1E1E).withValues(alpha: 0.98)
+            : Colors.white.withValues(alpha: 0.98),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(Icons.add_circle_outline, color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666)),
+                onPressed: () {},
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: TextField(
+                  controller: _messageController,
+                  style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A), fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: 'Type a message...',
+                    hintStyle: TextStyle(color: isDarkMode ? Colors.white.withValues(alpha: 0.38) : Colors.grey.shade500, fontSize: 15),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    border: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.emoji_emotions_outlined, color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500),
+                      onPressed: () {},
+                    ),
+                  ),
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Consumer<ChatProvider>(
+              builder: (context, chatProvider, child) {
+                final canSend = chatProvider.isConnected && _messageController.text.trim().isNotEmpty;
+                return Material(
+                  color: canSend ? const Color(0xFF6B9B5B) : isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: canSend ? _sendMessage : null,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      child: Icon(Icons.send_rounded, color: canSend ? Colors.white : isDarkMode ? Colors.white.withValues(alpha: 0.3) : Colors.grey.shade400, size: 20),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateSeparator(DateTime date, bool isDarkMode) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, isDarkMode ? Colors.white.withValues(alpha: 0.24) : Colors.black.withValues(alpha: 0.12)],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _formatDate(date),
+              style: TextStyle(
+                color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [isDarkMode ? Colors.white.withValues(alpha: 0.24) : Colors.black.withValues(alpha: 0.12), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDarkMode) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 48,
+              color: isDarkMode ? Colors.white.withValues(alpha: 0.3) : const Color(0xFF6B9B5B),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No messages yet',
+            style: TextStyle(
+              color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF666666),
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start a conversation by sending a message!',
+            style: TextStyle(
+              color: isDarkMode ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF999999),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingScreen(bool isDarkMode) {
+    return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                  strokeWidth: 3,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Connecting to chat...',
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF666666),
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorScreen(bool isDarkMode, String receiverName) {
+    return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      appBar: AppBar(
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_rounded, color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(receiverName, style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A))),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+                child: Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Connection Failed',
+                style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A), fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _initError!,
+                style: TextStyle(color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isInitializing = true;
+                    _initError = null;
+                  });
+                  _initializeChat();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, child) {
+        if (chatProvider.error == null) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade600,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(chatProvider.error!, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+              GestureDetector(
+                onTap: () => chatProvider.clearError(),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScrollToBottomButton(bool isDarkMode) {
+    return Material(
+      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: () => _scrollToBottom(),
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Icon(Icons.keyboard_arrow_down_rounded, color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B9B5B)),
+        ),
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    if (_isSameDay(date, now)) return 'Today';
+    if (_isSameDay(date, now.subtract(const Duration(days: 1)))) return 'Yesterday';
+    if (now.difference(date).inDays < 7) return DateFormat('EEEE').format(date);
+    return DateFormat('MMMM d, yyyy').format(date);
+  }
+}
