@@ -21,79 +21,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: provider.backgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFF6B9B5B).withValues(alpha: 0.3),
-                      isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
-                    ],
-                  ),
-                ),
-              ),
+      appBar: AppBar(
+        backgroundColor: provider.backgroundColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDarkMode 
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.9),
+              shape: BoxShape.circle,
             ),
-            leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.white.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-                  size: 20,
-                ),
-              ),
-              onPressed: () => Navigator.pop(context),
+            child: Icon(
+              Icons.arrow_back_rounded,
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              size: 20,
             ),
           ),
-          
-          // Profile Content
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              offset: const Offset(0, -80),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    // Profile Card
-                    _buildProfileCard(userData, isDarkMode),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // Stats Row
-                    _buildStatsRow(provider, isDarkMode),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Menu Section
-                    _buildMenuSection(context, isDarkMode),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Logout Button
-                    _buildLogoutButton(context, isDarkMode),
-                    
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
           ),
-        ],
+        ),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            
+            // Profile Header with Avatar
+            _buildProfileHeader(userData, isDarkMode),
+            
+            const SizedBox(height: 24),
+            
+            // Stats Row
+            _buildStatsCard(provider, isDarkMode),
+            
+            const SizedBox(height: 24),
+            
+            // Menu Section
+            _buildMenuSection(context, isDarkMode),
+            
+            const SizedBox(height: 24),
+            
+            // Logout Button
+            _buildLogoutButton(context, isDarkMode),
+            
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigation(
         currentIndex: _currentIndex,
@@ -109,15 +93,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileCard(Map<String, dynamic> userData, bool isDarkMode) {
+  Widget _buildProfileHeader(Map<String, dynamic> userData, bool isDarkMode) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.3 : 0.08),
+            color: const Color(0xFF6B9B5B).withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -126,72 +115,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           // Avatar with border
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF6B9B5B),
-                    width: 3,
-                  ),
-                ),
-                child: CircleAvatar(
-                  radius: 50,
-                  backgroundImage: NetworkImage(userData['avatar']),
-                ),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.5),
+                width: 3,
               ),
-              Positioned(
-                bottom: 4,
-                right: 4,
-                child: GestureDetector(
-                  onTap: () {},
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white, width: 3),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+            child: CircleAvatar(
+              radius: 45,
+              backgroundImage: NetworkImage(userData['avatar']),
+              backgroundColor: Colors.white,
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           
           // Name
           Text(
             userData['name'],
-            style: TextStyle(
-              fontSize: 24,
+            style: const TextStyle(
+              fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           
           // Role Badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               userData['role'],
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF6B9B5B),
+                color: Colors.white,
               ),
             ),
           ),
@@ -201,18 +165,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.phone_outlined,
-                size: 16,
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF666666),
-              ),
-              const SizedBox(width: 8),
+              Icon(Icons.phone_outlined, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+              const SizedBox(width: 6),
               Text(
                 userData['phone'],
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
-                ),
+                style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9)),
               ),
             ],
           ),
@@ -220,46 +177,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.email_outlined,
-                size: 16,
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF666666),
-              ),
-              const SizedBox(width: 8),
+              Icon(Icons.email_outlined, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+              const SizedBox(width: 6),
               Text(
                 userData['email'],
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
-                ),
+                style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9)),
               ),
             ],
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Edit Profile Button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/edit-profile'),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text(
-                'Edit Profile',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                elevation: 0,
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsCard(AppProvider provider, bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatItem(
+              value: provider.totalTrips.toString(),
+              label: 'Trips',
+              icon: Icons.route_outlined,
+              color: const Color(0xFF6B9B5B),
+              isDarkMode: isDarkMode,
+            ),
+          ),
+          Container(height: 40, width: 1, color: isDarkMode ? Colors.white24 : Colors.black12),
+          Expanded(
+            child: _buildStatItem(
+              value: provider.completedTrips.toString(),
+              label: 'Completed',
+              icon: Icons.check_circle_outline,
+              color: const Color(0xFF2196F3),
+              isDarkMode: isDarkMode,
+            ),
+          ),
+          Container(height: 40, width: 1, color: isDarkMode ? Colors.white24 : Colors.black12),
+          Expanded(
+            child: _buildStatItem(
+              value: '${provider.totalDistance.toStringAsFixed(0)}km',
+              label: 'Distance',
+              icon: Icons.straighten,
+              color: const Color(0xFFFF9800),
+              isDarkMode: isDarkMode,
             ),
           ),
         ],
@@ -267,64 +240,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatsRow(AppProvider provider, bool isDarkMode) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatItem(
-            value: provider.totalTrips.toString(),
-            label: 'Trips',
-            isDarkMode: isDarkMode,
-          ),
-        ),
-        Container(
-          height: 40,
-          width: 1,
-          color: isDarkMode ? Colors.white24 : Colors.black12,
-        ),
-        Expanded(
-          child: _buildStatItem(
-            value: provider.completedTrips.toString(),
-            label: 'Completed',
-            isDarkMode: isDarkMode,
-          ),
-        ),
-        Container(
-          height: 40,
-          width: 1,
-          color: isDarkMode ? Colors.white24 : Colors.black12,
-        ),
-        Expanded(
-          child: _buildStatItem(
-            value: '${provider.totalDistance.toStringAsFixed(0)}km',
-            label: 'Distance',
-            isDarkMode: isDarkMode,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildStatItem({
     required String value,
     required String label,
+    required IconData icon,
+    required Color color,
     required bool isDarkMode,
   }) {
     return Column(
       children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(height: 8),
         Text(
           value,
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
           ),
         ),
@@ -335,32 +281,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildMenuSection(BuildContext context, bool isDarkMode) {
     final menuItems = [
       {
+        'icon': Icons.person_outline,
+        'title': 'Edit Profile',
+        'subtitle': 'Update your information',
+        'route': '/edit-profile',
+        'color': const Color(0xFF6B9B5B),
+      },
+      {
         'icon': Icons.lock_outline,
         'title': 'Change Password',
         'subtitle': 'Update your security',
         'route': '/change-password',
-        'color': const Color(0xFF6B9B5B),
+        'color': const Color(0xFF2196F3),
       },
       {
         'icon': Icons.notifications_outlined,
         'title': 'Notifications',
         'subtitle': 'Manage alerts',
         'route': null,
-        'color': const Color(0xFF2196F3),
+        'color': const Color(0xFFFF9800),
       },
       {
         'icon': Icons.description_outlined,
         'title': 'Terms of Service',
         'subtitle': 'Legal information',
         'route': '/terms',
-        'color': const Color(0xFFFF9800),
+        'color': const Color(0xFF9C27B0),
       },
       {
         'icon': Icons.privacy_tip_outlined,
         'title': 'Privacy Policy',
         'subtitle': 'Data protection',
         'route': '/privacy',
-        'color': const Color(0xFF9C27B0),
+        'color': const Color(0xFF607D8B),
       },
       {
         'icon': Icons.delete_outline,
@@ -384,29 +337,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: menuItems.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          indent: 72,
-          color: isDarkMode ? Colors.white12 : Colors.black.withValues(alpha: 0.05),
-        ),
-        itemBuilder: (context, index) {
-          final item = menuItems[index];
-          return _buildMenuTile(
-            icon: item['icon'] as IconData,
-            title: item['title'] as String,
-            subtitle: item['subtitle'] as String,
-            color: item['color'] as Color,
-            isDestructive: item['isDestructive'] as bool? ?? false,
-            isDarkMode: isDarkMode,
-            onTap: item['route'] != null
-                ? () => Navigator.pushNamed(context, item['route'] as String)
-                : () {},
+      child: Column(
+        children: menuItems.asMap().entries.map((entry) {
+          final index = entry.key;
+          final item = entry.value;
+          return Column(
+            children: [
+              _buildMenuTile(
+                icon: item['icon'] as IconData,
+                title: item['title'] as String,
+                subtitle: item['subtitle'] as String,
+                color: item['color'] as Color,
+                isDestructive: item['isDestructive'] as bool? ?? false,
+                isDarkMode: isDarkMode,
+                onTap: item['route'] != null
+                    ? () => Navigator.pushNamed(context, item['route'] as String)
+                    : () {},
+              ),
+              if (index < menuItems.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 72,
+                  endIndent: 20,
+                  color: isDarkMode ? Colors.white12 : Colors.black.withValues(alpha: 0.05),
+                ),
+            ],
           );
-        },
+        }).toList(),
       ),
     );
   }
@@ -421,20 +378,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isDestructive
-              ? color.withValues(alpha: 0.1)
-              : color.withValues(alpha: 0.15),
+          color: color.withValues(alpha: isDestructive ? 0.1 : 0.15),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          icon,
-          color: isDestructive ? color : color,
-          size: 20,
-        ),
+        child: Icon(icon, color: color, size: 20),
       ),
       title: Text(
         title,
@@ -455,29 +406,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF999999),
         ),
       ),
-      trailing: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          Icons.chevron_right,
-          color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF999999),
-          size: 18,
-        ),
+      trailing: Icon(
+        Icons.chevron_right,
+        color: isDarkMode ? Colors.white.withValues(alpha: 0.4) : const Color(0xFFCCCCCC),
+        size: 20,
       ),
       onTap: onTap,
     );
   }
 
   Widget _buildLogoutButton(BuildContext context, bool isDarkMode) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: 52,
       child: ElevatedButton.icon(
         onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-        icon: const Icon(Icons.logout_rounded, color: Colors.white),
+        icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
         label: const Text(
           'Logout',
           style: TextStyle(
@@ -489,7 +433,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFDC143C),
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
