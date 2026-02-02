@@ -1,0 +1,277 @@
+import 'package:flutter/material.dart';
+import '../../widgets/bottom_navigation.dart';
+
+class StartTripScreen extends StatefulWidget {
+  const StartTripScreen({super.key});
+
+  @override
+  State<StartTripScreen> createState() => _StartTripScreenState();
+}
+
+class _StartTripScreenState extends State<StartTripScreen> {
+  int _currentIndex = 0;
+  String? _selectedVehicle;
+  String? _selectedAttendant;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F0),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Map Area (Placeholder)
+            Expanded(
+              flex: 2,
+              child: Container(
+                color: const Color(0xFFE8F5E9),
+                child: Stack(
+                  children: [
+                    // Map Background
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+                        ),
+                      ),
+                    ),
+                    // Route Line
+                    CustomPaint(size: Size.infinite, painter: RoutePainter()),
+                    // Location Markers
+                    Positioned(
+                      left: 50,
+                      top: 100,
+                      child: _buildLocationMarker(true),
+                    ),
+                    Positioned(
+                      right: 80,
+                      top: 150,
+                      child: _buildLocationMarker(false),
+                    ),
+                    Positioned(
+                      left: 120,
+                      bottom: 120,
+                      child: _buildLocationMarker(false),
+                    ),
+                    // Back Button
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(26),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.arrow_back),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom Sheet
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Start Your Trip',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Select your assigned vehicle, attendant, and route to begin your trip.',
+                    style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Vehicle Registration Dropdown
+                  _buildDropdown(
+                    'Vehicle Registration No.',
+                    _selectedVehicle,
+                    ['KCA 123U', 'KCB 456X', 'KCC 789Y'],
+                    (value) => setState(() => _selectedVehicle = value),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Attendant Dropdown
+                  _buildDropdown(
+                    'Attendant',
+                    _selectedAttendant,
+                    ['James Kadere', 'John Doe', 'Jane Smith'],
+                    (value) => setState(() => _selectedAttendant = value),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF666666),
+                            side: const BorderSide(color: Color(0xFFE0E0E0)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/select-students');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6B9B5B),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: const Text('Next'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: BottomNavigation(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          if (index == 3) {
+            Navigator.pushNamed(context, '/profile');
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildLocationMarker(bool isStart) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: isStart ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
+        ],
+      ),
+      child: Icon(
+        isStart ? Icons.directions_bus : Icons.location_on,
+        color: Colors.white,
+        size: 20,
+      ),
+    );
+  }
+
+  Widget _buildDropdown(
+    String label,
+    String? value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF666666),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              hint: Text('Select $label'),
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down),
+              items: items.map((String item) {
+                return DropdownMenuItem<String>(value: item, child: Text(item));
+              }).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class RoutePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF6B9B5B)
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path()
+      ..moveTo(70, 120)
+      ..lineTo(size.width - 100, 170)
+      ..lineTo(140, size.height - 140);
+
+    canvas.drawPath(path, paint);
+
+    // Draw dashed line effect
+    final dashPaint = Paint()
+      ..color = const Color(0xFF6B9B5B).withAlpha(77)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    final dashPath = Path()
+      ..moveTo(70, 120)
+      ..lineTo(size.width - 100, 170)
+      ..lineTo(140, size.height - 140);
+
+    canvas.drawPath(dashPath, dashPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
