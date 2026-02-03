@@ -1,6 +1,7 @@
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import '../../widgets/bus_illustration.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -218,7 +219,16 @@ class _LoginScreenState extends State<LoginScreen>
           const SizedBox(height: 24),
 
           // Phone Number Input
-          _buildPhoneInput(),
+          IntlPhoneField(
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder(),
+                    ),
+                    initialCountryCode: 'KE',
+                    onChanged: (phone) {
+                      // phone.completeNumber
+                    },
+                  ),
           const SizedBox(height: 16),
 
           // Passcode Input
