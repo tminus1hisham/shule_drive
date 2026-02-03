@@ -3,9 +3,9 @@ import '../models/student.dart';
 import '../models/trip.dart';
 import '../models/child.dart';
 
-class AppProvider extends ChangeNotifier {
-  bool _isDarkMode = false;
-  bool get isDarkMode => _isDarkMode;
+class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
+  // Theme mode: null = system default, true = dark, false = light
+  bool? _manualDarkMode;
 
   // Theme colors
   static const Color primaryGreen = Color(0xFF6B9B5B);
@@ -17,17 +17,61 @@ class AppProvider extends ChangeNotifier {
   static const Color textSecondary = Color(0xFF666666);
   static const Color accentGreen = Color(0xFFE8F5E9);
 
-  ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
+  AppProvider() {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    // Notify listeners when system brightness changes
+    if (_manualDarkMode == null) {
+      notifyListeners();
+    }
+  }
+
+  /// Returns true if dark mode is active (either manual or system)
+  bool get isDarkMode {
+    if (_manualDarkMode != null) {
+      return _manualDarkMode!;
+    }
+    // Use system default
+    return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
+  }
+
+  /// Returns true if manually set to dark mode
+  bool? get manualDarkMode => _manualDarkMode;
+
+  /// Returns the theme mode for MaterialApp
+  ThemeMode get themeMode {
+    if (_manualDarkMode == null) {
+      return ThemeMode.system;
+    }
+    return _manualDarkMode! ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  /// Toggle between light and dark (overrides system)
   void toggleTheme() {
-    _isDarkMode = !_isDarkMode;
+    _manualDarkMode = !isDarkMode;
     notifyListeners();
   }
 
-  Color get backgroundColor => _isDarkMode ? darkBackground : lightBackground;
-  Color get cardColor => _isDarkMode ? cardDark : cardLight;
-  Color get textColor => _isDarkMode ? Colors.white : textPrimary;
-  Color get textMutedColor => _isDarkMode ? Colors.white70 : textSecondary;
+  /// Reset to system default
+  void useSystemTheme() {
+    _manualDarkMode = null;
+    notifyListeners();
+  }
+
+  Color get backgroundColor => isDarkMode ? darkBackground : lightBackground;
+  Color get cardColor => isDarkMode ? cardDark : cardLight;
+  Color get textColor => isDarkMode ? Colors.white : textPrimary;
+  Color get textMutedColor => isDarkMode ? Colors.white70 : textSecondary;
 
   // User data
   Map<String, dynamic> userData = {

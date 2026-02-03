@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,38 +19,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userData = provider.userData;
     final isDarkMode = provider.isDarkMode;
 
-    return Scaffold(
-      backgroundColor: provider.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: provider.backgroundColor,
-        elevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDarkMode 
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.white.withValues(alpha: 0.9),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.arrow_back_rounded,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-              size: 20,
-            ),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Profile',
-          style: TextStyle(
-            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-      ),
+    return MainScaffold(
+      title: 'Profile',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: 3,
+      onBottomNavTap: (index) {
+        if (index == 0) {
+          Navigator.pushReplacementNamed(context, '/landing');
+        } else if (index == 1) {
+          Navigator.pushNamed(context, '/chat');
+        }
+      },
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
@@ -78,17 +58,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
-          } else if (index == 1) {
-            Navigator.pushNamed(context, '/chat');
-          }
-        },
       ),
     );
   }

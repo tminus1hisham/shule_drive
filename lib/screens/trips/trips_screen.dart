@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class TripsScreen extends StatefulWidget {
   const TripsScreen({super.key});
@@ -18,24 +19,17 @@ class _TripsScreenState extends State<TripsScreen> {
     final provider = context.watch<AppProvider>();
     final trips = provider.trips;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Trips',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Trips',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        setState(() => _currentIndex = index);
+        if (index == 0) {
+          Navigator.pushReplacementNamed(context, '/landing');
+        }
+      },
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: trips.length,
@@ -124,15 +118,6 @@ class _TripsScreenState extends State<TripsScreen> {
               ),
             ),
           );
-        },
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
-          }
         },
       ),
     );

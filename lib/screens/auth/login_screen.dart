@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen>
     HapticFeedback.lightImpact();
     await Future.delayed(const Duration(seconds: 1));
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/landing');
+      Navigator.pushReplacementNamed(context, '/home');
     }
   }
 

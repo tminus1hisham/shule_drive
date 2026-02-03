@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_message.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../widgets/main_scaffold.dart';
 
 class ChatScreen extends StatefulWidget {
   final String? receiverId;
@@ -119,10 +120,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return ChangeNotifierProvider<ChatProvider>.value(
       value: _chatProvider!,
-      child: Scaffold(
-        backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
-        extendBodyBehindAppBar: true,
-        appBar: _buildAppBar(isDarkMode, receiverName),
+      child: MainScaffold(
+        title: receiverName,
+        showBackButton: true,
         body: Stack(
           children: [
             Positioned.fill(
@@ -152,114 +152,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(bool isDarkMode, String receiverName) {
-    return AppBar(
-      backgroundColor: isDarkMode
-          ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
-          : Colors.white.withValues(alpha: 0.95),
-      elevation: 0,
-      leading: IconButton(
-        icon: Icon(
-          Icons.arrow_back_rounded,
-          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Row(
-        children: [
-          Stack(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF6B9B5B),
-                    width: 2,
-                  ),
-                ),
-                child: CircleAvatar(
-                  radius: 22,
-                  backgroundImage: widget.receiverAvatar != null
-                      ? NetworkImage(widget.receiverAvatar!)
-                      : null,
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  child: widget.receiverAvatar == null
-                      ? Text(
-                          receiverName.isNotEmpty ? receiverName[0].toUpperCase() : 'C',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                        )
-                      : null,
-                ),
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Consumer<ChatProvider>(
-                  builder: (context, chatProvider, child) {
-                    return Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: chatProvider.isConnected ? const Color(0xFF4CAF50) : Colors.grey,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-                          width: 2,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  receiverName,
-                  style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Consumer<ChatProvider>(
-                  builder: (context, chatProvider, child) {
-                    return Text(
-                      chatProvider.isConnected
-                          ? 'Online'
-                          : chatProvider.isConnecting
-                              ? 'Connecting...'
-                              : 'Offline',
-                      style: TextStyle(
-                        color: chatProvider.isConnected
-                            ? const Color(0xFF6B9B5B)
-                            : Colors.grey,
-                        fontSize: 12,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.more_vert_rounded, color: isDarkMode ? Colors.white70 : const Color(0xFF666666)),
-          onPressed: () {},
-        ),
-        const SizedBox(width: 8),
-      ],
     );
   }
 

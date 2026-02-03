@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../models/trip.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class TripDetailsScreen extends StatefulWidget {
   const TripDetailsScreen({super.key});
@@ -12,31 +12,14 @@ class TripDetailsScreen extends StatefulWidget {
 }
 
 class _TripDetailsScreenState extends State<TripDetailsScreen> {
-  int _currentIndex = 3;
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final trip = provider.trips.first;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Westlands - Kilimani Route',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Trip Details',
+      showBackButton: true,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -169,15 +152,6 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
-          }
-        },
       ),
     );
   }

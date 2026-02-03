@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class StartTripScreen extends StatefulWidget {
   const StartTripScreen({super.key});
@@ -15,8 +16,17 @@ class _StartTripScreenState extends State<StartTripScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+    return MainScaffold(
+      title: 'Start Trip',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        setState(() => _currentIndex = index);
+        if (index == 3) {
+          Navigator.pushNamed(context, '/profile');
+        }
+      },
       body: SafeArea(
         child: Column(
           children: [
@@ -54,28 +64,6 @@ class _StartTripScreenState extends State<StartTripScreen> {
                       left: 120,
                       bottom: 120,
                       child: _buildLocationMarker(false),
-                    ),
-                    // Back Button
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.arrow_back),
-                        ),
-                      ),
                     ),
                   ],
                 ),
@@ -167,15 +155,6 @@ class _StartTripScreenState extends State<StartTripScreen> {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
       ),
     );
   }

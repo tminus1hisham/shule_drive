@@ -22,6 +22,7 @@ import 'screens/trips/trip_details_screen.dart';
 import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
+import 'screens/auth/splash.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,7 +50,7 @@ class ShuleDriveApp extends StatelessWidget {
             themeMode: provider.themeMode,
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
-            initialRoute: '/login',
+            home: const Splash(),
             routes: {
               '/login': (context) => const LoginScreen(),
               '/otp': (context) => const OTPScreen(),
@@ -120,9 +121,7 @@ class ShuleDriveApp extends StatelessWidget {
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -131,7 +130,10 @@ class ShuleDriveApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
     );
   }
@@ -178,9 +180,7 @@ class ShuleDriveApp extends StatelessWidget {
       cardTheme: CardThemeData(
         color: const Color(0xFF1E1E1E),
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -189,7 +189,10 @@ class ShuleDriveApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
     );
   }

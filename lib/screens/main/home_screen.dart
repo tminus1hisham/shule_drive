@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,7 +11,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+  void _handleNavigation(int index) {
+    if (index == 1) {
+      Navigator.pushNamed(context, '/chat');
+    } else if (index == 3) {
+      Navigator.pushNamed(context, '/profile');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDarkMode = provider.isDarkMode;
     final userData = provider.userData;
 
-    return Scaffold(
-      backgroundColor: provider.backgroundColor,
+    return MainScaffold(
+      showBottomNav: true,
+      bottomNavIndex: 0,
+      onBottomNavTap: _handleNavigation,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -58,17 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 1) {
-            Navigator.pushNamed(context, '/chat');
-          } else if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
-      ),
     );
   }
 
@@ -76,43 +73,43 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.directions_bus,
-                  color: Colors.white,
-                  size: 22,
-                ),
+          // Logo
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
               ),
-              const SizedBox(width: 12),
-              Text(
-                'ShuleDrive',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
-                  letterSpacing: -0.5,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-            ],
+              ],
+            ),
+            child: const Icon(
+              Icons.directions_bus,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
+          const SizedBox(width: 12),
+          // App Name
+          Text(
+            'ShuleDrive',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const Spacer(),
+          // Profile Avatar
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, '/profile'),
             child: Container(

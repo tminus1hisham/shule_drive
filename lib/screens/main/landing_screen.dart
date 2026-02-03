@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/bus_illustration.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -12,7 +12,13 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
-  int _currentIndex = 0;
+  void _handleNavigation(int index) {
+    if (index == 1) {
+      Navigator.pushNamed(context, '/chat');
+    } else if (index == 3) {
+      Navigator.pushNamed(context, '/profile');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,8 +26,10 @@ class _LandingScreenState extends State<LandingScreen> {
     final isDarkMode = provider.isDarkMode;
     final userData = provider.userData;
 
-    return Scaffold(
-      backgroundColor: provider.backgroundColor,
+    return MainScaffold(
+      showBottomNav: true,
+      bottomNavIndex: 0,
+      onBottomNavTap: _handleNavigation,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -40,17 +48,6 @@ class _LandingScreenState extends State<LandingScreen> {
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 1) {
-            Navigator.pushNamed(context, '/chat');
-          } else if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
       ),
     );
   }

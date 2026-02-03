@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class ChildProfileScreen extends StatefulWidget {
   const ChildProfileScreen({super.key});
@@ -18,24 +18,17 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     final provider = context.watch<AppProvider>();
     final child = provider.children.first;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Child Profile',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Child Profile',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        setState(() => _currentIndex = index);
+        if (index == 0) {
+          Navigator.pushReplacementNamed(context, '/landing');
+        }
+      },
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -197,15 +190,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
-          }
-        },
       ),
     );
   }

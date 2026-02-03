@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../widgets/main_scaffold.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -36,24 +38,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final provider = context.read<AppProvider>();
     final userData = provider.userData;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Edit Profile',
+      showBackButton: true,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -116,7 +103,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildPhoneField(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 15),
                   _buildTextField(
                     'Email',
                     _emailController,
@@ -217,65 +204,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(2),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Colors.black,
-                            Color(0xFFDC143C),
-                            Color(0xFF228B22),
-                          ],
-                          stops: [0.33, 0.66, 1.0],
-                        ),
-                      ),
+        IntlPhoneField(
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '+254',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 24,
-                color: const Color(0xFFE0E0E0),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 16,
-                    ),
+                    initialCountryCode: 'KE',
+                    onChanged: (phone) {
+                      // phone.completeNumber
+                    },
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
+          
       ],
     );
   }

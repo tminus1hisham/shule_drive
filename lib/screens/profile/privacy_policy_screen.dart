@@ -1,28 +1,14 @@
 import 'package:flutter/material.dart';
+import '../../widgets/main_scaffold.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Privacy Policy',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Privacy Policy',
+      showBackButton: true,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

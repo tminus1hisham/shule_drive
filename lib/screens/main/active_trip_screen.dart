@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class ActiveTripScreen extends StatefulWidget {
   const ActiveTripScreen({super.key});
@@ -15,8 +16,17 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+    return MainScaffold(
+      title: 'Active Trip',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        setState(() => _currentIndex = index);
+        if (index == 3) {
+          Navigator.pushNamed(context, '/profile');
+        }
+      },
       body: Column(
         children: [
           // Map Area
@@ -223,15 +233,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
       ),
     );
   }

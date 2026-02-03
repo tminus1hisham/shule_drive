@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/student.dart';
 import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class SelectStudentsScreen extends StatefulWidget {
   const SelectStudentsScreen({super.key});
@@ -64,24 +65,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Select Students',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return MainScaffold(
+      title: 'Select Students',
+      showBackButton: true,
       body: Column(
         children: [
           Expanded(
@@ -199,15 +185,6 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 
 class ManageChildrenScreen extends StatefulWidget {
   const ManageChildrenScreen({super.key});
@@ -18,23 +19,21 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
     final provider = context.watch<AppProvider>();
     final children = provider.children;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F5F0),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Manage Children',
-          style: TextStyle(
-            color: Color(0xFF1A1A1A),
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+    return MainScaffold(
+      title: 'My Children',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        setState(() => _currentIndex = index);
+        if (index == 0) {
+          Navigator.pushReplacementNamed(context, '/landing');
+        }
+      },
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: const Color(0xFF6B9B5B),
+        child: const Icon(Icons.add),
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -96,20 +95,6 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
               ),
             ),
           );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: const Color(0xFF6B9B5B),
-        child: const Icon(Icons.add),
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
-          }
         },
       ),
     );

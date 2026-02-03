@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/student.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../widgets/main_scaffold.dart';
 import '../../widgets/student_card.dart';
 
 class StudentsListScreen extends StatefulWidget {
@@ -104,100 +104,70 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     final pickedCount = students.where((s) => s.status == StudentStatus.picked).length;
     final progress = pickedCount / students.length;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+    return MainScaffold(
+      title: 'Students',
+      showBackButton: true,
+      showBottomNav: true,
+      bottomNavIndex: _currentIndex,
+      onBottomNavTap: (index) {
+        if (index == 1) {
+          Navigator.pushNamed(context, '/chat');
+        } else if (index == 3) {
+          Navigator.pushNamed(context, '/profile');
+        }
+      },
       body: CustomScrollView(
         slivers: [
-          // App Bar
-          SliverAppBar(
-            expandedHeight: 180,
-            floating: false,
-            pinned: true,
-            backgroundColor: const Color(0xFFF5F5F0),
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFF6B9B5B).withValues(alpha: 0.15),
-                      const Color(0xFFF5F5F0),
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+          // Header Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.people_outline,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.people_outline,
-                                color: Colors.white,
-                                size: 24,
+                            Text(
+                              'Students List',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1A1A1A),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Students List',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1A1A1A),
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    '8:30 AM - South B Route',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Color(0xFF666666),
-                                    ),
-                                  ),
-                                ],
+                            SizedBox(height: 4),
+                            Text(
+                              '8:30 AM - South B Route',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF666666),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
-            leading: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
+                ],
               ),
             ),
           ),
@@ -209,6 +179,8 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SizedBox(height: 20),
+                  
                   // Progress Card
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -400,17 +372,6 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 1) {
-            Navigator.pushNamed(context, '/chat');
-          } else if (index == 3) {
-            Navigator.pushNamed(context, '/profile');
-          }
-        },
       ),
       floatingActionButton: Container(
         margin: const EdgeInsets.only(bottom: 80),
