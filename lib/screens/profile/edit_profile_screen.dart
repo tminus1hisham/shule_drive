@@ -35,7 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<AppProvider>();
+    final provider = context.watch<AppProvider>();
     final userData = provider.userData;
 
     return MainScaffold(
@@ -49,7 +49,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -69,7 +69,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           decoration: BoxDecoration(
                             color: const Color(0xFF6B9B5B),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border: Border.all(color: provider.cardColor, width: 2),
                           ),
                           child: const Icon(
                             Icons.camera_alt,
@@ -90,7 +90,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -158,25 +158,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     IconData icon, {
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final provider = context.watch<AppProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF666666),
+            color: provider.textMutedColor,
           ),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          style: TextStyle(color: provider.textColor),
           decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: const Color(0xFF999999)),
+            prefixIcon: Icon(icon, color: provider.textMutedColor),
             filled: true,
-            fillColor: const Color(0xFFF5F5F5),
+            fillColor: provider.isDarkMode ? Colors.grey[800] : const Color(0xFFF5F5F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -192,29 +194,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildPhoneField() {
+    final provider = context.watch<AppProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Phone',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF666666),
+            color: provider.textMutedColor,
           ),
         ),
         const SizedBox(height: 8),
         IntlPhoneField(
-                    decoration: InputDecoration(
-                      labelText: 'Phone Number',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialCountryCode: 'KE',
-                    onChanged: (phone) {
-                      // phone.completeNumber
-                    },
-                  ),
-          
+          decoration: InputDecoration(
+            labelText: 'Phone Number',
+            labelStyle: TextStyle(color: provider.textMutedColor),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            filled: true,
+            fillColor: provider.isDarkMode ? Colors.grey[800] : const Color(0xFFF5F5F5),
+          ),
+          style: TextStyle(color: provider.textColor),
+          dropdownTextStyle: TextStyle(color: provider.textColor),
+          initialCountryCode: 'KE',
+          onChanged: (phone) {
+            // phone.completeNumber
+          },
+        ),
       ],
     );
   }

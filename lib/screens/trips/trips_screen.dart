@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../widgets/bottom_navigation.dart';
 import '../../widgets/main_scaffold.dart';
 
 class TripsScreen extends StatefulWidget {
@@ -41,7 +40,7 @@ class _TripsScreenState extends State<TripsScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -53,10 +52,10 @@ class _TripsScreenState extends State<TripsScreen> {
                       Expanded(
                         child: Text(
                           trip.routeName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A1A),
+                            color: provider.textColor,
                           ),
                         ),
                       ),
@@ -66,15 +65,19 @@ class _TripsScreenState extends State<TripsScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE8F5E9),
+                          color: provider.isDarkMode
+                              ? const Color(0xFF2E4A2E)
+                              : const Color(0xFFE8F5E9),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Completed',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF6B9B5B),
+                            color: provider.isDarkMode
+                                ? const Color(0xFF8BC48B)
+                                : const Color(0xFF6B9B5B),
                           ),
                         ),
                       ),
@@ -84,6 +87,7 @@ class _TripsScreenState extends State<TripsScreen> {
                   Row(
                     children: [
                       _buildInfoItem(
+                        provider,
                         Icons.calendar_today,
                         'Date: ${trip.date}',
                       ),
@@ -93,22 +97,30 @@ class _TripsScreenState extends State<TripsScreen> {
                   Row(
                     children: [
                       _buildInfoItem(
+                        provider,
                         Icons.access_time,
                         'Time: ${trip.time}',
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Divider(height: 1),
+                  Divider(
+                    height: 1,
+                    color: provider.isDarkMode
+                        ? Colors.grey[700]
+                        : Colors.grey[300],
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _buildStatItem(
+                        provider,
                         Icons.account_balance_wallet_outlined,
                         'KSh ${trip.fare.toStringAsFixed(0)}',
                       ),
                       _buildStatItem(
+                        provider,
                         Icons.route_outlined,
                         '${trip.distance} km',
                       ),
@@ -123,41 +135,45 @@ class _TripsScreenState extends State<TripsScreen> {
     );
   }
 
-  Widget _buildInfoItem(IconData icon, String text) {
+  Widget _buildInfoItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
         Icon(
           icon,
           size: 14,
-          color: const Color(0xFF999999),
+          color: provider.textMutedColor,
         ),
         const SizedBox(width: 6),
         Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: Color(0xFF666666),
+            color: provider.textMutedColor,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatItem(IconData icon, String text) {
+  Widget _buildStatItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
         Icon(
           icon,
           size: 16,
-          color: const Color(0xFF6B9B5B),
+          color: provider.isDarkMode
+              ? const Color(0xFF8BC48B)
+              : const Color(0xFF6B9B5B),
         ),
         const SizedBox(width: 6),
         Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF6B9B5B),
+            color: provider.isDarkMode
+                ? const Color(0xFF8BC48B)
+                : const Color(0xFF6B9B5B),
           ),
         ),
       ],

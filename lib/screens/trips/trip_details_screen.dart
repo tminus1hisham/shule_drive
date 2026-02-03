@@ -29,26 +29,26 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Trip Started',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B9B5B),
+                      color: provider.isDarkMode ? AppProvider.primaryGreen : const Color(0xFF6B9B5B),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '12 June 2025, 10:42 AM',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF666666),
+                      color: provider.textMutedColor,
                     ),
                   ),
                 ],
@@ -61,7 +61,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -85,7 +85,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                                   : const Color(0xFF6B9B5B),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white,
+                                color: provider.cardColor,
                                 width: 2,
                               ),
                               boxShadow: [
@@ -104,7 +104,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                             Container(
                               width: 2,
                               height: 60,
-                              color: const Color(0xFFE0E0E0),
+                              color: provider.isDarkMode ? Colors.white24 : const Color(0xFFE0E0E0),
                             ),
                         ],
                       ),
@@ -122,23 +122,23 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: isDelay
                                     ? const Color(0xFFFF9800)
-                                    : const Color(0xFF1A1A1A),
+                                    : provider.textColor,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               stop.address,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF666666),
+                                color: provider.textMutedColor,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               stop.time,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Color(0xFF999999),
+                                color: provider.isDarkMode ? Colors.white54 : const Color(0xFF999999),
                               ),
                             ),
                             if (!isLast) const SizedBox(height: 24),

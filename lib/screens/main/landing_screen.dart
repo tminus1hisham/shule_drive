@@ -25,6 +25,9 @@ class _LandingScreenState extends State<LandingScreen> {
     final provider = context.watch<AppProvider>();
     final isDarkMode = provider.isDarkMode;
     final userData = provider.userData;
+    final cardColor = provider.cardColor;
+    final textColor = provider.textColor;
+    final textMutedColor = provider.textMutedColor;
 
     return MainScaffold(
       showBottomNav: true,
@@ -34,16 +37,16 @@ class _LandingScreenState extends State<LandingScreen> {
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: _buildHeader(userData, isDarkMode),
+              child: _buildHeader(userData, isDarkMode, textColor),
             ),
             SliverToBoxAdapter(
-              child: _buildGreeting(userData, isDarkMode),
+              child: _buildGreeting(userData, isDarkMode, textColor, textMutedColor),
             ),
             SliverToBoxAdapter(
-              child: _buildNoTripCard(context, isDarkMode),
+              child: _buildNoTripCard(context, isDarkMode, cardColor, textColor, textMutedColor),
             ),
             SliverToBoxAdapter(
-              child: _buildFeaturesSection(context, isDarkMode),
+              child: _buildFeaturesSection(context, isDarkMode, cardColor, textColor, textMutedColor),
             ),
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
@@ -52,7 +55,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildHeader(Map<String, dynamic> userData, bool isDarkMode) {
+  Widget _buildHeader(Map<String, dynamic> userData, bool isDarkMode, Color textColor) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -87,7 +90,7 @@ class _LandingScreenState extends State<LandingScreen> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: textColor,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -119,7 +122,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildGreeting(Map<String, dynamic> userData, bool isDarkMode) {
+  Widget _buildGreeting(Map<String, dynamic> userData, bool isDarkMode, Color textColor, Color textMutedColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -159,7 +162,7 @@ class _LandingScreenState extends State<LandingScreen> {
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: textColor,
               letterSpacing: -1,
             ),
           ),
@@ -168,7 +171,7 @@ class _LandingScreenState extends State<LandingScreen> {
             'Ready to start your day?',
             style: TextStyle(
               fontSize: 16,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: textMutedColor,
             ),
           ),
         ],
@@ -176,12 +179,12 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildNoTripCard(BuildContext context, bool isDarkMode) {
+  Widget _buildNoTripCard(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -207,7 +210,7 @@ class _LandingScreenState extends State<LandingScreen> {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -216,7 +219,7 @@ class _LandingScreenState extends State<LandingScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: textMutedColor,
               height: 1.5,
             ),
           ),
@@ -249,7 +252,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildFeaturesSection(BuildContext context, bool isDarkMode) {
+  Widget _buildFeaturesSection(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
     final features = [
       {
         'icon': Icons.route_outlined,
@@ -287,7 +290,7 @@ class _LandingScreenState extends State<LandingScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: textColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -308,6 +311,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 title: feature['title'] as String,
                 subtitle: feature['subtitle'] as String,
                 color: feature['color'] as Color,
+                cardColor: cardColor,
+                textColor: textColor,
+                textMutedColor: textMutedColor,
                 isDarkMode: isDarkMode,
                 onTap: () {
                   if (index == 0) Navigator.pushNamed(context, '/trips');
@@ -328,6 +334,9 @@ class _LandingScreenState extends State<LandingScreen> {
     required String title,
     required String subtitle,
     required Color color,
+    required Color cardColor,
+    required Color textColor,
+    required Color textMutedColor,
     required bool isDarkMode,
     required VoidCallback onTap,
   }) {
@@ -336,7 +345,7 @@ class _LandingScreenState extends State<LandingScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: cardColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -363,7 +372,7 @@ class _LandingScreenState extends State<LandingScreen> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: textColor,
               ),
             ),
             const SizedBox(height: 2),
@@ -371,7 +380,7 @@ class _LandingScreenState extends State<LandingScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF999999),
+                color: textMutedColor,
               ),
             ),
           ],

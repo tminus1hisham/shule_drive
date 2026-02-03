@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../widgets/bottom_navigation.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../providers/app_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ContactScreen extends StatefulWidget {
@@ -29,6 +30,8 @@ class _ContactScreenState extends State<ContactScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+
     return MainScaffold(
       title: 'Contact Us',
       showBackButton: true,
@@ -48,46 +51,49 @@ class _ContactScreenState extends State<ContactScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Get in Touch',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: provider.textColor,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'We\'d love to hear from you',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF666666),
+                      color: provider.textMutedColor,
                     ),
                   ),
                   const SizedBox(height: 24),
 
                   // Phone Numbers
                   _buildContactItem(
+                    provider,
                     Icons.phone,
                     '+254 750 003304',
                     'Nairobi Office',
                     () => _launchPhone('+254750003304'),
                   ),
-                  const Divider(height: 32),
+                  Divider(height: 32, color: provider.textMutedColor.withOpacity(0.2)),
                   _buildContactItem(
+                    provider,
                     Icons.phone,
                     '+254 712 345 678',
                     'Customer Support - Always Active',
                     () => _launchPhone('+254712345678'),
                   ),
-                  const Divider(height: 32),
+                  Divider(height: 32, color: provider.textMutedColor.withOpacity(0.2)),
                   _buildContactItem(
+                    provider,
                     Icons.phone,
                     '+255 622 711 508',
                     'Dar es Salaam, Tanzania',
@@ -98,18 +104,19 @@ class _ContactScreenState extends State<ContactScreen> {
 
                   // Address
                   _buildContactItem(
+                    provider,
                     Icons.location_on,
                     'Westlands Heights, Kiambu Road',
                     'Nairobi, Kenya',
                     () {},
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 40, top: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 40, top: 8),
                     child: Text(
                       'Nairobi, Kenya',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF999999),
+                        color: provider.textMutedColor,
                       ),
                     ),
                   ),
@@ -118,6 +125,7 @@ class _ContactScreenState extends State<ContactScreen> {
 
                   // Email
                   _buildContactItem(
+                    provider,
                     Icons.email,
                     'info@shuledrive.com',
                     '',
@@ -133,6 +141,7 @@ class _ContactScreenState extends State<ContactScreen> {
   }
 
   Widget _buildContactItem(
+    AppProvider provider,
     IconData icon,
     String title,
     String subtitle,
@@ -146,7 +155,9 @@ class _ContactScreenState extends State<ContactScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
+              color: provider.isDarkMode 
+                  ? const Color(0xFF2C4A2C) 
+                  : const Color(0xFFE8F5E9),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -162,26 +173,26 @@ class _ContactScreenState extends State<ContactScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: provider.textColor,
                   ),
                 ),
                 if (subtitle.isNotEmpty)
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF999999),
+                      color: provider.textMutedColor,
                     ),
                   ),
               ],
             ),
           ),
-          const Icon(
+          Icon(
             Icons.chevron_right,
-            color: Color(0xFF999999),
+            color: provider.textMutedColor,
           ),
         ],
       ),

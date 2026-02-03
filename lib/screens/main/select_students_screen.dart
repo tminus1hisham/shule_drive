@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/student.dart';
-import '../../widgets/bottom_navigation.dart';
+import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class SelectStudentsScreen extends StatefulWidget {
@@ -65,6 +66,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+
     return MainScaffold(
       title: 'Select Students',
       showBackButton: true,
@@ -76,29 +79,30 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Select Students scheduled for this trip.',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+                    style: TextStyle(fontSize: 14, color: provider.textMutedColor),
                   ),
                   const SizedBox(height: 16),
 
                   // Search Bar
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: provider.cardColor,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: TextField(
                       controller: _searchController,
+                      style: TextStyle(color: provider.textColor),
                       decoration: InputDecoration(
                         hintText: 'Search Students',
                         hintStyle: TextStyle(
-                          color: Colors.grey[400],
+                          color: provider.textMutedColor,
                           fontSize: 14,
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search,
-                          color: Color(0xFF666666),
+                          color: provider.textMutedColor,
                         ),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(
@@ -115,20 +119,20 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Students added to the list',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF1A1A1A),
+                          color: provider.textColor,
                         ),
                       ),
                       Text(
                         '${selectedStudents.length}/${students.length}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF6B9B5B),
+                          color: AppProvider.primaryGreen,
                         ),
                       ),
                     ],
@@ -137,7 +141,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   const SizedBox(height: 16),
 
                   // Students List
-                  ...students.map((student) => _buildStudentCard(student)),
+                  ...students.map((student) => _buildStudentCard(student, provider)),
                 ],
               ),
             ),
@@ -147,10 +151,12 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: provider.cardColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(13),
+                  color: provider.isDarkMode
+                      ? Colors.black.withAlpha(51)
+                      : Colors.black.withAlpha(13),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -165,13 +171,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                       ? () => Navigator.pushNamed(context, '/active-trip')
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppProvider.primaryGreen,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
-                    disabledBackgroundColor: const Color(0xFFE0E0E0),
+                    disabledBackgroundColor: provider.isDarkMode
+                        ? Colors.grey[800]
+                        : const Color(0xFFE0E0E0),
                   ),
                   child: Text(
                     'Start Trip (${selectedStudents.length})',
@@ -189,17 +197,17 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     );
   }
 
-  Widget _buildStudentCard(Student student) {
+  Widget _buildStudentCard(Student student, AppProvider provider) {
     final isSelected = selectedStudents.contains(student);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: provider.cardColor,
         borderRadius: BorderRadius.circular(16),
         border: isSelected
-            ? Border.all(color: const Color(0xFF6B9B5B), width: 2)
+            ? Border.all(color: AppProvider.primaryGreen, width: 2)
             : null,
       ),
       child: Row(
@@ -215,18 +223,18 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               children: [
                 Text(
                   student.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: provider.textColor,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   student.className,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF666666),
+                    color: provider.textMutedColor,
                   ),
                 ),
               ],
@@ -238,7 +246,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFF6B9B5B)
+                    ? AppProvider.primaryGreen
                     : const Color(0xFFFF9800),
                 borderRadius: BorderRadius.circular(12),
               ),

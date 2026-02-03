@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -27,6 +29,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+
     return MainScaffold(
       title: 'Change Password',
       showBackButton: true,
@@ -38,12 +42,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             Container(
               height: 150,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: CustomPaint(
                 size: const Size(double.infinity, 150),
-                painter: MiniBusPainter(),
+                painter: MiniBusPainter(isDarkMode: provider.isDarkMode),
               ),
             ),
 
@@ -53,7 +57,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -64,6 +68,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     _previousController,
                     _obscurePrevious,
                     () => setState(() => _obscurePrevious = !_obscurePrevious),
+                    provider,
                   ),
                   const SizedBox(height: 16),
                   _buildPasswordField(
@@ -71,6 +76,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     _newController,
                     _obscureNew,
                     () => setState(() => _obscureNew = !_obscureNew),
+                    provider,
                   ),
                   const SizedBox(height: 16),
                   _buildPasswordField(
@@ -78,6 +84,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     _confirmController,
                     _obscureConfirm,
                     () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    provider,
                   ),
                 ],
               ),
@@ -121,25 +128,27 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     TextEditingController controller,
     bool obscureText,
     VoidCallback onToggle,
+    AppProvider provider,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF666666),
+            color: provider.textMutedColor,
           ),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           obscureText: obscureText,
+          style: TextStyle(color: provider.textColor),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFFF5F5F5),
+            fillColor: provider.isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -167,12 +176,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 }
 
 class MiniBusPainter extends CustomPainter {
+  final bool isDarkMode;
+
+  MiniBusPainter({required this.isDarkMode});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
     
-    // Draw ground line
-    paint.color = const Color(0xFFE0E0E0);
+    // Draw ground line - adapt to dark mode
+    paint.color = isDarkMode ? const Color(0xFF3A3A3A) : const Color(0xFFE0E0E0);
     paint.strokeWidth = 2;
     canvas.drawLine(
       Offset(size.width * 0.2, size.height - 20),

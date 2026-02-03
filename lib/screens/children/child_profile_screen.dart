@@ -37,7 +37,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -57,7 +57,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                           decoration: BoxDecoration(
                             color: const Color(0xFF6B9B5B),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border: Border.all(color: provider.cardColor, width: 2),
                           ),
                           child: const Icon(
                             Icons.camera_alt,
@@ -73,10 +73,10 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                   // Name
                   Text(
                     child.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: provider.textColor,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -94,9 +94,9 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                   // Class
                   Text(
                     child.className,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF666666),
+                      color: provider.textMutedColor,
                     ),
                   ),
                 ],
@@ -109,24 +109,24 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Parent Information',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: provider.textColor,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildInfoRow('Parent Name', child.parentName),
+                  _buildInfoRow(context, 'Parent Name', child.parentName),
                   const Divider(height: 24),
-                  _buildInfoRow('Phone', child.parentPhone),
+                  _buildInfoRow(context, 'Phone', child.parentPhone),
                 ],
               ),
             ),
@@ -137,26 +137,26 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'School Information',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: provider.textColor,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildInfoRow('School', child.school),
+                  _buildInfoRow(context, 'School', child.school),
                   const Divider(height: 24),
-                  _buildInfoRow('Class', child.className),
+                  _buildInfoRow(context, 'Class', child.className),
                   const Divider(height: 24),
-                  _buildInfoRow('Student ID', 'STU-${child.id.padLeft(4, '0')}'),
+                  _buildInfoRow(context, 'Student ID', 'STU-${child.id.padLeft(4, '0')}'),
                 ],
               ),
             ),
@@ -194,23 +194,24 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
+    final provider = context.watch<AppProvider>();
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: Color(0xFF666666),
+            color: provider.textMutedColor,
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: provider.textColor,
           ),
         ),
       ],

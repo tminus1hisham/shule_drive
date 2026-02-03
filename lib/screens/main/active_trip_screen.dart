@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../widgets/bottom_navigation.dart';
+import 'package:provider/provider.dart';
+import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ActiveTripScreen extends StatefulWidget {
@@ -16,6 +17,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    
     return MainScaffold(
       title: 'Active Trip',
       showBackButton: true,
@@ -36,11 +39,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               children: [
                 // Map Background
                 Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+                      colors: provider.isDarkMode
+                          ? [const Color(0xFF263238), const Color(0xFF37474F)]
+                          : [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)],
                     ),
                   ),
                 ),
@@ -65,9 +70,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.directions_bus,
-                      color: Colors.white,
+                      color: provider.isDarkMode ? const Color(0xFF6B9B5B) : Colors.white,
                       size: 24,
                     ),
                   ),
@@ -119,9 +124,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           // Bottom Sheet
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            decoration: BoxDecoration(
+              color: provider.cardColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,12 +136,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Students picked up',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF1A1A1A),
+                        color: provider.textColor,
                       ),
                     ),
                     Text(
@@ -154,7 +159,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: _pickedCount / _totalCount,
-                    backgroundColor: const Color(0xFFE0E0E0),
+                    backgroundColor: provider.isDarkMode ? const Color(0xFF3E3E3E) : const Color(0xFFE0E0E0),
                     valueColor: const AlwaysStoppedAnimation<Color>(
                       Color(0xFF6B9B5B),
                     ),
@@ -254,26 +259,31 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: const Color(0xFF666666)),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
+    return Builder(
+      builder: (context) {
+        final provider = context.watch<AppProvider>();
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: provider.isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
-        ),
-      ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: provider.textMutedColor),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 14, color: provider.textMutedColor),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     );
   }
 }

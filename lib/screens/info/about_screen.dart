@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
-import '../../widgets/bottom_navigation.dart';
 
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
@@ -14,6 +15,8 @@ class _AboutScreenState extends State<AboutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<AppProvider>(context);
+    
     return MainScaffold(
       title: 'About Us',
       showBackButton: true,
@@ -33,28 +36,28 @@ class _AboutScreenState extends State<AboutScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Bringing Peace of Mind to School Transportation',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: provider.textColor,
                     ),
                   ),
                   const SizedBox(height: 16),
 
                   // ShuleDrive description
                   RichText(
-                    text: const TextSpan(
+                    text: TextSpan(
                       style: TextStyle(
                         fontSize: 14,
-                        color: Color(0xFF666666),
+                        color: provider.textMutedColor,
                         height: 1.6,
                       ),
                       children: [
@@ -62,10 +65,10 @@ class _AboutScreenState extends State<AboutScreen> {
                           text: 'ShuleDrive ',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF6B9B5B),
+                            color: AppProvider.primaryGreen,
                           ),
                         ),
-                        TextSpan(
+                        const TextSpan(
                           text: 'is committed to revolutionizing school transportation in Kenya by making it safer, smarter, and more reliable.',
                         ),
                       ],
@@ -73,11 +76,11 @@ class _AboutScreenState extends State<AboutScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  const Text(
+                  Text(
                     'Our comprehensive app connects parents, schools, and transport providers, ensuring that every journey is tracked, monitored, and optimized for safety. With real-time tracking, automated notifications, and detailed reporting, we give parents peace of mind while helping schools and transport providers deliver exceptional service.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF666666),
+                      color: provider.textMutedColor,
                       height: 1.6,
                     ),
                   ),
@@ -90,20 +93,25 @@ class _AboutScreenState extends State<AboutScreen> {
                     child: Container(
                       height: 180,
                       width: double.infinity,
-                      color: const Color(0xFFF5F5F5),
+                      color: provider.isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           // Background gradient
                           Container(
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFFE8F5E9),
-                                  Color(0xFFC8E6C9),
-                                ],
+                                colors: provider.isDarkMode
+                                    ? [
+                                        const Color(0xFF1E3A1E),
+                                        const Color(0xFF2C4A2C),
+                                      ]
+                                    : [
+                                        const Color(0xFFE8F5E9),
+                                        const Color(0xFFC8E6C9),
+                                      ],
                               ),
                             ),
                           ),
@@ -121,11 +129,11 @@ class _AboutScreenState extends State<AboutScreen> {
 
                   const SizedBox(height: 20),
 
-                  const Text(
+                  Text(
                     'With a focus on safety, transparency, and communication, ShuleDrive transforms the daily school commute into a seamless experience for everyone involved.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF666666),
+                      color: provider.textMutedColor,
                       height: 1.6,
                     ),
                   ),

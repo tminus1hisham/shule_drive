@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../models/student.dart';
+import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/student_card.dart';
 
@@ -100,6 +102,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
     final filteredStudents = _getFilteredStudents();
     final pickedCount = students.where((s) => s.status == StudentStatus.picked).length;
     final progress = pickedCount / students.length;
@@ -142,7 +145,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -151,15 +154,15 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1A1A1A),
+                                color: provider.textColor,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
                               '8:30 AM - South B Route',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Color(0xFF666666),
+                                color: provider.textMutedColor,
                               ),
                             ),
                           ],
@@ -257,11 +260,13 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   // Search Bar
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: provider.cardColor,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
+                          color: provider.isDarkMode
+                              ? Colors.black.withValues(alpha: 0.2)
+                              : Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -270,10 +275,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                     child: TextField(
                       controller: _searchController,
                       onChanged: (_) => setState(() {}),
+                      style: TextStyle(color: provider.textColor),
                       decoration: InputDecoration(
                         hintText: 'Search student...',
                         hintStyle: TextStyle(
-                          color: Colors.grey[400],
+                          color: provider.textMutedColor,
                           fontSize: 15,
                         ),
                         prefixIcon: Container(
@@ -295,7 +301,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.close, size: 20),
+                                icon: Icon(Icons.close, size: 20, color: provider.textMutedColor),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() {});
@@ -316,7 +322,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   // Tabs
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
+                      color: provider.isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: TabBar(
@@ -333,7 +339,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         ],
                       ),
                       labelColor: Colors.white,
-                      unselectedLabelColor: const Color(0xFF666666),
+                      unselectedLabelColor: provider.textMutedColor,
                       labelStyle: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -344,9 +350,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       ),
                       padding: const EdgeInsets.all(4),
                       tabs: [
-                        _buildTab('All', students.length),
-                        _buildTab('Picked', students.where((s) => s.status == StudentStatus.picked).length),
-                        _buildTab('Absent', students.where((s) => s.status == StudentStatus.absent).length),
+                        _buildTab('All', students.length, provider),
+                        _buildTab('Picked', students.where((s) => s.status == StudentStatus.picked).length, provider),
+                        _buildTab('Absent', students.where((s) => s.status == StudentStatus.absent).length, provider),
                       ],
                     ),
                   ),
@@ -355,7 +361,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
 
                   // Students List
                   if (filteredStudents.isEmpty)
-                    _buildEmptyState()
+                    _buildEmptyState(provider)
                   else
                     ...filteredStudents.map(
                       (student) => StudentCard(
@@ -389,7 +395,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     );
   }
 
-  Widget _buildTab(String label, int count) {
+  Widget _buildTab(String label, int count, AppProvider provider) {
     return Tab(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -420,7 +426,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppProvider provider) {
     return Container(
       padding: const EdgeInsets.all(40),
       child: Column(
@@ -438,12 +444,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No students found',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF666666),
+              color: provider.textColor,
             ),
           ),
           const SizedBox(height: 4),
@@ -451,7 +457,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             'Try adjusting your search',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: provider.textMutedColor,
             ),
           ),
         ],

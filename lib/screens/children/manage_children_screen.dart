@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
-import '../../widgets/bottom_navigation.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ManageChildrenScreen extends StatefulWidget {
@@ -46,7 +45,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: provider.cardColor,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -62,34 +61,34 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                       children: [
                         Text(
                           child.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A1A),
+                            color: provider.textColor,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           child.school,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF666666),
+                            color: provider.textMutedColor,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           child.className,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF999999),
+                            color: provider.textMutedColor,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    color: Color(0xFF999999),
+                    color: provider.textMutedColor,
                   ),
                 ],
               ),

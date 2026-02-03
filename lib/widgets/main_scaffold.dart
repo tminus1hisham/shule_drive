@@ -81,7 +81,14 @@ class MainScaffold extends StatelessWidget {
       bottomNavigationBar: showBottomNav
           ? BottomNavigation(
               currentIndex: bottomNavIndex,
-              onTap: onBottomNavTap ?? (index) {},
+              onTap: (index) {
+                if (index == 4) {
+                  // Center action button - navigate to start trip
+                  Navigator.pushNamed(context, '/start-trip');
+                } else {
+                  onBottomNavTap?.call(index);
+                }
+              },
             )
           : null,
       floatingActionButton: floatingActionButton,
