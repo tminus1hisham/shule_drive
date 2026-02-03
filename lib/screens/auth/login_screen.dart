@@ -1,7 +1,8 @@
-import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/bus_illustration.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,12 +15,20 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _passcodeController = TextEditingController();
-  bool _obscurePasscode = true;
-  bool _isLoading = false;
+  final TextEditingController _passwordController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
+  String _completePhoneNumber = '';
+  bool _obscurePassword = true;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  // Rate limiting
+  int _failedAttempts = 0;
+  DateTime? _lastAttemptTime;
+  static const int _maxAttempts = 5;
+  static const Duration _lockoutDuration = Duration(minutes: 5);
 
   @override
   void initState() {
@@ -45,22 +54,94 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void dispose() {
     _phoneController.dispose();
-    _passcodeController.dispose();
+    _passwordController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
+  /// Check if user is currently locked out due to rate limiting
+  bool get _isLockedOut {
+    if (_failedAttempts < _maxAttempts) return false;
+    if (_lastAttemptTime == null) return false;
+    
+    final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
+    return timeSinceLastAttempt < _lockoutDuration;
+  }
+
+  /// Get remaining lockout time in seconds
+  int get _remainingLockoutSeconds {
+    if (_lastAttemptTime == null) return 0;
+    final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
+    final remaining = _lockoutDuration - timeSinceLastAttempt;
+    return remaining.inSeconds.clamp(0, _lockoutDuration.inSeconds);
+  }
+
   Future<void> _login() async {
-    setState(() => _isLoading = true);
-    HapticFeedback.lightImpact();
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/home',ModalRoute.withName('/'));
+    // Validate form
+    if (!_formKey.currentState!.validate()) return;
+    
+    // Check rate limiting
+    if (_isLockedOut) {
+      final remainingSeconds = _remainingLockoutSeconds;
+      _showError(
+        'Too many attempts. Please try again in ${remainingSeconds ~/ 60}m ${remainingSeconds % 60}s.',
+      );
+      return;
     }
+
+    HapticFeedback.lightImpact();
+
+    final authProvider = context.read<AuthProvider>();
+    
+    final success = await authProvider.login(
+      phoneNumber: _completePhoneNumber,
+      password: _passwordController.text,
+    );
+    
+    if (!mounted) return;
+
+    if (success) {
+      // Reset failed attempts on success
+      _failedAttempts = 0;
+      
+      // Navigate to home/landing screen
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/landing',
+        (route) => false,
+      );
+    } else {
+      // Record failed attempt
+      _failedAttempts++;
+      _lastAttemptTime = DateTime.now();
+      
+      _showError(authProvider.errorMessage ?? 'Login failed. Please try again.');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F0),
       body: SafeArea(
@@ -74,14 +155,14 @@ class _LoginScreenState extends State<LoginScreen>
               _buildWelcomeText(),
               
               // Animated Bus Illustration
-              const BusIllustration(height: 200),
+              const BusIllustration(height: 180),
               
               // Login Form
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: _buildLoginForm(),
+                  child: _buildLoginForm(authProvider),
                 ),
               ),
               const SizedBox(height: 24),
@@ -124,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen>
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF6B9B5B),
+              color: Color(0xFF1A1A1A),
               letterSpacing: -0.5,
             ),
           ),
@@ -135,35 +216,141 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildWelcomeText() {
     return const Padding(
-      padding: EdgeInsets.only(left: 24, top: 24, right: 24),
-      child: Align(
-        alignment: Alignment.centerLeft,
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome Back! 👋',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A),
+              letterSpacing: -0.5,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Enter your credentials to continue',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFF666666),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginForm(AuthProvider authProvider) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Form(
+        key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Welcome Back!',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A1A),
-                letterSpacing: -1,
+            // Phone Field
+            _buildPhoneField(),
+            
+            const SizedBox(height: 20),
+            
+            // Password Field
+            _buildPasswordField(),
+            
+            const SizedBox(height: 24),
+            
+            // Login Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: authProvider.isLoading ? null : _login,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B9B5B),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                ),
+                child: authProvider.isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Sign In',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
-            SizedBox(height: 8),
-            Text(
-              'The Smarter, Safer School',
-              style: TextStyle(
-                fontSize: 15,
-                color: Color(0xFF666666),
+            
+            const SizedBox(height: 20),
+            
+            // Forgot Password
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/forgot-password');
+                },
+                child: const Text(
+                  'Forgot Password?',
+                  style: TextStyle(
+                    color: Color(0xFF6B9B5B),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
-            Text(
-              'Transport Solution',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF6B9B5B),
+            
+            const SizedBox(height: 16),
+            
+            // Security notice
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.security,
+                    size: 16,
+                    color: const Color(0xFF6B9B5B),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your credentials are secure and encrypted.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: const Color(0xFF6B9B5B),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -172,273 +359,119 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Login Title
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.lock_outline,
-                  color: Color(0xFF6B9B5B),
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Login',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A1A),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Phone Number Input
-          IntlPhoneField(
-                    decoration: InputDecoration(
-                      labelText: 'Phone Number',
-                      border: OutlineInputBorder(),
-                    ),
-                    initialCountryCode: 'KE',
-                    onChanged: (phone) {
-                      // phone.completeNumber
-                    },
-                  ),
-          const SizedBox(height: 16),
-
-          // Passcode Input
-          _buildPasscodeInput(),
-          const SizedBox(height: 24),
-
-          // Login Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _login,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
-                disabledBackgroundColor:
-                    const Color(0xFF6B9B5B).withValues(alpha: 0.5),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Log In',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(Icons.arrow_forward_rounded, size: 20),
-                      ],
-                    ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Forgot Password
-          Center(
-            child: TextButton(
-              onPressed: () => Navigator.pushNamed(context, '/otp'),
-              child: const Text(
-                'Forgot your password?',
-                style: TextStyle(
-                  color: Color(0xFF6B9B5B),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPhoneInput() {
+  Widget _buildPhoneField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Phone Number',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF666666),
+            color: Color(0xFF1A1A1A),
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFFE0E0E0),
-              width: 1,
+        IntlPhoneField(
+          controller: _phoneController,
+          decoration: InputDecoration(
+            hintText: '712 345 678',
+            hintStyle: TextStyle(
+              color: Colors.grey.shade400,
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF5F5F5),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
             ),
           ),
-          child: Row(
-            children: [
-              // Country Code Dropdown
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(2),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Colors.black,
-                            Color(0xFFDC143C),
-                            Color(0xFF228B22),
-                          ],
-                          stops: [0.33, 0.66, 1.0],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      '+254',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: Color(0xFF666666),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 24,
-                color: const Color(0xFFE0E0E0),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    hintText: '701 234 567',
-                    hintStyle: TextStyle(
-                      color: Color(0xFFAAAAAA),
-                      fontSize: 15,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          initialCountryCode: 'KE',
+          disableLengthCheck: true,
+          flagsButtonPadding: const EdgeInsets.only(left: 12),
+          dropdownIcon: const Icon(
+            Icons.arrow_drop_down,
+            color: Color(0xFF666666),
           ),
+          dropdownTextStyle: const TextStyle(
+            fontSize: 16,
+            color: Color(0xFF1A1A1A),
+          ),
+          style: const TextStyle(
+            fontSize: 16,
+            color: Color(0xFF1A1A1A),
+          ),
+          onChanged: (phone) {
+            _completePhoneNumber = phone.completeNumber;
+          },
+          validator: (phone) {
+            if (phone == null || phone.number.isEmpty) {
+              return 'Please enter your phone number';
+            }
+            if (phone.number.length < 9) {
+              return 'Please enter a valid phone number';
+            }
+            return null;
+          },
         ),
       ],
     );
   }
 
-  Widget _buildPasscodeInput() {
+  Widget _buildPasswordField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Passcode',
+          'Password',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF666666),
+            color: Color(0xFF1A1A1A),
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFFE0E0E0),
-              width: 1,
+        TextFormField(
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your password';
+            }
+            if (value.length < 4) {
+              return 'Password must be at least 4 characters';
+            }
+            return null;
+          },
+          decoration: InputDecoration(
+            hintText: 'Enter your password',
+            hintStyle: TextStyle(
+              color: Colors.grey.shade400,
             ),
-          ),
-          child: TextField(
-            controller: _passcodeController,
-            obscureText: _obscurePasscode,
-            decoration: InputDecoration(
-              hintText: 'Enter your passcode',
-              hintStyle: const TextStyle(
-                color: Color(0xFFAAAAAA),
-                fontSize: 15,
+            filled: true,
+            fillColor: const Color(0xFFF5F5F5),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                color: Colors.grey.shade600,
               ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              suffixIcon: TextButton(
-                onPressed: () {
-                  setState(() {
-                    _obscurePasscode = !_obscurePasscode;
-                  });
-                },
-                child: Text(
-                  _obscurePasscode ? 'Show' : 'Hide',
-                  style: const TextStyle(
-                    color: Color(0xFF6B9B5B),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              onPressed: () {
+                setState(() {
+                  _obscurePassword = !_obscurePassword;
+                });
+              },
             ),
           ),
         ),

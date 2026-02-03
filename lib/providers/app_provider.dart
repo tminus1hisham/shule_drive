@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
+import '../api/api.dart' as api;
 import '../models/student.dart';
 import '../models/trip.dart';
 import '../models/child.dart';
 
 class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
+  // API Services
+  final api.RouteService _routeService = api.RouteService();
+  final api.StudentService _studentService = api.StudentService();
+  
+  // Loading states
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+  
   // Theme mode: null = system default, true = dark, false = light
   bool? _manualDarkMode;
 
@@ -72,6 +84,312 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   Color get cardColor => isDarkMode ? cardDark : cardLight;
   Color get textColor => isDarkMode ? Colors.white : textPrimary;
   Color get textMutedColor => isDarkMode ? Colors.white70 : textSecondary;
+  
+  // ==========================================================================
+  // API INTEGRATION - ROUTES
+  // ==========================================================================
+  
+  List<api.BusRoute> _routes = [];
+  List<api.BusRoute> get routes => _routes;
+  
+  /// Fetch all routes from API
+  Future<void> fetchRoutes() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _routes = await _routeService.getAllRoutes();
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch routes');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Fetch routes by current user
+  Future<void> fetchRoutesByUser() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _routes = await _routeService.getRoutesByUser();
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch routes');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Create a new route
+  Future<api.BusRoute?> createRoute({
+    required String name,
+    required String description,
+    required List<api.RouteStop> stops,
+    String? schoolId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final route = await _routeService.createRoute(
+        name: name,
+        description: description,
+        stops: stops,
+        schoolId: schoolId,
+      );
+      _routes.add(route);
+      notifyListeners();
+      return route;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to create route');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Update a route
+  Future<api.BusRoute?> updateRoute({
+    required String routeId,
+    String? name,
+    String? description,
+    List<api.RouteStop>? stops,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final updatedRoute = await _routeService.updateRoute(
+        routeId: routeId,
+        name: name,
+        description: description,
+        stops: stops,
+      );
+      
+      final index = _routes.indexWhere((r) => r.id == routeId);
+      if (index != -1) {
+        _routes[index] = updatedRoute;
+        notifyListeners();
+      }
+      return updatedRoute;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to update route');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Delete a route
+  Future<bool> deleteRoute(String routeId) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      await _routeService.deleteRoute(routeId);
+      _routes.removeWhere((r) => r.id == routeId);
+      notifyListeners();
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to delete route');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  // ==========================================================================
+  // API INTEGRATION - CHILDREN/STUDENTS
+  // ==========================================================================
+  
+  List<api.Student> _apiStudents = [];
+  List<api.Student> get apiStudents => _apiStudents;
+  
+  // For UI compatibility - converts API students to model students
+  List<Student> get studentsList => _apiStudents.map((s) => Student(
+    id: s.id,
+    name: s.name,
+    className: s.className,
+    avatar: s.photo ?? 'https://i.pravatar.cc/150?img=1',
+    status: StudentStatus.pending,
+  )).toList();
+  
+  /// Fetch all students from API
+  Future<void> fetchStudents() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _apiStudents = await _studentService.getAllStudents();
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch students');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Fetch guardian's students
+  Future<void> fetchGuardianStudents() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _apiStudents = await _studentService.getGuardianStudents();
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch students');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Add a new child/student
+  Future<api.Student?> addChildAPI({
+    required String name,
+    required String className,
+    String? schoolId,
+    String? photo,
+    String? pickupLocation,
+    String? dropoffLocation,
+    String? emergencyContact,
+    String? emergencyPhone,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final student = await _studentService.createStudent(
+        name: name,
+        className: className,
+        schoolId: schoolId,
+        photo: photo,
+        pickupLocation: pickupLocation,
+        dropoffLocation: dropoffLocation,
+        emergencyContact: emergencyContact,
+        emergencyPhone: emergencyPhone,
+      );
+      _apiStudents.add(student);
+      notifyListeners();
+      return student;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to add child');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Update child/student
+  Future<api.Student?> updateChildAPI({
+    required String studentId,
+    String? name,
+    String? className,
+    String? schoolId,
+    String? photo,
+    String? pickupLocation,
+    String? dropoffLocation,
+    String? emergencyContact,
+    String? emergencyPhone,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final updatedStudent = await _studentService.updateStudent(
+        studentId: studentId,
+        name: name,
+        className: className,
+        schoolId: schoolId,
+        photo: photo,
+        pickupLocation: pickupLocation,
+        dropoffLocation: dropoffLocation,
+        emergencyContact: emergencyContact,
+        emergencyPhone: emergencyPhone,
+      );
+      
+      final index = _apiStudents.indexWhere((s) => s.id == studentId);
+      if (index != -1) {
+        _apiStudents[index] = updatedStudent;
+        notifyListeners();
+      }
+      return updatedStudent;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to update child');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Delete child/student
+  Future<bool> deleteChildAPI(String studentId) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      await _studentService.deleteStudent(studentId);
+      _apiStudents.removeWhere((s) => s.id == studentId);
+      notifyListeners();
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to delete child');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  // ==========================================================================
+  // HELPER METHODS
+  // ==========================================================================
+  
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+  
+  void _setError(String message) {
+    _errorMessage = message;
+    notifyListeners();
+  }
+  
+  void _clearError() {
+    _errorMessage = null;
+  }
+  
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
 
   // User data
   Map<String, dynamic> userData = {
@@ -260,3 +578,5 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get completedTrips => trips.where((t) => t.status == TripStatus.completed).length;
   double get totalDistance => trips.fold(0, (sum, t) => sum + t.distance);
 }
+
+

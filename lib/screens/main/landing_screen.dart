@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/bus_illustration.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -23,8 +24,9 @@ class _LandingScreenState extends State<LandingScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
-    final userData = provider.userData;
+    final userData = authProvider.userData; // Use authenticated user data
     final cardColor = provider.cardColor;
     final textColor = provider.textColor;
     final textMutedColor = provider.textMutedColor;

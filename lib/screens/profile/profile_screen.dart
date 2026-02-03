@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,7 +17,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final userData = provider.userData;
+    final authProvider = context.watch<AuthProvider>();
+    final userData = authProvider.userData; // Use authenticated user data
     final isDarkMode = provider.isDarkMode;
 
     return MainScaffold(

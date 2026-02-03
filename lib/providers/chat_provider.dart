@@ -1,57 +1,79 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
-import '../services/mqtt_service.dart';
+import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {
-  final MQTTService _mqttService = MQTTService();
-  final _uuid = const Uuid();
+  final ChatService _chatService = ChatService();
 
   final List<ChatMessage> _messages = [];
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _error;
+  String? _currentChatUserId;
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get isConnected => _isConnected;
   bool get isConnecting => _isConnecting;
   String? get error => _error;
 
-  StreamSubscription? _messageSubscription;
-  StreamSubscription? _connectionSubscription;
+  StreamSubscription<bool>? _typingSubscription;
+  bool _otherUserTyping = false;
+  bool get otherUserTyping => _otherUserTyping;
 
+  /// Initialize and start chat with another user
   Future<void> initialize(String currentUserId, String otherUserId) async {
     _isConnecting = true;
     _error = null;
+    _currentChatUserId = otherUserId;
     notifyListeners();
 
     try {
-      _connectionSubscription?.cancel();
-      _connectionSubscription = _mqttService.connectionStream.listen((connected) {
-        _isConnected = connected;
-        notifyListeners();
-      });
+      // Initialize chat service if needed
+      await _chatService.initialize();
+      
+      // Connect to MQTT
+      await _chatService.connect();
+      _isConnected = true;
 
-      _messageSubscription?.cancel();
-      _messageSubscription = _mqttService.messageStream.listen((message) {
+      // Start chat and listen for messages
+      await _chatService.startChat(otherUserId, (message) {
         if (!_messages.any((m) => m.id == message.id)) {
           _messages.add(message);
           _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
           notifyListeners();
+          
+          // Mark as delivered if message is from other user
+          if (message.senderId == otherUserId) {
+            _chatService.markAsDelivered(message.id, message.senderId);
+          }
         }
       });
 
-      await _mqttService.connect(currentUserId, otherUserId);
+      // Load message history
+      final history = _chatService.getMessageHistory(otherUserId);
+      _messages.clear();
+      _messages.addAll(history);
+      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      // Listen to typing indicators
+      _typingSubscription?.cancel();
+      _typingSubscription = _chatService.onTypingIndicator(otherUserId).listen((isTyping) {
+        _otherUserTyping = isTyping;
+        notifyListeners();
+      });
+
       _isConnecting = false;
       notifyListeners();
     } catch (e) {
       _isConnecting = false;
+      _isConnected = false;
       _error = 'Failed to connect: $e';
       notifyListeners();
     }
   }
 
+  /// Send a text message
   Future<void> sendMessage(String content) async {
     if (!_isConnected) {
       _error = 'Not connected to chat server';
@@ -59,26 +81,42 @@ class ChatProvider extends ChangeNotifier {
       return;
     }
 
-    if (content.trim().isEmpty) return;
-
-    final message = ChatMessage(
-      id: _uuid.v4(),
-      senderId: 'user1',
-      receiverId: 'user2',
-      content: content.trim(),
-      timestamp: DateTime.now(),
-      isRead: false,
-    );
+    if (content.trim().isEmpty || _currentChatUserId == null) return;
 
     try {
-      await _mqttService.sendMessage(message);
-      _messages.add(message);
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      notifyListeners();
+      await _chatService.sendMessage(
+        recipientId: _currentChatUserId!,
+        content: content.trim(),
+      );
+      // Message will be added via the startChat callback when echoed back
     } catch (e) {
       _error = 'Failed to send message: $e';
       notifyListeners();
     }
+  }
+
+  /// Send typing indicator
+  Future<void> sendTypingIndicator(bool isTyping) async {
+    if (!_isConnected || _currentChatUserId == null) return;
+    
+    try {
+      await _chatService.sendTypingIndicator(_currentChatUserId!, isTyping);
+    } catch (e) {
+      // Silently fail - typing indicator is not critical
+    }
+  }
+
+  /// Mark all messages from other user as read
+  Future<void> markMessagesAsRead() async {
+    if (_currentChatUserId == null) return;
+    
+    for (final message in _messages) {
+      if (message.senderId == _currentChatUserId && message.status != MessageStatus.read) {
+        await _chatService.markAsRead(message.id, message.senderId);
+        message.status = MessageStatus.read;
+      }
+    }
+    notifyListeners();
   }
 
   void clearError() {
@@ -88,9 +126,8 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _messageSubscription?.cancel();
-    _connectionSubscription?.cancel();
-    _mqttService.dispose();
+    _typingSubscription?.cancel();
+    _chatService.dispose();
     super.dispose();
   }
 }

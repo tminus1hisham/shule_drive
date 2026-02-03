@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -15,14 +16,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
+  String _completePhoneNumber = '';
 
   @override
   void initState() {
     super.initState();
-    final userData = context.read<AppProvider>().userData;
+    final userData = context.read<AuthProvider>().userData;
     _nameController = TextEditingController(text: userData['name']);
     _phoneController = TextEditingController(text: userData['phone']);
-    _emailController = TextEditingController(text: userData['email']);
+    _emailController = TextEditingController(text: userData['email'] ?? '');
+    _completePhoneNumber = userData['phone'] ?? '';
   }
 
   @override
@@ -33,10 +36,73 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _saveProfile() async {
+    if (_nameController.text.trim().isEmpty) {
+      _showError('Please enter your name');
+      return;
+    }
+
+    final authProvider = context.read<AuthProvider>();
+    
+    final success = await authProvider.updateUserProfile(
+      name: _nameController.text.trim(),
+      phone: _completePhoneNumber.isNotEmpty ? _completePhoneNumber : null,
+      email: _emailController.text.trim().isNotEmpty 
+          ? _emailController.text.trim() 
+          : null,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      _showSuccess('Profile updated successfully');
+      Navigator.pop(context);
+    } else {
+      _showError(authProvider.errorMessage ?? 'Failed to update profile');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: const Color(0xFF6B9B5B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final userData = provider.userData;
+    final authProvider = context.watch<AuthProvider>();
+    final userData = authProvider.userData;
 
     return MainScaffold(
       title: 'Edit Profile',
@@ -60,6 +126,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       CircleAvatar(
                         radius: 50,
                         backgroundImage: NetworkImage(userData['avatar']),
+                        backgroundColor: Colors.grey.shade200,
                       ),
                       Positioned(
                         bottom: 0,
@@ -79,6 +146,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    userData['name'] ?? 'User',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: provider.textColor,
+                    ),
+                  ),
+                  Text(
+                    userData['role']?.toString().toUpperCase() ?? '',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: provider.textMutedColor,
+                    ),
                   ),
                 ],
               ),
@@ -103,7 +186,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildPhoneField(),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 16),
                   _buildTextField(
                     'Email',
                     _emailController,
@@ -121,14 +204,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  provider.updateUserData({
-                    'name': _nameController.text,
-                    'phone': _phoneController.text,
-                    'email': _emailController.text,
-                  });
-                  Navigator.pop(context);
-                },
+                onPressed: authProvider.isLoading ? null : _saveProfile,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6B9B5B),
                   foregroundColor: Colors.white,
@@ -136,14 +212,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   elevation: 0,
+                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
                 ),
-                child: const Text(
-                  'Save Changes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: authProvider.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Save Changes',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -199,7 +285,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Phone',
+          'Phone Number',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -208,9 +294,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
         const SizedBox(height: 8),
         IntlPhoneField(
+          controller: _phoneController,
           decoration: InputDecoration(
-            labelText: 'Phone Number',
-            labelStyle: TextStyle(color: provider.textMutedColor),
+            hintText: '712 345 678',
+            hintStyle: TextStyle(color: Colors.grey.shade400),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -221,8 +308,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           style: TextStyle(color: provider.textColor),
           dropdownTextStyle: TextStyle(color: provider.textColor),
           initialCountryCode: 'KE',
+          disableLengthCheck: true,
           onChanged: (phone) {
-            // phone.completeNumber
+            _completePhoneNumber = phone.completeNumber;
           },
         ),
       ],

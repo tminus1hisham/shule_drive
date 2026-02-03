@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'api/api_client.dart';
 import 'providers/app_provider.dart';
+import 'providers/auth_provider.dart';
+import 'providers/trip_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/auth/otp_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
+import 'screens/auth/verify_reset_otp_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/main/home_screen.dart';
 import 'screens/main/landing_screen.dart';
 import 'screens/main/start_trip_screen.dart';
@@ -23,9 +28,14 @@ import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/auth/splash.dart';
+import 'widgets/role_guard.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize API client (loads saved tokens)
+  await ApiClient().init();
+  
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -40,8 +50,12 @@ class ShuleDriveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AppProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => TripProvider()),
+      ],
       child: Consumer<AppProvider>(
         builder: (context, provider, child) {
           return MaterialApp(
@@ -53,12 +67,28 @@ class ShuleDriveApp extends StatelessWidget {
             home: const Splash(),
             routes: {
               '/login': (context) => const LoginScreen(),
-              '/otp': (context) => const OTPScreen(),
+              '/forgot-password': (context) => const ForgotPasswordScreen(),
+              '/verify-reset-otp': (context) => const VerifyResetOtpScreen(),
+              '/reset-password': (context) => const ResetPasswordScreen(),
               '/landing': (context) => const LandingScreen(),
               '/home': (context) => const HomeScreen(),
-              '/start-trip': (context) => const StartTripScreen(),
-              '/select-students': (context) => const SelectStudentsScreen(),
-              '/active-trip': (context) => const ActiveTripScreen(),
+              // Driver-only routes
+              '/start-trip': (context) => RoleGuard(
+                allowedRoles: const [UserRole.driver],
+                fallback: const _AccessDeniedFallback(),
+                child: const StartTripScreen(),
+              ),
+              '/select-students': (context) => RoleGuard(
+                allowedRoles: const [UserRole.driver],
+                fallback: const _AccessDeniedFallback(),
+                child: const SelectStudentsScreen(),
+              ),
+              '/active-trip': (context) => RoleGuard(
+                allowedRoles: const [UserRole.driver],
+                fallback: const _AccessDeniedFallback(),
+                child: const ActiveTripScreen(),
+              ),
+              // Shared routes
               '/students-list': (context) => const StudentsListScreen(),
               '/profile': (context) => const ProfileScreen(),
               '/edit-profile': (context) => const EditProfileScreen(),
@@ -69,8 +99,10 @@ class ShuleDriveApp extends StatelessWidget {
               '/contact': (context) => const ContactScreen(),
               '/trips': (context) => const TripsScreen(),
               '/trip-details': (context) => const TripDetailsScreen(),
+              // Guardian routes
               '/manage-children': (context) => const ManageChildrenScreen(),
               '/child-profile': (context) => const ChildProfileScreen(),
+              // Chat (all roles)
               '/chat': (context) => const ChatScreen(),
             },
           );
@@ -90,11 +122,9 @@ class ShuleDriveApp extends StatelessWidget {
         primary: Color(0xFF6B9B5B),
         secondary: Color(0xFF6B9B5B),
         surface: Colors.white,
-        background: Color(0xFFF5F5F0),
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: Color(0xFF1A1A1A),
-        onBackground: Color(0xFF1A1A1A),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Color(0xFFF5F5F0),
@@ -149,11 +179,9 @@ class ShuleDriveApp extends StatelessWidget {
         primary: Color(0xFF6B9B5B),
         secondary: Color(0xFF6B9B5B),
         surface: Color(0xFF1E1E1E),
-        background: Color(0xFF121212),
         onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: Colors.white,
-        onBackground: Colors.white,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Color(0xFF121212),
@@ -196,4 +224,35 @@ class ShuleDriveApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AccessDeniedFallback extends StatelessWidget {
+  const _AccessDeniedFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.block, size: 80, color: Colors.red),
+            const SizedBox(height: 16),
+            const Text(
+              'Access Denied',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('You don\'t have permission to access this feature.'),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Go Back'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }
