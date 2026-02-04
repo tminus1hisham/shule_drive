@@ -6,6 +6,7 @@ import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/trip_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/tracking_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
@@ -32,6 +33,8 @@ import 'screens/chat/chat_screen.dart';
 import 'screens/chat/chat_list_screen.dart';
 import 'screens/chat/user_list_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
+import 'screens/tracking/live_tracking_screen.dart';
+import 'screens/tracking/osm_tracking_screen.dart';
 
 import 'services/token_storage.dart';
 import 'widgets/route_guard.dart';
@@ -66,6 +69,7 @@ class ShuleDriveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => TripProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => TrackingProvider()),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
@@ -343,6 +347,26 @@ class ShuleDriveApp extends StatelessWidget {
         );
         protected = true;
         break;
+      
+      case '/live-tracking':
+        final args = settings.arguments as Map<String, dynamic>?;
+        page = LiveTrackingScreen(
+          tripId: args?['tripId'] as String?,
+          busId: args?['busId'] as String?,
+          routeId: args?['routeId'] as String?,
+        );
+        protected = true;
+        break;
+      
+      case '/osm-tracking':
+        final args = settings.arguments as Map<String, dynamic>?;
+        page = OsmTrackingScreen(
+          tripId: args?['tripId'] as String?,
+          busId: args?['busId'] as String?,
+          routeId: args?['routeId'] as String?,
+        );
+        protected = true;
+        break;
 
       default:
         return PageRouteBuilder(
@@ -409,7 +433,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _initializeAuth();
+    // Delay initialization to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAuth();
+    });
   }
 
   Future<void> _initializeAuth() async {

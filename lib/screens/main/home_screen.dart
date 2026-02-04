@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/map_selector.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,38 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (index == 4) {
       // Center + button - only for drivers
       Navigator.pushNamed(context, '/start-trip');
+    }
+  }
+
+  void _showMapSelector(BuildContext ctx) async {
+    final provider = await showMapSelectorDialog(
+      ctx,
+      initialProvider: MapProvider.openStreetMap,
+    );
+    
+    if (provider == null) return;
+    if (!mounted) return;
+    
+    if (provider == MapProvider.google) {
+      Navigator.pushNamed(
+        context, 
+        '/live-tracking',
+        arguments: {
+          'tripId': 'TRIP_001',
+          'busId': 'BUS001',
+          'routeId': 'ROUTE_001',
+        },
+      );
+    } else {
+      Navigator.pushNamed(
+        context,
+        '/osm-tracking',
+        arguments: {
+          'tripId': 'TRIP_001',
+          'busId': 'BUS001',
+          'routeId': 'ROUTE_001',
+        },
+      );
     }
   }
 
@@ -525,20 +558,20 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildQuickActionCard(
-                  icon: Icons.history,
-                  label: 'Trip History',
-                  color: const Color(0xFF2196F3),
-                  onTap: () => Navigator.pushNamed(context, '/trips'),
+                  icon: Icons.map,
+                  label: 'Live Track',
+                  color: const Color(0xFFFF9800),
+                  onTap: () => _showMapSelector(context),
                   isDarkMode: isDarkMode,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _buildQuickActionCard(
-                  icon: Icons.people_outline,
-                  label: 'Students',
-                  color: const Color(0xFFE91E63),
-                  onTap: () => Navigator.pushNamed(context, '/manage-children'),
+                  icon: Icons.history,
+                  label: 'History',
+                  color: const Color(0xFF2196F3),
+                  onTap: () => Navigator.pushNamed(context, '/trips'),
                   isDarkMode: isDarkMode,
                 ),
               ),

@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 /// Custom page transitions for faster, snappier navigation
 class PageTransitions {
   /// Fast fade transition - best for tab switching
-  static PageRouteBuilder fadeTransition({
+  static PageRouteBuilder<T> fadeTransition<T>({
     required Widget page,
     Duration duration = const Duration(milliseconds: 200),
   }) {
-    return PageRouteBuilder(
+    return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         return FadeTransition(
@@ -24,11 +24,11 @@ class PageTransitions {
   }
 
   /// Slide up transition - for modals/bottom sheets replacement
-  static PageRouteBuilder slideUpTransition({
+  static PageRouteBuilder<T> slideUpTransition<T>({
     required Widget page,
     Duration duration = const Duration(milliseconds: 300),
   }) {
-    return PageRouteBuilder(
+    return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         const begin = Offset(0.0, 0.1);
@@ -52,11 +52,11 @@ class PageTransitions {
   }
 
   /// Scale transition - for dialogs/popups
-  static PageRouteBuilder scaleTransition({
+  static PageRouteBuilder<T> scaleTransition<T>({
     required Widget page,
     Duration duration = const Duration(milliseconds: 250),
   }) {
-    return PageRouteBuilder(
+    return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         return ScaleTransition(
@@ -76,10 +76,10 @@ class PageTransitions {
   }
 
   /// No transition - instant page switch (fastest)
-  static PageRouteBuilder noTransition({
+  static PageRouteBuilder<T> noTransition<T>({
     required Widget page,
   }) {
-    return PageRouteBuilder(
+    return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
       transitionDuration: Duration.zero,
@@ -88,11 +88,11 @@ class PageTransitions {
   }
 
   /// iOS-style slide transition
-  static PageRouteBuilder slideTransition({
+  static PageRouteBuilder<T> slideTransition<T>({
     required Widget page,
     Duration duration = const Duration(milliseconds: 250),
   }) {
-    return PageRouteBuilder(
+    return PageRouteBuilder<T>(
       pageBuilder: (context, animation, secondaryAnimation) => page,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         const begin = Offset(1.0, 0.0);
@@ -129,22 +129,6 @@ class FastMaterialPageRoute<T> extends MaterialPageRoute<T> {
   Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
 }
 
-/// Custom CupertinoPageRoute with optimized transitions
-class FastCupertinoPageRoute<T> extends CupertinoPageRoute<T> {
-  FastCupertinoPageRoute({
-    required super.builder,
-    super.settings,
-    super.maintainState,
-    super.fullscreenDialog,
-  });
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 250);
-
-  @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
-}
-
 /// Navigation helper with optimized transitions
 class NavigationHelper {
   /// Navigate with fade transition (best for tabs)
@@ -153,11 +137,11 @@ class NavigationHelper {
     Widget page, {
     bool replace = false,
   }) {
-    final route = PageTransitions.fadeTransition(page: page);
+    final route = PageTransitions.fadeTransition<T>(page: page);
     if (replace) {
-      return Navigator.pushReplacement(context, route);
+      return Navigator.pushReplacement<T, T>(context, route);
     }
-    return Navigator.push(context, route);
+    return Navigator.push<T>(context, route);
   }
 
   /// Navigate with slide up transition
@@ -166,11 +150,11 @@ class NavigationHelper {
     Widget page, {
     bool replace = false,
   }) {
-    final route = PageTransitions.slideUpTransition(page: page);
+    final route = PageTransitions.slideUpTransition<T>(page: page);
     if (replace) {
-      return Navigator.pushReplacement(context, route);
+      return Navigator.pushReplacement<T, T>(context, route);
     }
-    return Navigator.push(context, route);
+    return Navigator.push<T>(context, route);
   }
 
   /// Navigate instantly (no transition)
@@ -179,11 +163,11 @@ class NavigationHelper {
     Widget page, {
     bool replace = false,
   }) {
-    final route = PageTransitions.noTransition(page: page);
+    final route = PageTransitions.noTransition<T>(page: page);
     if (replace) {
-      return Navigator.pushReplacement(context, route);
+      return Navigator.pushReplacement<T, T>(context, route);
     }
-    return Navigator.push(context, route);
+    return Navigator.push<T>(context, route);
   }
 
   /// Navigate with iOS slide
@@ -192,10 +176,10 @@ class NavigationHelper {
     Widget page, {
     bool replace = false,
   }) {
-    final route = PageTransitions.slideTransition(page: page);
+    final route = PageTransitions.slideTransition<T>(page: page);
     if (replace) {
-      return Navigator.pushReplacement(context, route);
+      return Navigator.pushReplacement<T, T>(context, route);
     }
-    return Navigator.push(context, route);
+    return Navigator.push<T>(context, route);
   }
 }
