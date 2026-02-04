@@ -31,6 +31,7 @@ import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/chat/chat_list_screen.dart';
 import 'screens/chat/user_list_screen.dart';
+import 'screens/notifications/notifications_screen.dart';
 
 import 'services/token_storage.dart';
 import 'widgets/route_guard.dart';
@@ -136,6 +137,11 @@ class ShuleDriveApp extends StatelessWidget {
               ),
               '/trip-details': (context) => const RouteGuard(
                 child: TripDetailsScreen(),
+              ),
+              
+              // Notifications
+              '/notifications': (context) => const RouteGuard(
+                child: NotificationsScreen(),
               ),
               
               // Guardian routes

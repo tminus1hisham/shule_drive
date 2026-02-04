@@ -29,7 +29,8 @@ class _LandingScreenState extends State<LandingScreen> {
     } else if (index == 1) {
       Navigator.pushNamed(context, '/chat');
     } else if (index == 2) {
-      // Alerts
+      // Alerts - navigate to notifications
+      Navigator.pushNamed(context, '/notifications');
     } else if (index == 3) {
       Navigator.pushNamed(context, '/profile');
     } else if (index == 4) {
