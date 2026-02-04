@@ -13,11 +13,50 @@ class StartTripScreen extends StatefulWidget {
 class _StartTripScreenState extends State<StartTripScreen> {
   int _currentIndex = 0;
   String? _selectedVehicle;
+  String? _selectedRoute;
   String? _selectedAttendant;
+  
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch routes and buses when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    
+    final provider = context.read<AppProvider>();
+    
+    // Fetch routes and buses in parallel
+    await Future.wait([
+      provider.fetchRoutesByUser(),
+      provider.fetchBusesByUser(),
+    ]);
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final routes = provider.routes;
+    final buses = provider.buses;
+    
+    // Build vehicle items from API data
+    final vehicleItems = buses.map((bus) => bus.registrationNumber).toList();
+    
+    // Build route items from API data
+    final routeItems = routes.map((route) => route.name).toList();
+    
+    // Attendant items (could be fetched from API if needed)
+    final attendantItems = ['James Kadere', 'John Doe', 'Jane Smith'];
     
     return MainScaffold(
       title: 'Start Trip',
@@ -101,29 +140,65 @@ class _StartTripScreenState extends State<StartTripScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Select your assigned vehicle, attendant, and route to begin your trip.',
+                    'Select your assigned vehicle, route, and attendant to begin your trip.',
                     style: TextStyle(fontSize: 14, color: provider.textMutedColor),
                   ),
                   const SizedBox(height: 20),
+                  
+                  // Show loading indicator while fetching data
+                  if (_isLoading || provider.isLoading)
+                    Center(
+                      child: Column(
+                        children: [
+                          const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Loading routes and vehicles...',
+                            style: TextStyle(
+                              color: provider.textMutedColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    // Route Dropdown
+                    _buildDropdown(
+                      'Route',
+                      _selectedRoute,
+                      routeItems,
+                      (value) => setState(() => _selectedRoute = value),
+                      provider,
+                      hint: 'Select Route',
+                      emptyMessage: routeItems.isEmpty ? 'No routes available' : null,
+                    ),
+                    const SizedBox(height: 16),
 
-                  // Vehicle Registration Dropdown
-                  _buildDropdown(
-                    'Vehicle Registration No.',
-                    _selectedVehicle,
-                    ['KCA 123U', 'KCB 456X', 'KCC 789Y'],
-                    (value) => setState(() => _selectedVehicle = value),
-                    provider,
-                  ),
-                  const SizedBox(height: 16),
+                    // Vehicle Registration Dropdown
+                    _buildDropdown(
+                      'Vehicle Registration No.',
+                      _selectedVehicle,
+                      vehicleItems,
+                      (value) => setState(() => _selectedVehicle = value),
+                      provider,
+                      hint: 'Select Vehicle',
+                      emptyMessage: vehicleItems.isEmpty ? 'No vehicles available' : null,
+                    ),
+                    const SizedBox(height: 16),
 
-                  // Attendant Dropdown
-                  _buildDropdown(
-                    'Attendant',
-                    _selectedAttendant,
-                    ['James Kadere', 'John Doe', 'Jane Smith'],
-                    (value) => setState(() => _selectedAttendant = value),
-                    provider,
-                  ),
+                    // Attendant Dropdown
+                    _buildDropdown(
+                      'Attendant',
+                      _selectedAttendant,
+                      attendantItems,
+                      (value) => setState(() => _selectedAttendant = value),
+                      provider,
+                      hint: 'Select Attendant',
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // Buttons
@@ -150,9 +225,13 @@ class _StartTripScreenState extends State<StartTripScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamed(context, '/select-students');
-                          },
+                          onPressed: (_isLoading || provider.isLoading || 
+                                     _selectedRoute == null || 
+                                     _selectedVehicle == null)
+                              ? null 
+                              : () {
+                                  Navigator.pushNamed(context, '/select-students');
+                                },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF6B9B5B),
                             foregroundColor: Colors.white,
@@ -160,6 +239,7 @@ class _StartTripScreenState extends State<StartTripScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 16),
+                            disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
                           ),
                           child: const Text('Next'),
                         ),
@@ -188,7 +268,7 @@ class _StartTripScreenState extends State<StartTripScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDarkMode ? 0.4 : 0.2), 
+            color: Colors.black.withValues(alpha: isDarkMode ? 0.4 : 0.2), 
             blurRadius: 8,
           ),
         ],
@@ -206,8 +286,10 @@ class _StartTripScreenState extends State<StartTripScreen> {
     String? value,
     List<String> items,
     Function(String?) onChanged,
-    AppProvider provider,
-  ) {
+    AppProvider provider, {
+    required String hint,
+    String? emptyMessage,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -228,29 +310,50 @@ class _StartTripScreenState extends State<StartTripScreen> {
                 : const Color(0xFFF5F5F5),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              hint: Text(
-                'Select $label',
-                style: TextStyle(color: provider.textMutedColor),
-              ),
-              isExpanded: true,
-              icon: Icon(Icons.keyboard_arrow_down, color: provider.textMutedColor),
-              dropdownColor: provider.cardColor,
-              style: TextStyle(color: provider.textColor),
-              items: items.map((String item) {
-                return DropdownMenuItem<String>(
-                  value: item, 
-                  child: Text(
-                    item,
-                    style: TextStyle(color: provider.textColor),
+          child: emptyMessage != null
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: provider.textMutedColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        emptyMessage,
+                        style: TextStyle(
+                          color: provider.textMutedColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }).toList(),
-              onChanged: onChanged,
-            ),
-          ),
+                )
+              : DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: value,
+                    hint: Text(
+                      hint,
+                      style: TextStyle(color: provider.textMutedColor),
+                    ),
+                    isExpanded: true,
+                    icon: Icon(Icons.keyboard_arrow_down, color: provider.textMutedColor),
+                    dropdownColor: provider.cardColor,
+                    style: TextStyle(color: provider.textColor),
+                    items: items.map((String item) {
+                      return DropdownMenuItem<String>(
+                        value: item, 
+                        child: Text(
+                          item,
+                          style: TextStyle(color: provider.textColor),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: onChanged,
+                  ),
+                ),
         ),
       ],
     );

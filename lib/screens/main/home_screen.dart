@@ -513,8 +513,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildQuickActionCard(
-                  icon: Icons.child_care,
-                  label: 'Children',
+                  icon: Icons.people_outline,
+                  label: 'Students',
                   color: const Color(0xFFE91E63),
                   onTap: () => Navigator.pushNamed(context, '/manage-children'),
                   isDarkMode: isDarkMode,
@@ -618,7 +618,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTripItem(trip, bool isDarkMode) {
+  Widget _buildTripItem(dynamic trip, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),

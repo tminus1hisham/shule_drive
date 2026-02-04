@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -12,11 +13,51 @@ class ChildProfileScreen extends StatefulWidget {
 
 class _ChildProfileScreenState extends State<ChildProfileScreen> {
   int _currentIndex = 3;
+  String? _childId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Get child ID from route arguments
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    _childId = args?['childId'] as String?;
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final child = provider.children.first;
+    
+    // Find child from API data
+    api.Student? child;
+    if (_childId != null) {
+      child = provider.apiStudents.firstWhere(
+        (s) => s.id == _childId,
+        orElse: () => provider.apiStudents.first,
+      );
+    } else {
+      child = provider.apiStudents.isNotEmpty ? provider.apiStudents.first : null;
+    }
+    
+    // Show loading if no child data
+    if (child == null) {
+      return MainScaffold(
+        title: 'Child Profile',
+        showBackButton: true,
+        showBottomNav: true,
+        bottomNavIndex: _currentIndex,
+        onBottomNavTap: (index) {
+          setState(() => _currentIndex = index);
+          if (index == 0) {
+            Navigator.pushReplacementNamed(context, '/landing');
+          }
+        },
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFF6B9B5B),
+          ),
+        ),
+      );
+    }
 
     return MainScaffold(
       title: 'Child Profile',
@@ -47,7 +88,17 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                     children: [
                       CircleAvatar(
                         radius: 50,
-                        backgroundImage: NetworkImage(child.avatar),
+                        backgroundImage: child.photo != null 
+                            ? NetworkImage(child.photo!)
+                            : null,
+                        backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
+                        child: child.photo == null
+                            ? const Icon(
+                                Icons.person,
+                                color: Color(0xFF6B9B5B),
+                                size: 40,
+                              )
+                            : null,
                       ),
                       Positioned(
                         bottom: 0,
@@ -83,7 +134,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
 
                   // School
                   Text(
-                    child.school,
+                    child.schoolName ?? 'No School',
                     style: const TextStyle(
                       fontSize: 14,
                       color: Color(0xFF6B9B5B),
@@ -124,9 +175,9 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildInfoRow(context, 'Parent Name', child.parentName),
+                  _buildInfoRow(context, 'Guardian', provider.userData['name'] ?? 'N/A'),
                   const Divider(height: 24),
-                  _buildInfoRow(context, 'Phone', child.parentPhone),
+                  _buildInfoRow(context, 'Phone', provider.userData['phone'] ?? 'N/A'),
                 ],
               ),
             ),
@@ -152,7 +203,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildInfoRow(context, 'School', child.school),
+                  _buildInfoRow(context, 'School', child.schoolName ?? 'N/A'),
                   const Divider(height: 24),
                   _buildInfoRow(context, 'Class', child.className),
                   const Divider(height: 24),

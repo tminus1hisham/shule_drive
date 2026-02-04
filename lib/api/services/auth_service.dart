@@ -1,12 +1,12 @@
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
-import '../../services/secure_token_storage.dart';
+import '../../services/token_storage.dart';
 
 /// Auth Service - Handles authentication-related API calls
 class AuthService {
   final ApiClient _apiClient = ApiClient();
-  final SecureTokenStorage _tokenStorage = SecureTokenStorage();
+  final TokenStorage _tokenStorage = TokenStorage();
   
   /// Login with phone number and password
   /// POST /api/auth/login

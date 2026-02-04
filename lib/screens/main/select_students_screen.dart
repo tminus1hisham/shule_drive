@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/student.dart';
+import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -14,39 +14,50 @@ class SelectStudentsScreen extends StatefulWidget {
 class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  
+  List<api.Student> _filteredStudents = [];
+  List<api.Student> _selectedStudents = [];
+  bool _isLoading = true;
 
-  List<Student> students = [
-    Student(
-      id: '1',
-      name: 'Mary Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=5',
-      status: StudentStatus.pending,
-    ),
-    Student(
-      id: '2',
-      name: 'Mary Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=9',
-      status: StudentStatus.pending,
-    ),
-    Student(
-      id: '3',
-      name: 'Mary Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=8',
-      status: StudentStatus.pending,
-    ),
-    Student(
-      id: '4',
-      name: 'Mary Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=3',
-      status: StudentStatus.pending,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Fetch students when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudents();
+    });
+    _searchController.addListener(_filterStudents);
+  }
 
-  List<Student> selectedStudents = [];
+  Future<void> _loadStudents() async {
+    setState(() => _isLoading = true);
+    
+    final provider = context.read<AppProvider>();
+    await provider.fetchGuardianStudents();
+    
+    if (mounted) {
+      setState(() {
+        _filteredStudents = provider.apiStudents;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _filterStudents() {
+    final provider = context.read<AppProvider>();
+    final query = _searchController.text.toLowerCase();
+    
+    setState(() {
+      if (query.isEmpty) {
+        _filteredStudents = provider.apiStudents;
+      } else {
+        _filteredStudents = provider.apiStudents.where((student) {
+          return student.name.toLowerCase().contains(query) ||
+                 student.className.toLowerCase().contains(query);
+        }).toList();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -54,19 +65,24 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     super.dispose();
   }
 
-  void _toggleStudent(Student student) {
+  void _toggleStudent(api.Student student) {
     setState(() {
-      if (selectedStudents.contains(student)) {
-        selectedStudents.remove(student);
+      if (_selectedStudents.any((s) => s.id == student.id)) {
+        _selectedStudents.removeWhere((s) => s.id == student.id);
       } else {
-        selectedStudents.add(student);
+        _selectedStudents.add(student);
       }
     });
+  }
+
+  bool _isSelected(api.Student student) {
+    return _selectedStudents.any((s) => s.id == student.id);
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final students = provider.apiStudents;
 
     return MainScaffold(
       title: 'Select Students',
@@ -74,77 +90,119 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       body: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select Students scheduled for this trip.',
-                    style: TextStyle(fontSize: 14, color: provider.textMutedColor),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Search Bar
-                  Container(
-                    decoration: BoxDecoration(
-                      color: provider.cardColor,
-                      borderRadius: BorderRadius.circular(12),
+            child: _isLoading || provider.isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF6B9B5B),
                     ),
-                    child: TextField(
-                      controller: _searchController,
-                      style: TextStyle(color: provider.textColor),
-                      decoration: InputDecoration(
-                        hintText: 'Search Students',
-                        hintStyle: TextStyle(
-                          color: provider.textMutedColor,
-                          fontSize: 14,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search,
-                          color: provider.textMutedColor,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadStudents,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Select Students scheduled for this trip.',
+                            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Search Bar
+                          Container(
+                            decoration: BoxDecoration(
+                              color: provider.cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              style: TextStyle(color: provider.textColor),
+                              decoration: InputDecoration(
+                                hintText: 'Search Students',
+                                hintStyle: TextStyle(
+                                  color: provider.textMutedColor,
+                                  fontSize: 14,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  color: provider.textMutedColor,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Selected Count
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Students added to the list',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: provider.textColor,
+                                ),
+                              ),
+                              Text(
+                                '${_selectedStudents.length}/${students.length}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppProvider.primaryGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Empty State
+                          if (students.isEmpty)
+                            Center(
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 40),
+                                  Icon(
+                                    Icons.school_outlined,
+                                    size: 64,
+                                    color: provider.textMutedColor,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No students found',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: provider.textColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Add students in the Manage Children section',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: provider.textMutedColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            // Students List
+                            ..._filteredStudents.map((student) => _buildStudentCard(student, provider)),
+                        ],
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Selected Count
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Students added to the list',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: provider.textColor,
-                        ),
-                      ),
-                      Text(
-                        '${selectedStudents.length}/${students.length}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppProvider.primaryGreen,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Students List
-                  ...students.map((student) => _buildStudentCard(student, provider)),
-                ],
-              ),
-            ),
           ),
 
           // Bottom Button
@@ -167,7 +225,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: selectedStudents.isNotEmpty
+                  onPressed: _selectedStudents.isNotEmpty
                       ? () => Navigator.pushNamed(context, '/active-trip')
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -182,7 +240,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                         : const Color(0xFFE0E0E0),
                   ),
                   child: Text(
-                    'Start Trip (${selectedStudents.length})',
+                    'Start Trip (${_selectedStudents.length})',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -197,8 +255,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     );
   }
 
-  Widget _buildStudentCard(Student student, AppProvider provider) {
-    final isSelected = selectedStudents.contains(student);
+  Widget _buildStudentCard(api.Student student, AppProvider provider) {
+    final isSelected = _isSelected(student);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -214,7 +272,17 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundImage: NetworkImage(student.avatar),
+            backgroundImage: student.photo != null
+                ? NetworkImage(student.photo!)
+                : null,
+            backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
+            child: student.photo == null
+                ? const Icon(
+                    Icons.person,
+                    color: Color(0xFF6B9B5B),
+                    size: 28,
+                  )
+                : null,
           ),
           const SizedBox(width: 12),
           Expanded(

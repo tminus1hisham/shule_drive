@@ -23,11 +23,11 @@ class ApiConstants {
   static const String changePassword = '/user/change-password';
   
   // Trip Endpoints
-  static const String trips = '/trips';
-  static const String tripDetails = '/trips/{id}';
-  static const String startTrip = '/trips/start';
-  static const String endTrip = '/trips/{id}/end';
-  static const String activeTrip = '/trips/active';
+  static const String trips = '/api/trips/get/all/master/trips';
+  static const String tripDetails = '/api/trips/{id}';
+  static const String startTrip = '/api/trips/start';
+  static const String endTrip = '/api/trips/{id}/end';
+  static const String activeTrip = '/api/trips/get/student/active/trip';
   
   // Student Endpoints
   static const String students = '/students';

@@ -209,7 +209,11 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
         }
       },
       child: GestureDetector(
-        onTap: () => Navigator.pushNamed(context, '/child-profile'),
+        onTap: () => Navigator.pushNamed(
+          context,
+          '/child-profile',
+          arguments: {'childId': child.id},
+        ),
         child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),

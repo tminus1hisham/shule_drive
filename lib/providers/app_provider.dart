@@ -8,6 +8,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   // API Services
   final api.RouteService _routeService = api.RouteService();
   final api.StudentService _studentService = api.StudentService();
+  final api.BusService _busService = api.BusService();
   
   // Loading states
   bool _isLoading = false;
@@ -100,6 +101,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _routes = await _routeService.getAllRoutes();
       notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _routes = [];
+      notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);
     } catch (e) {
@@ -116,6 +121,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     
     try {
       _routes = await _routeService.getRoutesByUser();
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _routes = [];
       notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);
@@ -214,6 +223,72 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
   
   // ==========================================================================
+  // API INTEGRATION - BUSES/VEHICLES
+  // ==========================================================================
+  
+  List<api.Bus> _buses = [];
+  List<api.Bus> get buses => _buses;
+  
+  /// Fetch all buses from API
+  Future<void> fetchBuses() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _buses = await _busService.getAllBuses();
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch buses');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Fetch buses by current user
+  Future<void> fetchBusesByUser() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _buses = await _busService.getBusesByUser();
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _buses = [];
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch buses');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Fetch active buses
+  Future<void> fetchActiveBuses() async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      _buses = await _busService.getActiveBuses();
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _buses = [];
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+    } catch (e) {
+      _setError('Failed to fetch buses');
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  // ==========================================================================
   // API INTEGRATION - CHILDREN/STUDENTS
   // ==========================================================================
   
@@ -237,6 +312,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _apiStudents = await _studentService.getAllStudents();
       notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _apiStudents = [];
+      notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);
     } catch (e) {
@@ -253,6 +332,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     
     try {
       _apiStudents = await _studentService.getGuardianStudents();
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      // Endpoint not available - show empty list
+      _apiStudents = [];
       notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);

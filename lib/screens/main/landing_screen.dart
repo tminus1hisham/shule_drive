@@ -263,9 +263,9 @@ class _LandingScreenState extends State<LandingScreen> {
         'color': const Color(0xFF6B9B5B),
       },
       {
-        'icon': Icons.people_outline,
-        'title': 'Students',
-        'subtitle': 'Manage student list',
+        'icon': Icons.child_care,
+        'title': 'Children',
+        'subtitle': 'Manage your children',
         'color': const Color(0xFF2196F3),
       },
       {
@@ -318,8 +318,8 @@ class _LandingScreenState extends State<LandingScreen> {
                 textMutedColor: textMutedColor,
                 isDarkMode: isDarkMode,
                 onTap: () {
-                  if (index == 0) Navigator.pushNamed(context, '/trips');
-                  if (index == 1) Navigator.pushNamed(context, '/students-list');
+                  if (index == 0) Navigator.pushNamed(context, '/routes');
+                  if (index == 1) Navigator.pushNamed(context, '/manage-children');
                   if (index == 2) Navigator.pushNamed(context, '/trips');
                   if (index == 3) Navigator.pushNamed(context, '/chat');
                 },

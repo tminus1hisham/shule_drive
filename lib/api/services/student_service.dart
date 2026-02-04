@@ -18,10 +18,17 @@ class StudentService {
         },
       );
       
-      final students = (response['data'] as List)
-          .map((student) => Student.fromJson(student))
-          .toList();
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> studentsData;
+      if (response is List) {
+        studentsData = response;
+      } else if (response is Map && response['data'] != null) {
+        studentsData = response['data'] as List;
+      } else {
+        studentsData = [];
+      }
       
+      final students = studentsData.map((student) => Student.fromJson(student)).toList();
       return students;
     } on ApiException {
       rethrow;
@@ -138,10 +145,17 @@ class StudentService {
     try {
       final response = await _apiClient.get(Endpoints.getGuardianStudents);
       
-      final students = (response['data'] as List)
-          .map((student) => Student.fromJson(student))
-          .toList();
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> studentsData;
+      if (response is List) {
+        studentsData = response;
+      } else if (response is Map && response['data'] != null) {
+        studentsData = response['data'] as List;
+      } else {
+        studentsData = [];
+      }
       
+      final students = studentsData.map((student) => Student.fromJson(student)).toList();
       return students;
     } on ApiException {
       rethrow;

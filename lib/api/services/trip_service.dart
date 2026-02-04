@@ -18,10 +18,20 @@ class TripService {
         },
       );
       
-      final trips = (response['data'] as List)
-          .map((trip) => Trip.fromJson(trip))
-          .toList();
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> tripsData;
+      if (response is List) {
+        // Response is already a list
+        tripsData = response;
+      } else if (response is Map && response['data'] != null) {
+        // Response is wrapped in a map with 'data' key
+        tripsData = response['data'] as List;
+      } else {
+        // Empty or unknown response structure
+        tripsData = [];
+      }
       
+      final trips = tripsData.map((trip) => Trip.fromJson(trip)).toList();
       return trips;
     } on ApiException {
       rethrow;

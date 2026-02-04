@@ -187,8 +187,8 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
 
     final authProvider = context.read<AuthProvider>();
     
-    // Old OTP flow - not used anymore
-    final success = false;
+    // Request new OTP via API
+    final success = await authProvider.requestPasswordReset(_phoneNumber!);
     
     if (!mounted) return;
 

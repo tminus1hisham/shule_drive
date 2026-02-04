@@ -24,14 +24,19 @@ import 'screens/info/about_screen.dart';
 import 'screens/info/contact_screen.dart';
 import 'screens/trips/trips_screen.dart';
 import 'screens/trips/trip_details_screen.dart';
+import 'screens/routes/routes_list_screen.dart';
 import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/auth/splash.dart';
+import 'services/token_storage.dart';
 import 'widgets/role_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize token storage (for web: shared_preferences, for mobile: secure_storage)
+  await TokenStorage().init();
   
   // Initialize API client (loads saved tokens)
   await ApiClient().init();
@@ -98,6 +103,7 @@ class ShuleDriveApp extends StatelessWidget {
               '/about': (context) => const AboutScreen(),
               '/contact': (context) => const ContactScreen(),
               '/trips': (context) => const TripsScreen(),
+              '/routes': (context) => const RoutesListScreen(),
               '/trip-details': (context) => const TripDetailsScreen(),
               // Guardian routes
               '/manage-children': (context) => const ManageChildrenScreen(),

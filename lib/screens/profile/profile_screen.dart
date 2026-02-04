@@ -266,10 +266,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'color': const Color(0xFF2196F3),
       },
       {
-        'icon': Icons.notifications_outlined,
-        'title': 'Notifications',
-        'subtitle': 'Manage alerts',
-        'route': null,
+        'icon': Icons.phone_outlined,
+        'title': 'Contact',
+        'subtitle': 'Get in touch with us',
+        'route': '/contact',
         'color': const Color(0xFFFF9800),
       },
       {

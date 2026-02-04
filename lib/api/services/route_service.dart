@@ -12,10 +12,17 @@ class RouteService {
     try {
       final response = await _apiClient.get(Endpoints.getAllRoutes);
       
-      final routes = (response['data'] as List)
-          .map((route) => BusRoute.fromJson(route))
-          .toList();
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> routesData;
+      if (response is List) {
+        routesData = response;
+      } else if (response is Map && response['data'] != null) {
+        routesData = response['data'] as List;
+      } else {
+        routesData = [];
+      }
       
+      final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
       return routes;
     } on ApiException {
       rethrow;
@@ -30,10 +37,17 @@ class RouteService {
     try {
       final response = await _apiClient.get(Endpoints.getRoutesByUser);
       
-      final routes = (response['data'] as List)
-          .map((route) => BusRoute.fromJson(route))
-          .toList();
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> routesData;
+      if (response is List) {
+        routesData = response;
+      } else if (response is Map && response['data'] != null) {
+        routesData = response['data'] as List;
+      } else {
+        routesData = [];
+      }
       
+      final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
       return routes;
     } on ApiException {
       rethrow;

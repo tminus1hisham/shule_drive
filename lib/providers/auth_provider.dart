@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
-import '../services/secure_token_storage.dart';
+import '../services/token_storage.dart';
 
 /// User Roles
 enum UserRole {
@@ -35,7 +35,7 @@ enum UserRole {
 /// Auth Provider - Manages authentication state and role-based access
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
-  final SecureTokenStorage _tokenStorage = SecureTokenStorage();
+  final TokenStorage _tokenStorage = TokenStorage();
 
   // Auth state
   bool _isAuthenticated = false;
@@ -112,6 +112,24 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       if (response.success && response.token != null) {
+        // Save auth tokens
+        await api.ApiClient().saveTokens(
+          accessToken: response.token!,
+          refreshToken: response.refreshToken,
+        );
+        
+        // Save user data
+        if (response.user != null) {
+          await _tokenStorage.saveUserData(
+            userId: response.user!.id,
+            name: response.user!.name,
+            phone: response.user!.phone,
+            role: response.user!.role,
+            email: response.user!.email,
+            avatar: response.user!.avatar,
+          );
+        }
+        
         // User authenticated successfully
         _currentUser = response.user;
         _userRole = UserRole.fromString(response.user?.role ?? 'unknown');
@@ -183,6 +201,10 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       // Even if server logout fails, clear local data
     } finally {
+      // Clear tokens from storage
+      await _tokenStorage.clearAll();
+      await api.ApiClient().clearAuthToken();
+      
       _currentUser = null;
       _userRole = UserRole.unknown;
       _isAuthenticated = false;

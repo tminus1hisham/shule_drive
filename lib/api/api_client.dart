@@ -81,7 +81,28 @@ class ApiClient {
   /// Handle HTTP response
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
-    final body = jsonDecode(response.body);
+    
+    // Handle empty response body
+    if (response.body.isEmpty) {
+      if (statusCode >= 200 && statusCode < 300) {
+        return {}; // Return empty map for successful empty responses
+      } else {
+        throw ApiException(
+          message: 'Server returned empty response with status $statusCode',
+          statusCode: statusCode,
+        );
+      }
+    }
+    
+    dynamic body;
+    try {
+      body = jsonDecode(response.body);
+    } catch (e) {
+      throw ApiException(
+        message: 'Invalid JSON response: ${e.toString()}',
+        statusCode: statusCode,
+      );
+    }
     
     switch (statusCode) {
       case HttpStatus.ok:

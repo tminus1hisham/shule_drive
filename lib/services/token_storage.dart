@@ -1,13 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'secure_token_storage.dart';
 
-/// Token Storage Service - Manages auth tokens using SharedPreferences
+/// Cross-platform Token Storage
+/// Uses flutter_secure_storage for mobile (encrypted)
+/// Uses shared_preferences for web (local storage)
 class TokenStorage {
   static final TokenStorage _instance = TokenStorage._internal();
   factory TokenStorage() => _instance;
   TokenStorage._internal();
 
-  SharedPreferences? _prefs;
+  // Mobile secure storage
+  final SecureTokenStorage _secureStorage = SecureTokenStorage();
   
+  // Web shared preferences
+  SharedPreferences? _prefs;
+  final bool _isWeb = kIsWeb;
+
   // Keys for storage
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
@@ -15,36 +24,53 @@ class TokenStorage {
   static const String _userNameKey = 'user_name';
   static const String _userPhoneKey = 'user_phone';
   static const String _userRoleKey = 'user_role';
-  static const String _isLoggedInKey = 'is_logged_in';
+  static const String _userEmailKey = 'user_email';
+  static const String _userAvatarKey = 'user_avatar';
 
-  /// Initialize SharedPreferences
+  /// Initialize storage (call this before using other methods)
   Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
+    if (_isWeb) {
+      _prefs = await SharedPreferences.getInstance();
+    }
   }
 
-  /// Save auth tokens after login
+  /// Check if running on web
+  bool get isWeb => _isWeb;
+
+  /// Save auth tokens
   Future<void> saveAuthTokens({
     required String accessToken,
     String? refreshToken,
   }) async {
-    await init();
-    await _prefs!.setString(_accessTokenKey, accessToken);
-    if (refreshToken != null) {
-      await _prefs!.setString(_refreshTokenKey, refreshToken);
+    if (_isWeb) {
+      await _prefs?.setString(_accessTokenKey, accessToken);
+      if (refreshToken != null) {
+        await _prefs?.setString(_refreshTokenKey, refreshToken);
+      }
+    } else {
+      await _secureStorage.saveAuthTokens(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
     }
-    await _prefs!.setBool(_isLoggedInKey, true);
   }
 
   /// Get access token
   Future<String?> getAccessToken() async {
-    await init();
-    return _prefs!.getString(_accessTokenKey);
+    if (_isWeb) {
+      return _prefs?.getString(_accessTokenKey);
+    } else {
+      return await _secureStorage.getAccessToken();
+    }
   }
 
   /// Get refresh token
   Future<String?> getRefreshToken() async {
-    await init();
-    return _prefs!.getString(_refreshTokenKey);
+    if (_isWeb) {
+      return _prefs?.getString(_refreshTokenKey);
+    } else {
+      return await _secureStorage.getRefreshToken();
+    }
   }
 
   /// Save user data
@@ -53,61 +79,108 @@ class TokenStorage {
     required String name,
     required String phone,
     required String role,
+    String? email,
+    String? avatar,
   }) async {
-    await init();
-    await _prefs!.setString(_userIdKey, userId);
-    await _prefs!.setString(_userNameKey, name);
-    await _prefs!.setString(_userPhoneKey, phone);
-    await _prefs!.setString(_userRoleKey, role);
+    if (_isWeb) {
+      await _prefs?.setString(_userIdKey, userId);
+      await _prefs?.setString(_userNameKey, name);
+      await _prefs?.setString(_userPhoneKey, phone);
+      await _prefs?.setString(_userRoleKey, role);
+      if (email != null) {
+        await _prefs?.setString(_userEmailKey, email);
+      }
+      if (avatar != null) {
+        await _prefs?.setString(_userAvatarKey, avatar);
+      }
+    } else {
+      await _secureStorage.saveUserData(
+        userId: userId,
+        name: name,
+        phone: phone,
+        role: role,
+        email: email,
+        avatar: avatar,
+      );
+    }
   }
 
   /// Get user ID
   Future<String?> getUserId() async {
-    await init();
-    return _prefs!.getString(_userIdKey);
+    if (_isWeb) {
+      return _prefs?.getString(_userIdKey);
+    } else {
+      return await _secureStorage.getUserId();
+    }
   }
 
   /// Get user name
   Future<String?> getUserName() async {
-    await init();
-    return _prefs!.getString(_userNameKey);
+    if (_isWeb) {
+      return _prefs?.getString(_userNameKey);
+    } else {
+      return await _secureStorage.getUserName();
+    }
   }
 
   /// Get user phone
   Future<String?> getUserPhone() async {
-    await init();
-    return _prefs!.getString(_userPhoneKey);
+    if (_isWeb) {
+      return _prefs?.getString(_userPhoneKey);
+    } else {
+      return await _secureStorage.getUserPhone();
+    }
   }
 
   /// Get user role
   Future<String?> getUserRole() async {
-    await init();
-    return _prefs!.getString(_userRoleKey);
+    if (_isWeb) {
+      return _prefs?.getString(_userRoleKey);
+    } else {
+      return await _secureStorage.getUserRole();
+    }
   }
 
-  /// Check if user is logged in
+  /// Get user email
+  Future<String?> getUserEmail() async {
+    if (_isWeb) {
+      return _prefs?.getString(_userEmailKey);
+    } else {
+      return await _secureStorage.getUserEmail();
+    }
+  }
+
+  /// Get user avatar
+  Future<String?> getUserAvatar() async {
+    if (_isWeb) {
+      return _prefs?.getString(_userAvatarKey);
+    } else {
+      return await _secureStorage.getUserAvatar();
+    }
+  }
+
+  /// Check if user is logged in (has access token)
   Future<bool> isLoggedIn() async {
-    await init();
-    return _prefs!.getBool(_isLoggedInKey) ?? false;
+    final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
   }
 
   /// Clear all stored data (logout)
   Future<void> clearAll() async {
-    await init();
-    await _prefs!.remove(_accessTokenKey);
-    await _prefs!.remove(_refreshTokenKey);
-    await _prefs!.remove(_userIdKey);
-    await _prefs!.remove(_userNameKey);
-    await _prefs!.remove(_userPhoneKey);
-    await _prefs!.remove(_userRoleKey);
-    await _prefs!.remove(_isLoggedInKey);
+    if (_isWeb) {
+      await _prefs?.clear();
+    } else {
+      await _secureStorage.clearAll();
+    }
   }
 
-  /// Clear only tokens (for token refresh scenarios)
+  /// Clear only tokens
   Future<void> clearTokens() async {
-    await init();
-    await _prefs!.remove(_accessTokenKey);
-    await _prefs!.remove(_refreshTokenKey);
-    await _prefs!.setBool(_isLoggedInKey, false);
+    if (_isWeb) {
+      await _prefs?.remove(_accessTokenKey);
+      await _prefs?.remove(_refreshTokenKey);
+    } else {
+      await _secureStorage.clearTokens();
+    }
   }
 }
