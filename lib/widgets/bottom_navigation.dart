@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
+import '../providers/auth_provider.dart';
 
 class BottomNavigation extends StatelessWidget {
   final int currentIndex;
@@ -15,7 +16,9 @@ class BottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
+    final isDriver = authProvider.isDriver;
 
     // Modern glassmorphism background
     final backgroundColor = isDarkMode 
@@ -54,7 +57,8 @@ class BottomNavigation extends StatelessWidget {
           children: [
             _buildNavItem(Icons.home_rounded, 'Home', 0, isDarkMode),
             _buildNavItem(Icons.chat_bubble_outline_rounded, 'Chat', 1, isDarkMode),
-            _buildCenterActionButton(isDarkMode),
+            // Only show center '+' button for drivers (taps index 4)
+            if (isDriver) _buildCenterActionButton(isDarkMode),
             _buildNavItem(Icons.notifications_none_rounded, 'Alerts', 2, isDarkMode),
             _buildNavItem(Icons.settings_outlined, 'Settings', 3, isDarkMode),
           ],

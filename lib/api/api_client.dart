@@ -26,8 +26,10 @@ class ApiClient {
   String get baseUrl => ApiConstants.baseUrl;
   
   /// Initialize and load token from storage
+  /// Only loads token if one exists - call this on app startup
   Future<void> init() async {
-    _authToken = await _tokenStorage.getAccessToken();
+    // Only load token if we haven't explicitly cleared it
+    _authToken ??= await _tokenStorage.getAccessToken();
   }
   
   /// Set auth token after login (persists to storage)
@@ -47,15 +49,21 @@ class ApiClient {
   
   /// Clear auth token on logout
   Future<void> clearAuthToken() async {
+    // Clear in-memory token first
     _authToken = null;
+    
+    // Clear all tokens from persistent storage
     await _tokenStorage.clearAll();
+  }
+  
+  /// Force clear any cached token (useful for logout scenarios)
+  void forceClearToken() {
+    _authToken = null;
   }
   
   /// Check if user is authenticated
   Future<bool> isAuthenticated() async {
-    if (_authToken == null) {
-      _authToken = await _tokenStorage.getAccessToken();
-    }
+    _authToken ??= await _tokenStorage.getAccessToken();
     return _authToken != null;
   }
   

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,18 +13,37 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   void _handleNavigation(int index) {
-    if (index == 1) {
+    final authProvider = context.read<AuthProvider>();
+    final isGuardian = authProvider.isGuardian;
+    
+    if (index == 0) {
+      // Home button - show different screen based on role
+      if (isGuardian) {
+        // Guardian on HomeScreen → go to LandingScreen
+        Navigator.pushReplacementNamed(context, '/landing');
+      } else {
+        // Driver on HomeScreen → stay (or go to landing if on home)
+        Navigator.pushReplacementNamed(context, '/landing');
+      }
+    } else if (index == 1) {
       Navigator.pushNamed(context, '/chat');
+    } else if (index == 2) {
+      // Alerts
     } else if (index == 3) {
       Navigator.pushNamed(context, '/profile');
+    } else if (index == 4) {
+      // Center + button - only for drivers
+      Navigator.pushNamed(context, '/start-trip');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
-    final userData = provider.userData;
+    final userData = authProvider.userData;
+    final isGuardian = authProvider.isGuardian;
 
     return MainScaffold(
       showBottomNav: true,
@@ -39,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
             
             // Greeting
             SliverToBoxAdapter(
-              child: _buildGreeting(userData, isDarkMode),
+              child: _buildGreeting(userData, isGuardian, isDarkMode),
             ),
             
             // Stats Cards
@@ -136,35 +156,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildGreeting(Map<String, dynamic> userData, bool isDarkMode) {
+  Widget _buildGreeting(Map<String, dynamic> userData, bool isGuardian, bool isDarkMode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Role Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isDarkMode 
                   ? Colors.white.withValues(alpha: 0.1)
-                  : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                  : const Color(0xFF2196F3).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.wb_sunny_outlined,
+                  isGuardian ? Icons.family_restroom : Icons.local_shipping_outlined,
                   size: 14,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
+                  color: isDarkMode ? Colors.white70 : const Color(0xFF2196F3),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Good Morning',
+                  isGuardian ? 'Guardian' : 'Driver',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
+                    color: isDarkMode ? Colors.white70 : const Color(0xFF2196F3),
                   ),
                 ),
               ],
@@ -182,7 +203,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Ready for today\'s trip?',
+            isGuardian 
+              ? 'Track your children\'s journey safely.'
+              : 'Ready for today\'s trip?',
             style: TextStyle(
               fontSize: 16,
               color: isDarkMode ? Colors.white60 : const Color(0xFF666666),

@@ -14,10 +14,27 @@ class LandingScreen extends StatefulWidget {
 
 class _LandingScreenState extends State<LandingScreen> {
   void _handleNavigation(int index) {
-    if (index == 1) {
+    final authProvider = context.read<AuthProvider>();
+    final isDriver = authProvider.isDriver;
+    
+    if (index == 0) {
+      // Home button - show different screen based on role
+      if (isDriver) {
+        // Driver on LandingScreen → go to HomeScreen
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        // Guardian on LandingScreen → stay (or go to home if on landing)
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } else if (index == 1) {
       Navigator.pushNamed(context, '/chat');
+    } else if (index == 2) {
+      // Alerts
     } else if (index == 3) {
       Navigator.pushNamed(context, '/profile');
+    } else if (index == 4) {
+      // Center + button - only for drivers
+      Navigator.pushNamed(context, '/start-trip');
     }
   }
 
@@ -26,10 +43,12 @@ class _LandingScreenState extends State<LandingScreen> {
     final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
-    final userData = authProvider.userData; // Use authenticated user data
+    final userData = authProvider.userData;
     final cardColor = provider.cardColor;
     final textColor = provider.textColor;
     final textMutedColor = provider.textMutedColor;
+    final isDriver = authProvider.isDriver;
+    final isGuardian = authProvider.isGuardian;
 
     return MainScaffold(
       showBottomNav: true,
@@ -42,13 +61,15 @@ class _LandingScreenState extends State<LandingScreen> {
               child: _buildHeader(userData, isDarkMode, textColor),
             ),
             SliverToBoxAdapter(
-              child: _buildGreeting(userData, isDarkMode, textColor, textMutedColor),
+              child: _buildGreeting(userData, isDriver, isDarkMode, textColor, textMutedColor),
             ),
             SliverToBoxAdapter(
-              child: _buildNoTripCard(context, isDarkMode, cardColor, textColor, textMutedColor),
+              child: isDriver 
+                ? _buildDriverTripCard(context, isDarkMode, cardColor, textColor, textMutedColor)
+                : _buildGuardianDashboard(context, isDarkMode, cardColor, textColor, textMutedColor),
             ),
             SliverToBoxAdapter(
-              child: _buildFeaturesSection(context, isDarkMode, cardColor, textColor, textMutedColor),
+              child: _buildFeaturesSection(context, isDriver, isGuardian, isDarkMode, cardColor, textColor, textMutedColor),
             ),
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
@@ -124,7 +145,11 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildGreeting(Map<String, dynamic> userData, bool isDarkMode, Color textColor, Color textMutedColor) {
+  Widget _buildGreeting(Map<String, dynamic> userData, bool isDriver, bool isDarkMode, Color textColor, Color textMutedColor) {
+    final subtitle = isDriver 
+      ? 'Ready to start your driving day?'
+      : 'Track your children\'s journey safely.';
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -142,13 +167,13 @@ class _LandingScreenState extends State<LandingScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.wb_sunny_outlined,
+                  isDriver ? Icons.local_shipping_outlined : Icons.family_restroom,
                   size: 14,
                   color: isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Good Morning',
+                  isDriver ? 'Driver' : 'Guardian',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -170,7 +195,7 @@ class _LandingScreenState extends State<LandingScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Ready to start your day?',
+            subtitle,
             style: TextStyle(
               fontSize: 16,
               color: textMutedColor,
@@ -181,7 +206,8 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildNoTripCard(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
+  // Driver Widget - Shows trip card
+  Widget _buildDriverTripCard(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(28),
@@ -254,33 +280,154 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  Widget _buildFeaturesSection(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
-    final features = [
+  // Guardian Widget - Shows children overview
+  Widget _buildGuardianDashboard(BuildContext context, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.family_restroom,
+              size: 60,
+              color: const Color(0xFF2196F3),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Your Children',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Monitor your children\'s school transportation in real-time.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: textMutedColor,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/manage-children'),
+                    icon: const Icon(Icons.child_care, size: 22),
+                    label: const Text(
+                      'My Children',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2196F3),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturesSection(BuildContext context, bool isDriver, bool isGuardian, bool isDarkMode, Color cardColor, Color textColor, Color textMutedColor) {
+    // Different features based on user role
+    final driverFeatures = [
       {
         'icon': Icons.route_outlined,
-        'title': 'Plan Routes',
-        'subtitle': 'View and manage routes',
+        'title': 'Routes',
+        'subtitle': 'View assigned routes',
         'color': const Color(0xFF6B9B5B),
+        'route': '/routes',
       },
       {
-        'icon': Icons.child_care,
-        'title': 'Children',
-        'subtitle': 'Manage your children',
+        'icon': Icons.people_outline,
+        'title': 'Students',
+        'subtitle': 'View student list',
         'color': const Color(0xFF2196F3),
+        'route': '/students-list',
       },
       {
         'icon': Icons.history,
         'title': 'History',
-        'subtitle': 'View past trips',
+        'subtitle': 'Trip history',
         'color': const Color(0xFFFF9800),
+        'route': '/trips',
       },
       {
         'icon': Icons.chat_bubble_outline,
         'title': 'Messages',
-        'subtitle': 'Chat with parents',
+        'subtitle': 'Chat with guardians',
         'color': const Color(0xFFE91E63),
+        'route': '/chat',
       },
     ];
+
+    final guardianFeatures = [
+      {
+        'icon': Icons.child_care,
+        'title': 'My Children',
+        'subtitle': 'Manage children',
+        'color': const Color(0xFF2196F3),
+        'route': '/manage-children',
+      },
+      {
+        'icon': Icons.route_outlined,
+        'title': 'Routes',
+        'subtitle': 'View bus routes',
+        'color': const Color(0xFF6B9B5B),
+        'route': '/routes',
+      },
+      {
+        'icon': Icons.history,
+        'title': 'History',
+        'subtitle': 'Trip history',
+        'color': const Color(0xFFFF9800),
+        'route': '/trips',
+      },
+      {
+        'icon': Icons.chat_bubble_outline,
+        'title': 'Messages',
+        'subtitle': 'Chat with driver',
+        'color': const Color(0xFFE91E63),
+        'route': '/chat',
+      },
+    ];
+
+    final features = isDriver ? driverFeatures : guardianFeatures;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -317,12 +464,7 @@ class _LandingScreenState extends State<LandingScreen> {
                 textColor: textColor,
                 textMutedColor: textMutedColor,
                 isDarkMode: isDarkMode,
-                onTap: () {
-                  if (index == 0) Navigator.pushNamed(context, '/routes');
-                  if (index == 1) Navigator.pushNamed(context, '/manage-children');
-                  if (index == 2) Navigator.pushNamed(context, '/trips');
-                  if (index == 3) Navigator.pushNamed(context, '/chat');
-                },
+                onTap: () => Navigator.pushNamed(context, feature['route'] as String),
               );
             },
           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
+import '../providers/auth_provider.dart';
 
 class SideMenu extends StatefulWidget {
   const SideMenu({super.key});
@@ -538,9 +539,12 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/login');
+              // Perform logout
+              final authProvider = context.read<AuthProvider>();
+              await authProvider.logout();
+              // Navigation will be handled by AuthWrapper automatically
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFE53935),

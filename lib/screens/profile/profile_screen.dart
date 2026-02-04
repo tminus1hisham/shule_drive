@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../utils/permission_helper.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,14 +14,15 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  int _currentIndex = 3;
+  final int _currentIndex = 3;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
-    final userData = authProvider.userData; // Use authenticated user data
+    final userData = authProvider.userData;
     final isDarkMode = provider.isDarkMode;
+    final userRole = authProvider.userRole;
 
     return MainScaffold(
       title: 'Profile',
@@ -40,7 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
             
             // Profile Header with Avatar
-            _buildProfileHeader(userData, isDarkMode),
+            _buildProfileHeader(userData, isDarkMode, userRole, authProvider),
             
             const SizedBox(height: 24),
             
@@ -64,7 +67,176 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(Map<String, dynamic> userData, bool isDarkMode) {
+  void _showImagePickerOptions(BuildContext context, AuthProvider authProvider) {
+    final isDarkMode = context.read<AppProvider>().isDarkMode;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Update Profile Photo',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B9B5B).withValues(alpha: 30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    color: Color(0xFF6B9B5B),
+                  ),
+                ),
+                title: Text(
+                  'Take Photo',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+                subtitle: Text(
+                  'Use camera to take a photo',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  // Request camera permission first
+                  final hasPermission = await PermissionHelper.requestCameraPermission(context);
+                  if (hasPermission && context.mounted) {
+                    await _pickAndUploadImage(context, authProvider, ImageSource.camera);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2196F3).withValues(alpha: 30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFF2196F3),
+                  ),
+                ),
+                title: Text(
+                  'Choose from Gallery',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+                subtitle: Text(
+                  'Select a photo from your gallery',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  // Request photo library permission first
+                  final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(context);
+                  if (hasPermission && context.mounted) {
+                    await _pickAndUploadImage(context, authProvider, ImageSource.gallery);
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadImage(
+    BuildContext context,
+    AuthProvider authProvider,
+    ImageSource source,
+  ) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      if (!context.mounted) return;
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        ),
+      );
+
+      final avatarUrl = await authProvider.updateUserAvatar(pickedFile.path);
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (avatarUrl != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Profile photo updated successfully'),
+            backgroundColor: const Color(0xFF6B9B5B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      } else if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to upload photo. Please try again.'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildProfileHeader(Map<String, dynamic> userData, bool isDarkMode, UserRole userRole, AuthProvider authProvider) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -85,20 +257,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Column(
         children: [
-          // Avatar with border
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.5),
-                width: 3,
-              ),
-            ),
-            child: CircleAvatar(
-              radius: 45,
-              backgroundImage: NetworkImage(userData['avatar']),
-              backgroundColor: Colors.white,
+          // Avatar with border and edit button
+          GestureDetector(
+            onTap: () => _showImagePickerOptions(context, authProvider),
+            child: Stack(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      width: 3,
+                    ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 45,
+                    backgroundImage: NetworkImage(userData['avatar']),
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+                // Edit icon overlay
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF6B9B5B),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      color: Color(0xFF6B9B5B),
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -391,7 +591,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       height: 52,
       child: ElevatedButton.icon(
-        onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+        onPressed: () async {
+          // Perform logout - AuthWrapper will handle navigation
+          final authProvider = context.read<AuthProvider>();
+          await authProvider.logout();
+        },
         icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
         label: const Text(
           'Logout',

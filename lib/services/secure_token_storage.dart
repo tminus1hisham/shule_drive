@@ -127,6 +127,8 @@ class SecureTokenStorage {
   /// Clear all stored data (logout)
   Future<void> clearAll() async {
     await _secureStorage.deleteAll();
+    // Also clear cached data
+    _cachedUserId = null;
   }
 
   /// Clear only tokens

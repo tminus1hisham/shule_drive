@@ -58,24 +58,3 @@ enum MessageStatus {
   read,
   failed,
 }
-
-/// Chat Conversation Model
-class ChatConversation {
-  final String id;
-  final String otherUserId;
-  final String otherUserName;
-  final String? otherUserAvatar;
-  final ChatMessage? lastMessage;
-  final int unreadCount;
-  final DateTime? lastActivity;
-
-  ChatConversation({
-    required this.id,
-    required this.otherUserId,
-    required this.otherUserName,
-    this.otherUserAvatar,
-    this.lastMessage,
-    this.unreadCount = 0,
-    this.lastActivity,
-  });
-}

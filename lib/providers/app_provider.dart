@@ -451,6 +451,56 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
   
+  /// Upload and update student image
+  Future<String?> uploadStudentImage({
+    required String studentId,
+    required String imagePath,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final imageUrl = await _studentService.updateStudentImage(
+        studentId: studentId,
+        imagePath: imagePath,
+      );
+      
+      // Update local student data
+      final index = _apiStudents.indexWhere((s) => s.id == studentId);
+      if (index != -1) {
+        final updatedStudent = api.Student(
+          id: _apiStudents[index].id,
+          name: _apiStudents[index].name,
+          className: _apiStudents[index].className,
+          photo: imageUrl,
+          schoolId: _apiStudents[index].schoolId,
+          schoolName: _apiStudents[index].schoolName,
+          guardianId: _apiStudents[index].guardianId,
+          guardianName: _apiStudents[index].guardianName,
+          guardianPhone: _apiStudents[index].guardianPhone,
+          pickupLocation: _apiStudents[index].pickupLocation,
+          dropoffLocation: _apiStudents[index].dropoffLocation,
+          emergencyContact: _apiStudents[index].emergencyContact,
+          emergencyPhone: _apiStudents[index].emergencyPhone,
+          isActive: _apiStudents[index].isActive,
+          createdAt: _apiStudents[index].createdAt,
+        );
+        _apiStudents[index] = updatedStudent;
+        notifyListeners();
+      }
+      
+      return imageUrl;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to upload image');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
   // ==========================================================================
   // HELPER METHODS
   // ==========================================================================

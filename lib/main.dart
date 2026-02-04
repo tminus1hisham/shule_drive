@@ -5,6 +5,7 @@ import 'api/api_client.dart';
 import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/trip_provider.dart';
+import 'providers/chat_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
@@ -28,9 +29,11 @@ import 'screens/routes/routes_list_screen.dart';
 import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
-import 'screens/auth/splash.dart';
+import 'screens/chat/chat_list_screen.dart';
+import 'screens/chat/user_list_screen.dart';
+
 import 'services/token_storage.dart';
-import 'widgets/role_guard.dart';
+import 'widgets/route_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,56 +63,109 @@ class ShuleDriveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => TripProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
       ],
       child: Consumer<AppProvider>(
-        builder: (context, provider, child) {
+        builder: (context, appProvider, child) {
           return MaterialApp(
             title: 'ShuleDrive',
             debugShowCheckedModeBanner: false,
-            themeMode: provider.themeMode,
+            themeMode: appProvider.themeMode,
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
-            home: const Splash(),
+            home: const AuthWrapper(),
             routes: {
+              // Public routes (no auth required)
               '/login': (context) => const LoginScreen(),
               '/forgot-password': (context) => const ForgotPasswordScreen(),
               '/verify-reset-otp': (context) => const VerifyResetOtpScreen(),
               '/reset-password': (context) => const ResetPasswordScreen(),
-              '/landing': (context) => const LandingScreen(),
-              '/home': (context) => const HomeScreen(),
+              
+              // Protected routes - require authentication
+              '/landing': (context) => const RouteGuard(
+                child: LandingScreen(),
+              ),
+              '/home': (context) => const RouteGuard(
+                child: HomeScreen(),
+              ),
+              
               // Driver-only routes
-              '/start-trip': (context) => RoleGuard(
-                allowedRoles: const [UserRole.driver],
-                fallback: const _AccessDeniedFallback(),
-                child: const StartTripScreen(),
+              '/start-trip': (context) => const RouteGuard(
+                allowedRoles: [UserRole.driver],
+                child: StartTripScreen(),
               ),
-              '/select-students': (context) => RoleGuard(
-                allowedRoles: const [UserRole.driver],
-                fallback: const _AccessDeniedFallback(),
-                child: const SelectStudentsScreen(),
+              '/select-students': (context) => const RouteGuard(
+                allowedRoles: [UserRole.driver],
+                child: SelectStudentsScreen(),
               ),
-              '/active-trip': (context) => RoleGuard(
-                allowedRoles: const [UserRole.driver],
-                fallback: const _AccessDeniedFallback(),
-                child: const ActiveTripScreen(),
+              '/active-trip': (context) => const RouteGuard(
+                allowedRoles: [UserRole.driver],
+                child: ActiveTripScreen(),
               ),
-              // Shared routes
-              '/students-list': (context) => const StudentsListScreen(),
-              '/profile': (context) => const ProfileScreen(),
-              '/edit-profile': (context) => const EditProfileScreen(),
-              '/change-password': (context) => const ChangePasswordScreen(),
-              '/terms': (context) => const TermsServiceScreen(),
-              '/privacy': (context) => const PrivacyPolicyScreen(),
-              '/about': (context) => const AboutScreen(),
-              '/contact': (context) => const ContactScreen(),
-              '/trips': (context) => const TripsScreen(),
-              '/routes': (context) => const RoutesListScreen(),
-              '/trip-details': (context) => const TripDetailsScreen(),
+              
+              // Shared routes - any authenticated user
+              '/students-list': (context) => const RouteGuard(
+                child: StudentsListScreen(),
+              ),
+              '/profile': (context) => const RouteGuard(
+                child: ProfileScreen(),
+              ),
+              '/edit-profile': (context) => const RouteGuard(
+                child: EditProfileScreen(),
+              ),
+              '/change-password': (context) => const RouteGuard(
+                child: ChangePasswordScreen(),
+              ),
+              '/terms': (context) => const RouteGuard(
+                child: TermsServiceScreen(),
+              ),
+              '/privacy': (context) => const RouteGuard(
+                child: PrivacyPolicyScreen(),
+              ),
+              '/about': (context) => const RouteGuard(
+                child: AboutScreen(),
+              ),
+              '/contact': (context) => const RouteGuard(
+                child: ContactScreen(),
+              ),
+              '/trips': (context) => const RouteGuard(
+                child: TripsScreen(),
+              ),
+              '/routes': (context) => const RouteGuard(
+                child: RoutesListScreen(),
+              ),
+              '/trip-details': (context) => const RouteGuard(
+                child: TripDetailsScreen(),
+              ),
+              
               // Guardian routes
-              '/manage-children': (context) => const ManageChildrenScreen(),
-              '/child-profile': (context) => const ChildProfileScreen(),
-              // Chat (all roles)
-              '/chat': (context) => const ChatScreen(),
+              '/manage-children': (context) => const RouteGuard(
+                allowedRoles: [UserRole.guardian],
+                child: ManageChildrenScreen(),
+              ),
+              '/child-profile': (context) => const RouteGuard(
+                allowedRoles: [UserRole.guardian],
+                child: ChildProfileScreen(),
+              ),
+              
+              // Chat (all authenticated roles)
+              '/chat': (context) => const RouteGuard(
+                child: ChatListScreen(),
+              ),
+              '/chat-users': (context) => const RouteGuard(
+                child: UserListScreen(),
+              ),
+              '/chat-detail': (context) {
+                final args = ModalRoute.of(context)!.settings.arguments 
+                    as Map<String, dynamic>?;
+                return RouteGuard(
+                  child: ChatScreen(
+                    receiverId: args?['receiverId'] as String?,
+                    receiverName: args?['receiverName'] as String?,
+                    receiverAvatar: args?['receiverAvatar'] as String?,
+                  ),
+                );
+              },
             },
           );
         },
@@ -232,33 +288,57 @@ class ShuleDriveApp extends StatelessWidget {
   }
 }
 
-class _AccessDeniedFallback extends StatelessWidget {
-  const _AccessDeniedFallback();
+/// Authentication Wrapper - Handles auth state and redirects accordingly
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    _initializeAuth();
+  }
+
+  Future<void> _initializeAuth() async {
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.initialize();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.block, size: 80, color: Colors.red),
-            const SizedBox(height: 16),
-            const Text(
-              'Access Denied',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        // Show loading while initializing
+        if (authProvider.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF6B9B5B),
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text('You don\'t have permission to access this feature.'),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
-      ),
+          );
+        }
+
+        // If authenticated, show screen based on role
+        if (authProvider.isAuthenticated) {
+          // Drivers see LandingScreen (with trip features)
+          // Guardians see HomeScreen (simplified view)
+          if (authProvider.isDriver) {
+            return const LandingScreen();
+          } else {
+            return const HomeScreen();
+          }
+        }
+
+        // Not authenticated, show login
+        return const LoginScreen();
+      },
     );
   }
-
 }
+
+

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
+import '../api/services/user_service.dart';
 import '../services/token_storage.dart';
 
 /// User Roles
@@ -35,6 +36,7 @@ enum UserRole {
 /// Auth Provider - Manages authentication state and role-based access
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
   final TokenStorage _tokenStorage = TokenStorage();
 
   // Auth state
@@ -194,23 +196,36 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Logout user
+  /// Clears all tokens from memory and storage (works offline - no API call)
   Future<void> logout() async {
     _setLoading(true);
+    
     try {
-      await _authService.logout();
+      // Try server logout if available (don't wait for it)
+      _authService.logout().catchError((_) {
+        // Ignore server errors - we still want to logout locally
+      });
     } catch (e) {
-      // Even if server logout fails, clear local data
-    } finally {
-      // Clear tokens from storage
-      await _tokenStorage.clearAll();
-      await api.ApiClient().clearAuthToken();
-      
-      _currentUser = null;
-      _userRole = UserRole.unknown;
-      _isAuthenticated = false;
-      _setLoading(false);
-      notifyListeners();
+      // Ignore errors - proceed with local logout
     }
+    
+    // Clear all auth data - IMPORTANT: Order matters!
+    
+    // 1. Clear from ApiClient first (in-memory) - prevents new API requests
+    api.ApiClient().forceClearToken();
+    await api.ApiClient().clearAuthToken();
+    
+    // 2. Clear from TokenStorage (persistent storage)
+    await _tokenStorage.clearAll();
+    
+    // 3. Reset all local state
+    _currentUser = null;
+    _userRole = UserRole.unknown;
+    _isAuthenticated = false;
+    _errorMessage = null;
+    
+    _setLoading(false);
+    notifyListeners();
   }
 
   /// Update user profile via API and locally
@@ -338,6 +353,51 @@ class AuthProvider extends ChangeNotifier {
     } catch (e) {
       _setError('Failed to reset password. Please try again.');
       return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Update user avatar/profile photo
+  Future<String?> updateUserAvatar(String imagePath) async {
+    if (_currentUser == null) return null;
+    
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final avatarUrl = await _userService.uploadAvatar(imagePath);
+      
+      // Update current user with new avatar
+      _currentUser = api.User(
+        id: _currentUser!.id,
+        name: _currentUser!.name,
+        phone: _currentUser!.phone,
+        role: _currentUser!.role,
+        email: _currentUser!.email,
+        avatar: avatarUrl,
+        licenseNumber: _currentUser!.licenseNumber,
+        vehicleNumber: _currentUser!.vehicleNumber,
+      );
+      
+      // Update in storage
+      await _tokenStorage.saveUserData(
+        userId: _currentUser!.id,
+        name: _currentUser!.name,
+        phone: _currentUser!.phone,
+        role: _currentUser!.role,
+        email: _currentUser!.email,
+        avatar: avatarUrl,
+      );
+
+      notifyListeners();
+      return avatarUrl;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to upload avatar. Please try again.');
+      return null;
     } finally {
       _setLoading(false);
     }

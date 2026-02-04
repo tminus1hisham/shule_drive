@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
@@ -311,32 +313,133 @@ class LoginResponse {
   });
   
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
-    // Handle backend response format which has user fields at top level
+    // Debug: print the raw response to understand structure
+    debugPrint('LoginResponse raw: $json');
+    
     User? user;
-    if (json['userId'] != null || json['userName'] != null) {
-      final rawName = json['userName'] ?? json['name'] ?? '';
+    
+    // Try to extract user data from various API response formats
+    // Priority: 1. userType from body, 2. role from body, 3. role from JWT token
+    
+    String? extractedRole;
+    String? extractedName;
+    String? extractedId;
+    String? extractedPhone;
+    String? extractedEmail;
+    
+    // Try to get from response body first
+    if (json['userType'] != null) {
+      extractedRole = json['userType'];
+      debugPrint('Found userType in response body: $extractedRole');
+    } else if (json['role'] != null) {
+      extractedRole = json['role'];
+      debugPrint('Found role in response body: $extractedRole');
+    }
+    
+    // Get other user fields from body
+    extractedName = json['fullname'] ?? json['userName'] ?? json['name'];
+    extractedId = json['userId']?.toString() ?? json['id']?.toString();
+    extractedPhone = json['phoneNumber'] ?? json['phone'];
+    extractedEmail = json['email'];
+    
+    // If no role in body, try JWT token
+    if (extractedRole == null && json['token'] != null) {
+      extractedRole = _extractRoleFromToken(json['token']);
+      debugPrint('Extracted role from JWT: $extractedRole');
+    }
+    
+    // If we have a token but no ID, try to get ID from JWT
+    if (extractedId == null && json['token'] != null) {
+      extractedId = _extractUserIdFromToken(json['token']);
+    }
+    
+    // Create user if we have minimum data
+    if (extractedRole != null || json['token'] != null) {
       user = User(
-        id: json['userId']?.toString() ?? '',
-        name: User._cleanName(rawName), // Clean the name
-        phone: json['phone'] ?? '',
-        email: json['email'],
-        avatar: json['avatar'],
-        role: json['role'] ?? 'attendant',
+        id: extractedId ?? '',
+        name: User._cleanName(extractedName ?? ''),
+        phone: extractedPhone ?? '',
+        email: extractedEmail,
+        avatar: json['profileImage'] ?? json['avatar'],
+        role: extractedRole ?? 'unknown',
       );
-    } else if (json['user'] != null) {
-      user = User.fromJson(json['user']);
+      debugPrint('Created user with role: ${user.role}');
     }
     
     return LoginResponse(
-      success: json['success'] ?? false,
+      success: json['success'] ?? (user != null), // Success if we have user data
       message: json['message'],
-      token: json['token'],
+      token: json['token'] ?? json['accessToken'],
       refreshToken: json['refreshToken'] ?? json['refresh_token'],
       user: user,
       errors: json['errors'] != null 
           ? List<String>.from(json['errors']) 
           : null,
     );
+  }
+  
+  /// Extract role from JWT token payload
+  static String? _extractRoleFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      
+      // Base64 decode the payload (middle part)
+      String payload = parts[1];
+      
+      // Fix base64url encoding: replace - with + and _ with /
+      payload = payload.replaceAll('-', '+').replaceAll('_', '/');
+      
+      // Add padding if needed
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+      
+      // Use base64 decode instead of base64Url since we already converted
+      final decoded = utf8.decode(base64.decode(payload));
+      final payloadJson = jsonDecode(decoded);
+      
+      debugPrint('JWT payload decoded: $payloadJson');
+      
+      // Try different possible role fields in JWT
+      final role = payloadJson['role'] ?? 
+                   payloadJson['userType'] ?? 
+                   payloadJson['Role'] ?? 
+                   payloadJson['UserType'];
+      
+      debugPrint('Extracted role from JWT: $role');
+      return role;
+    } catch (e, stackTrace) {
+      debugPrint('Token decode error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return null;
+    }
+  }
+  
+  /// Extract user ID from JWT token payload
+  static String? _extractUserIdFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      
+      String payload = parts[1];
+      payload = payload.replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+      
+      final decoded = utf8.decode(base64.decode(payload));
+      final payloadJson = jsonDecode(decoded);
+      
+      // Try different possible ID fields
+      return payloadJson['UserId'] ?? 
+             payloadJson['userId'] ?? 
+             payloadJson['sub'] ??
+             payloadJson['id'];
+    } catch (e) {
+      debugPrint('UserId extraction error: $e');
+      return null;
+    }
   }
 }
 
@@ -411,15 +514,24 @@ class User {
   });
   
   factory User.fromJson(Map<String, dynamic> json) {
+    // Support both API formats:
+    // - Guardian/Driver API: fullname, userId, phoneNumber, userType, profileImage
+    // - Standard API: name, id, phone, role, avatar
+    final name = json['fullname'] ?? json['name'] ?? '';
+    final id = json['userId']?.toString() ?? json['id']?.toString() ?? '';
+    final phone = json['phoneNumber'] ?? json['phone'] ?? '';
+    final role = json['userType'] ?? json['role'] ?? 'attendant';
+    final avatar = json['profileImage'] ?? json['avatar'];
+    
     return User(
-      id: json['id'] ?? '',
-      name: _cleanName(json['name'] ?? ''),
-      phone: json['phone'] ?? '',
+      id: id,
+      name: _cleanName(name),
+      phone: phone,
       email: json['email'],
-      avatar: json['avatar'],
-      role: json['role'] ?? 'attendant',
-      licenseNumber: json['license_number'],
-      vehicleNumber: json['vehicle_number'],
+      avatar: avatar,
+      role: role,
+      licenseNumber: json['licenseImage'] ?? json['license_number'],
+      vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
     );
   }
   
