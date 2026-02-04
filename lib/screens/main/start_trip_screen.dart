@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+/// Start Trip Screen - Beautiful, modern trip initialization
 class StartTripScreen extends StatefulWidget {
   const StartTripScreen({super.key});
 
@@ -10,21 +13,51 @@ class StartTripScreen extends StatefulWidget {
   State<StartTripScreen> createState() => _StartTripScreenState();
 }
 
-class _StartTripScreenState extends State<StartTripScreen> {
-  int _currentIndex = 0;
+class _StartTripScreenState extends State<StartTripScreen>
+    with TickerProviderStateMixin {
   String? _selectedVehicle;
   String? _selectedRoute;
   String? _selectedAttendant;
   
   bool _isLoading = false;
+  int _currentStep = 0;
+  
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    // Fetch routes and buses when screen loads
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    _animationController.forward();
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -32,7 +65,6 @@ class _StartTripScreenState extends State<StartTripScreen> {
     
     final provider = context.read<AppProvider>();
     
-    // Fetch routes and buses in parallel
     await Future.wait([
       provider.fetchRoutesByUser(),
       provider.fetchBusesByUser(),
@@ -43,359 +75,664 @@ class _StartTripScreenState extends State<StartTripScreen> {
     }
   }
 
+  bool get _canStartTrip => 
+      _selectedRoute != null && 
+      _selectedVehicle != null;
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final routes = provider.routes;
-    final buses = provider.buses;
-    
-    // Build vehicle items from API data
-    final vehicleItems = buses.map((bus) => bus.registrationNumber).toList();
-    
-    // Build route items from API data
-    final routeItems = routes.map((route) => route.name).toList();
-    
-    // Attendant items (could be fetched from API if needed)
-    final attendantItems = ['James Kadere', 'John Doe', 'Jane Smith'];
+    final authProvider = context.watch<AuthProvider>();
+    final isDarkMode = provider.isDarkMode;
     
     return MainScaffold(
-      title: 'Start Trip',
+      title: 'New Trip',
       showBackButton: true,
-      showBottomNav: true,
-      bottomNavIndex: _currentIndex,
-      onBottomNavTap: (index) {
-        setState(() => _currentIndex = index);
-        if (index == 3) {
-          Navigator.pushNamed(context, '/profile');
-        }
-      },
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Map Area (Placeholder)
-            Expanded(
-              flex: 2,
-              child: Container(
-                color: provider.isDarkMode 
-                    ? const Color(0xFF1A2E1A) 
-                    : const Color(0xFFE8F5E9),
-                child: Stack(
-                  children: [
-                    // Map Background
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: provider.isDarkMode
-                              ? [const Color(0xFF1A2E1A), const Color(0xFF0D1F0D)]
-                              : [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)],
-                        ),
-                      ),
-                    ),
-                    // Route Line
-                    CustomPaint(
-                      size: Size.infinite, 
-                      painter: RoutePainter(isDarkMode: provider.isDarkMode),
-                    ),
-                    // Location Markers
-                    Positioned(
-                      left: 50,
-                      top: 100,
-                      child: _buildLocationMarker(true, provider.isDarkMode),
-                    ),
-                    Positioned(
-                      right: 80,
-                      top: 150,
-                      child: _buildLocationMarker(false, provider.isDarkMode),
-                    ),
-                    Positioned(
-                      left: 120,
-                      bottom: 120,
-                      child: _buildLocationMarker(false, provider.isDarkMode),
-                    ),
-                  ],
+      showBottomNav: false,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDarkMode
+                ? [const Color(0xFF1A1A1A), const Color(0xFF0D0D0D)]
+                : [const Color(0xFFF5F5F0), Colors.white],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header Section with Animation
+              _buildHeader(isDarkMode, authProvider),
+              
+              // Progress Indicator
+              _buildProgressIndicator(isDarkMode),
+              
+              // Main Content
+              Expanded(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _isLoading 
+                        ? _buildLoadingState(isDarkMode)
+                        : _buildSelectionContent(provider, isDarkMode),
+                  ),
                 ),
               ),
-            ),
-
-            // Bottom Sheet
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: provider.cardColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Start Your Trip',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: provider.textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Select your assigned vehicle, route, and attendant to begin your trip.',
-                    style: TextStyle(fontSize: 14, color: provider.textMutedColor),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Show loading indicator while fetching data
-                  if (_isLoading || provider.isLoading)
-                    Center(
-                      child: Column(
-                        children: [
-                          const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Loading routes and vehicles...',
-                            style: TextStyle(
-                              color: provider.textMutedColor,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    // Route Dropdown
-                    _buildDropdown(
-                      'Route',
-                      _selectedRoute,
-                      routeItems,
-                      (value) => setState(() => _selectedRoute = value),
-                      provider,
-                      hint: 'Select Route',
-                      emptyMessage: routeItems.isEmpty ? 'No routes available' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Vehicle Registration Dropdown
-                    _buildDropdown(
-                      'Vehicle Registration No.',
-                      _selectedVehicle,
-                      vehicleItems,
-                      (value) => setState(() => _selectedVehicle = value),
-                      provider,
-                      hint: 'Select Vehicle',
-                      emptyMessage: vehicleItems.isEmpty ? 'No vehicles available' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Attendant Dropdown
-                    _buildDropdown(
-                      'Attendant',
-                      _selectedAttendant,
-                      attendantItems,
-                      (value) => setState(() => _selectedAttendant = value),
-                      provider,
-                      hint: 'Select Attendant',
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-
-                  // Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: provider.textMutedColor,
-                            side: BorderSide(
-                              color: provider.isDarkMode 
-                                  ? Colors.white24 
-                                  : const Color(0xFFE0E0E0),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: (_isLoading || provider.isLoading || 
-                                     _selectedRoute == null || 
-                                     _selectedVehicle == null)
-                              ? null 
-                              : () {
-                                  Navigator.pushNamed(context, '/select-students');
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6B9B5B),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
-                          ),
-                          child: const Text('Next'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+              
+              // Bottom Action Button
+              _buildBottomButton(isDarkMode),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildLocationMarker(bool isStart, bool isDarkMode) {
+  Widget _buildHeader(bool isDarkMode, AuthProvider authProvider) {
     return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: isStart ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white, 
-          width: 3,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.4 : 0.2), 
-            blurRadius: 8,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          // Animated Bus Icon
+          TweenAnimationBuilder(
+            tween: Tween<double>(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 1000),
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.8 + (0.2 * value),
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6B9B5B).withAlpha(100),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.directions_bus,
+                    color: Colors.white,
+                    size: 50,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Ready to Roll?',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Configure your trip details below',
+            style: TextStyle(
+              fontSize: 15,
+              color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+            ),
           ),
         ],
       ),
-      child: Icon(
-        isStart ? Icons.directions_bus : Icons.location_on,
-        color: Colors.white,
-        size: 20,
+    );
+  }
+
+  Widget _buildProgressIndicator(bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          _buildStepDot(0, 'Route', isDarkMode),
+          _buildStepLine(_selectedRoute != null, isDarkMode),
+          _buildStepDot(1, 'Vehicle', isDarkMode),
+          _buildStepLine(_selectedVehicle != null, isDarkMode),
+          _buildStepDot(2, 'Attendant', isDarkMode),
+        ],
       ),
     );
   }
 
-  Widget _buildDropdown(
-    String label,
-    String? value,
-    List<String> items,
-    Function(String?) onChanged,
-    AppProvider provider, {
-    required String hint,
-    String? emptyMessage,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildStepDot(int step, String label, bool isDarkMode) {
+    final isActive = step <= _currentStep;
+    final isCompleted = step < _currentStep || 
+        (step == 0 && _selectedRoute != null) ||
+        (step == 1 && _selectedVehicle != null) ||
+        (step == 2 && _selectedAttendant != null);
+    
+    return Expanded(
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: isCompleted
+                  ? const LinearGradient(
+                      colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    )
+                  : null,
+              color: isCompleted
+                  ? null
+                  : isActive
+                      ? const Color(0xFF6B9B5B).withAlpha(30)
+                      : isDarkMode
+                          ? const Color(0xFF2C2C2C)
+                          : Colors.grey.shade200,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isActive
+                    ? const Color(0xFF6B9B5B)
+                    : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: isCompleted
+                  ? const Icon(Icons.check, color: Colors.white, size: 20)
+                  : Text(
+                      '${step + 1}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isActive
+                            ? const Color(0xFF6B9B5B)
+                            : isDarkMode
+                                ? Colors.white38
+                                : Colors.grey,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              color: isActive
+                  ? const Color(0xFF6B9B5B)
+                  : isDarkMode
+                      ? Colors.white38
+                      : Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepLine(bool isCompleted, bool isDarkMode) {
+    return Expanded(
+      flex: 2,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        height: 3,
+        margin: const EdgeInsets.only(bottom: 25),
+        decoration: BoxDecoration(
+          gradient: isCompleted
+              ? const LinearGradient(
+                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                )
+              : null,
+          color: isCompleted
+              ? null
+              : isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(bool isDarkMode) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Loading your trips...',
+            style: TextStyle(
+              color: isDarkMode ? Colors.white60 : Colors.grey,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionContent(AppProvider provider, bool isDarkMode) {
+    final routes = provider.routes;
+    final buses = provider.buses;
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Route Selection
+          _buildSectionTitle('Select Route', isDarkMode),
+          const SizedBox(height: 12),
+          ...routes.map((route) => _buildSelectionCard(
+            title: route.name,
+            subtitle: '${route.stopCount} stops',
+            icon: Icons.route,
+            isSelected: _selectedRoute == route.name,
+            onTap: () {
+              setState(() {
+                _selectedRoute = route.name;
+                _currentStep = 1;
+              });
+              HapticFeedback.lightImpact();
+            },
+            isDarkMode: isDarkMode,
+          )),
+          
+          if (routes.isEmpty)
+            _buildEmptyState('No routes available', isDarkMode),
+          
+          const SizedBox(height: 28),
+          
+          // Vehicle Selection
+          _buildSectionTitle('Select Vehicle', isDarkMode),
+          const SizedBox(height: 12),
+          ...buses.map((bus) => _buildSelectionCard(
+            title: bus.registrationNumber,
+            subtitle: bus.model ?? 'School Bus',
+            icon: Icons.directions_bus_filled,
+            isSelected: _selectedVehicle == bus.registrationNumber,
+            onTap: () {
+              setState(() {
+                _selectedVehicle = bus.registrationNumber;
+                _currentStep = 2;
+              });
+              HapticFeedback.lightImpact();
+            },
+            isDarkMode: isDarkMode,
+          )),
+          
+          if (buses.isEmpty)
+            _buildEmptyState('No vehicles available', isDarkMode),
+          
+          const SizedBox(height: 28),
+          
+          // Attendant Selection
+          _buildSectionTitle('Select Attendant (Optional)', isDarkMode),
+          const SizedBox(height: 12),
+          _buildAttendantChips(isDarkMode),
+          
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, bool isDarkMode) {
+    return Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: provider.textMutedColor,
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: const Color(0xFF6B9B5B),
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: provider.isDarkMode 
-                ? const Color(0xFF2C2C2C) 
-                : const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(12),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
           ),
-          child: emptyMessage != null
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: provider.textMutedColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        emptyMessage,
-                        style: TextStyle(
-                          color: provider.textMutedColor,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: value,
-                    hint: Text(
-                      hint,
-                      style: TextStyle(color: provider.textMutedColor),
-                    ),
-                    isExpanded: true,
-                    icon: Icon(Icons.keyboard_arrow_down, color: provider.textMutedColor),
-                    dropdownColor: provider.cardColor,
-                    style: TextStyle(color: provider.textColor),
-                    items: items.map((String item) {
-                      return DropdownMenuItem<String>(
-                        value: item, 
-                        child: Text(
-                          item,
-                          style: TextStyle(color: provider.textColor),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: onChanged,
-                  ),
-                ),
         ),
       ],
     );
   }
-}
 
-class RoutePainter extends CustomPainter {
-  final bool isDarkMode;
-  
-  RoutePainter({required this.isDarkMode});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF6B9B5B)
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path()
-      ..moveTo(70, 120)
-      ..lineTo(size.width - 100, 170)
-      ..lineTo(140, size.height - 140);
-
-    canvas.drawPath(path, paint);
-
-    // Draw dashed line effect
-    final dashPaint = Paint()
-      ..color = isDarkMode 
-          ? const Color(0xFF6B9B5B).withAlpha(128)
-          : const Color(0xFF6B9B5B).withAlpha(77)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final dashPath = Path()
-      ..moveTo(70, 120)
-      ..lineTo(size.width - 100, 170)
-      ..lineTo(140, size.height - 140);
-
-    canvas.drawPath(dashPath, dashPaint);
+  Widget _buildSelectionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isDarkMode,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    )
+                  : null,
+              color: isSelected
+                  ? null
+                  : isDarkMode
+                      ? const Color(0xFF1E1E1E)
+                      : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.transparent
+                    : isDarkMode
+                        ? Colors.white12
+                        : Colors.grey.shade200,
+                width: 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF6B9B5B).withAlpha(100),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(isDarkMode ? 30 : 10),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white.withAlpha(30)
+                        : const Color(0xFF6B9B5B).withAlpha(20),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isSelected
+                        ? Colors.white
+                        : const Color(0xFF6B9B5B),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? Colors.white
+                              : isDarkMode
+                                  ? Colors.white
+                                  : const Color(0xFF1A1A1A),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isSelected
+                              ? Colors.white.withAlpha(230)
+                              : isDarkMode
+                                  ? Colors.white60
+                                  : Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.white
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? Colors.white
+                          : isDarkMode
+                              ? Colors.white24
+                              : Colors.grey.shade300,
+                      width: 2,
+                    ),
+                  ),
+                  child: isSelected
+                      ? const Icon(
+                          Icons.check,
+                          color: Color(0xFF6B9B5B),
+                          size: 18,
+                        )
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget _buildAttendantChips(bool isDarkMode) {
+    final attendants = ['James Kadere', 'John Doe', 'Jane Smith', 'None'];
+    
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: attendants.map((attendant) {
+        final isSelected = _selectedAttendant == attendant ||
+            (attendant == 'None' && _selectedAttendant == null);
+        
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedAttendant = attendant == 'None' ? null : attendant;
+                });
+                HapticFeedback.lightImpact();
+              },
+              borderRadius: BorderRadius.circular(25),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  gradient: isSelected
+                      ? const LinearGradient(
+                          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                        )
+                      : null,
+                  color: isSelected
+                      ? null
+                      : isDarkMode
+                          ? const Color(0xFF1E1E1E)
+                          : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: isSelected
+                        ? Colors.transparent
+                        : isDarkMode
+                            ? Colors.white12
+                            : Colors.grey.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSelected)
+                      const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    if (isSelected) const SizedBox(width: 8),
+                    Text(
+                      attendant,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: isSelected
+                            ? Colors.white
+                            : isDarkMode
+                                ? Colors.white70
+                                : Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEmptyState(String message, bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? const Color(0xFF1E1E1E)
+            : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDarkMode
+              ? Colors.white12
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline,
+            color: isDarkMode ? Colors.white38 : Colors.grey,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white60 : Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomButton(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            isDarkMode
+                ? const Color(0xFF0D0D0D).withAlpha(0)
+                : Colors.white.withAlpha(0),
+            isDarkMode
+                ? const Color(0xFF0D0D0D)
+                : Colors.white,
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: double.infinity,
+          height: 60,
+          child: ElevatedButton(
+            onPressed: _canStartTrip
+                ? () {
+                    HapticFeedback.mediumImpact();
+                    Navigator.pushNamed(context, '/select-students');
+                  }
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B9B5B),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : Colors.grey.shade300,
+              disabledForegroundColor: isDarkMode
+                  ? Colors.white38
+                  : Colors.grey,
+              elevation: _canStartTrip ? 8 : 0,
+              shadowColor: const Color(0xFF6B9B5B).withAlpha(100),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _canStartTrip
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Start Trip',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(Icons.arrow_forward_rounded),
+                      ],
+                    )
+                  : const Text(
+                      'Select Route & Vehicle',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

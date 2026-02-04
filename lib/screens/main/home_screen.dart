@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
-import '../../widgets/map_selector.dart';
+// import '../../widgets/map_selector.dart'; // Re-enable when using Google Maps
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,60 +14,58 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   void _handleNavigation(int index) {
-    final authProvider = context.read<AuthProvider>();
-    final isGuardian = authProvider.isGuardian;
-    
-    if (index == 0) {
-      // Home button - show different screen based on role
-      if (isGuardian) {
-        Navigator.pushNamed(context, '/landing');
-      } else {
-        Navigator.pushNamed(context, '/landing');
-      }
-    } else if (index == 1) {
-      Navigator.pushNamed(context, '/chat');
-    } else if (index == 2) {
-      // Alerts - navigate to notifications
-      Navigator.pushNamed(context, '/notifications');
-    } else if (index == 3) {
-      Navigator.pushNamed(context, '/profile');
-    } else if (index == 4) {
-      // Center + button - only for drivers
-      Navigator.pushNamed(context, '/start-trip');
+    switch (index) {
+      case 0:
+        // Already on home (legacy screen)
+        break;
+      case 1:
+        Navigator.pushNamed(context, '/chat');
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/notifications');
+        break;
+      case 3:
+        Navigator.pushNamed(context, '/profile');
+        break;
+      case 4:
+        // Center + button - only for drivers
+        Navigator.pushNamed(context, '/start-trip');
+        break;
     }
   }
 
-  void _showMapSelector(BuildContext ctx) async {
-    final provider = await showMapSelectorDialog(
-      ctx,
-      initialProvider: MapProvider.openStreetMap,
-    );
-    
-    if (provider == null) return;
-    if (!mounted) return;
-    
-    if (provider == MapProvider.google) {
-      Navigator.pushNamed(
-        context, 
-        '/live-tracking',
-        arguments: {
-          'tripId': 'TRIP_001',
-          'busId': 'BUS001',
-          'routeId': 'ROUTE_001',
-        },
-      );
-    } else {
-      Navigator.pushNamed(
-        context,
-        '/osm-tracking',
-        arguments: {
-          'tripId': 'TRIP_001',
-          'busId': 'BUS001',
-          'routeId': 'ROUTE_001',
-        },
-      );
-    }
-  }
+  // TODO: Re-enable when Google Maps API key is available
+  // void _showMapSelector(BuildContext ctx) async {
+  //   final provider = await showMapSelectorDialog(
+  //     ctx,
+  //     initialProvider: MapProvider.openStreetMap,
+  //   );
+  //   
+  //   if (provider == null) return;
+  //   if (!mounted) return;
+  //   
+  //   if (provider == MapProvider.google) {
+  //     Navigator.pushNamed(
+  //       context, 
+  //       '/live-tracking',
+  //       arguments: {
+  //         'tripId': 'TRIP_001',
+  //         'busId': 'BUS001',
+  //         'routeId': 'ROUTE_001',
+  //       },
+  //     );
+  //   } else {
+  //     Navigator.pushNamed(
+  //       context,
+  //       '/osm-tracking',
+  //       arguments: {
+  //         'tripId': 'TRIP_001',
+  //         'busId': 'BUS001',
+  //         'routeId': 'ROUTE_001',
+  //       },
+  //     );
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -561,7 +559,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.map,
                   label: 'Live Track',
                   color: const Color(0xFFFF9800),
-                  onTap: () => _showMapSelector(context),
+                  // Temporarily using OSM directly (free, no API key needed)
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/osm-tracking',
+                    arguments: {
+                      'tripId': 'TRIP_001',
+                      'busId': 'BUS001',
+                      'routeId': 'ROUTE_001',
+                    },
+                  ),
                   isDarkMode: isDarkMode,
                 ),
               ),

@@ -13,6 +13,7 @@ import 'screens/auth/verify_reset_otp_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/main/home_screen.dart';
 import 'screens/main/landing_screen.dart';
+import 'screens/main/dashboard_screen.dart';
 import 'screens/main/start_trip_screen.dart';
 import 'screens/main/select_students_screen.dart';
 import 'screens/main/active_trip_screen.dart';
@@ -249,6 +250,11 @@ class ShuleDriveApp extends StatelessWidget {
         break;
 
       // Protected routes
+      case '/':
+      case '/dashboard':
+        page = const DashboardScreen();
+        protected = true;
+        break;
       case '/landing':
         page = const LandingScreen();
         protected = true;
@@ -461,13 +467,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         // If authenticated, show screen based on role
         if (authProvider.isAuthenticated) {
-          // Drivers see LandingScreen (with trip features)
-          // Guardians see HomeScreen (simplified view)
-          if (authProvider.isDriver) {
-            return const LandingScreen();
-          } else {
-            return const HomeScreen();
-          }
+          // Unified dashboard - adapts based on role and trip status
+          return const DashboardScreen();
         }
 
         // Not authenticated, show login
