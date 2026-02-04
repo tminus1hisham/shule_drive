@@ -86,7 +86,7 @@ class ApiClient {
     return headers;
   }
   
-  /// Handle HTTP response
+  /// Handle HTTP response with better error handling
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
     
@@ -95,10 +95,7 @@ class ApiClient {
       if (statusCode >= 200 && statusCode < 300) {
         return {}; // Return empty map for successful empty responses
       } else {
-        throw ApiException(
-          message: 'Server returned empty response with status $statusCode',
-          statusCode: statusCode,
-        );
+        throw ServerException(message: 'Server returned empty response');
       }
     }
     
@@ -106,42 +103,54 @@ class ApiClient {
     try {
       body = jsonDecode(response.body);
     } catch (e) {
+      debugPrint('JSON Parse Error: ${response.body}');
       throw ApiException(
-        message: 'Invalid JSON response: ${e.toString()}',
+        message: 'Invalid server response format',
         statusCode: statusCode,
       );
     }
     
+    // Success responses
+    if (statusCode >= 200 && statusCode < 300) {
+      return body;
+    }
+    
+    // Error responses - extract message
+    String message = 'Request failed';
+    if (body is Map) {
+      message = body['message'] ?? 
+                body['error'] ?? 
+                body['errorMessage'] ??
+                body['title'] ??
+                'Request failed';
+    }
+    
+    // Throw appropriate exception
     switch (statusCode) {
-      case HttpStatus.ok:
-      case HttpStatus.created:
-        return body;
       case HttpStatus.badRequest:
-        throw BadRequestException(
-          message: body['message'] ?? 'Bad request',
-        );
+        throw BadRequestException(message: message);
       case HttpStatus.unauthorized:
-        throw UnauthorizedException(
-          message: body['message'] ?? 'Unauthorized',
-        );
+        throw UnauthorizedException(message: message);
       case HttpStatus.forbidden:
-        throw ForbiddenException(
-          message: body['message'] ?? 'Access forbidden',
-        );
+        throw ForbiddenException(message: message);
       case HttpStatus.notFound:
-        throw NotFoundException(
-          message: body['message'] ?? 'Resource not found',
-        );
+        throw NotFoundException(message: message);
+      case 408: // Request Timeout
+        throw TimeoutException();
       case 422: // Validation error
         throw ValidationException(
-          message: body['message'] ?? 'Validation failed',
-          errors: body['errors'],
+          message: message,
+          errors: body is Map ? body['errors'] : null,
         );
-      case HttpStatus.serverError:
+      case 429: // Too Many Requests
+        throw ApiException(message: 'Too many requests. Please try again later.');
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        throw ServerException(message: 'Server error. Please try again later.');
       default:
-        throw ServerException(
-          message: body['message'] ?? 'Server error occurred',
-        );
+        throw ApiException(message: message, statusCode: statusCode);
     }
   }
   

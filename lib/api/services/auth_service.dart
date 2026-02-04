@@ -4,11 +4,13 @@ import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
 import '../../services/token_storage.dart';
+import '../../utils/buffer_manager.dart';
 
-/// Auth Service - Handles authentication-related API calls
+/// Auth Service - Handles authentication-related API calls with fallback buffers
 class AuthService {
   final ApiClient _apiClient = ApiClient();
   final TokenStorage _tokenStorage = TokenStorage();
+  final BufferManager _buffer = BufferManager();
   
   /// Login with phone number and password
   /// POST /api/auth/login
@@ -143,17 +145,49 @@ class AuthService {
     return await _apiClient.isAuthenticated();
   }
   
-  /// Get current user data from storage
+  /// Get current user data from storage with buffer fallback
   Future<User?> getCurrentUser() async {
+    // First try to get from buffer
+    final bufferedUser = await _buffer.getBuffer<User>(key: BufferKeys.currentUser);
+    if (bufferedUser != null) {
+      return bufferedUser;
+    }
+    
+    // Fallback to stored user data
     final userId = await _tokenStorage.getUserId();
     if (userId == null) return null;
     
-    return User(
+    final user = User(
       id: userId,
       name: await _tokenStorage.getUserName() ?? '',
       phone: await _tokenStorage.getUserPhone() ?? '',
-      role: await _tokenStorage.getUserRole() ?? 'attendant',
+      role: await _tokenStorage.getUserRole() ?? 'unknown',
+      email: await _tokenStorage.getUserEmail(),
+      avatar: await _tokenStorage.getUserAvatar(),
     );
+    
+    // Save to buffer for future use
+    await _buffer.saveBuffer(
+      key: BufferKeys.currentUser,
+      data: user,
+      expiration: const Duration(hours: 1),
+    );
+    
+    return user;
+  }
+  
+  /// Save current user to buffer
+  Future<void> cacheCurrentUser(User user) async {
+    await _buffer.saveBuffer(
+      key: BufferKeys.currentUser,
+      data: user,
+      expiration: const Duration(hours: 1),
+    );
+  }
+  
+  /// Clear auth-related buffers
+  Future<void> clearAuthBuffers() async {
+    await _buffer.clearBuffer(BufferKeys.currentUser);
   }
   
   /// Update user profile

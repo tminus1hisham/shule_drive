@@ -19,11 +19,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (index == 0) {
       // Home button - show different screen based on role
       if (isGuardian) {
-        // Guardian on HomeScreen → go to LandingScreen
-        Navigator.pushReplacementNamed(context, '/landing');
+        Navigator.pushNamed(context, '/landing');
       } else {
-        // Driver on HomeScreen → stay (or go to landing if on home)
-        Navigator.pushReplacementNamed(context, '/landing');
+        Navigator.pushNamed(context, '/landing');
       }
     } else if (index == 1) {
       Navigator.pushNamed(context, '/chat');

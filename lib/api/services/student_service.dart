@@ -1,56 +1,62 @@
+import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
+import '../../utils/buffer_manager.dart';
+import '../../services/token_storage.dart';
 
-/// Student Service - Handles student/children-related API calls
+/// Student Service - Handles student/children-related API calls with fallback buffers
 class StudentService {
   final ApiClient _apiClient = ApiClient();
+  final BufferManager _buffer = BufferManager();
+  final TokenStorage _tokenStorage = TokenStorage();
   
-  /// Get all students
+  /// Get all students with buffer fallback
   /// GET /api/students
   Future<List<Student>> getAllStudents({int page = 1, int limit = 20}) async {
-    try {
-      final response = await _apiClient.get(
-        Endpoints.students,
-        queryParams: {
-          'page': page.toString(),
-          'limit': limit.toString(),
-        },
-      );
-      
-      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-      List<dynamic> studentsData;
-      if (response is List) {
-        studentsData = response;
-      } else if (response is Map && response['data'] != null) {
-        studentsData = response['data'] as List;
-      } else {
-        studentsData = [];
-      }
-      
-      final students = studentsData.map((student) => Student.fromJson(student)).toList();
-      return students;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    return _buffer.withBuffer<List<Student>>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.students,
+          queryParams: {
+            'page': page.toString(),
+            'limit': limit.toString(),
+          },
+        );
+        
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> studentsData;
+        if (response is List) {
+          studentsData = response;
+        } else if (response is Map && response['data'] != null) {
+          studentsData = response['data'] as List;
+        } else {
+          studentsData = [];
+        }
+        
+        final students = studentsData.map((student) => Student.fromJson(student)).toList();
+        return students;
+      },
+      bufferKey: BufferKeys.students(),
+      fallbackData: <Student>[],
+      cacheDuration: const Duration(minutes: 20),
+    );
   }
   
-  /// Get student by ID
+  /// Get student by ID with buffer fallback
   /// GET /api/students/get/{id}
-  Future<Student> getStudentById(String studentId) async {
-    try {
-      final response = await _apiClient.get(
-        Endpoints.studentDetails(studentId),
-      );
-      
-      return Student.fromJson(response['data']);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+  Future<Student?> getStudentById(String studentId) async {
+    return _buffer.withOptionalBuffer<Student>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.studentDetails(studentId),
+        );
+        
+        return Student.fromJson(response['data'] ?? response);
+      },
+      bufferKey: BufferKeys.studentDetails(studentId),
+      cacheDuration: const Duration(minutes: 15),
+    );
   }
   
   /// Create a new student (through guardian)
@@ -82,7 +88,12 @@ class StudentService {
         },
       );
       
-      return Student.fromJson(response['data']);
+      final student = Student.fromJson(response['data']);
+      
+      // Clear students cache to force refresh
+      await _buffer.clearCategory('students');
+      
+      return student;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -119,7 +130,17 @@ class StudentService {
         body: body,
       );
       
-      return Student.fromJson(response['data']);
+      final student = Student.fromJson(response['data']);
+      
+      // Update buffers
+      await _buffer.saveBuffer(
+        key: BufferKeys.studentDetails(studentId),
+        data: student,
+        expiration: const Duration(minutes: 15),
+      );
+      await _buffer.clearBuffer(BufferKeys.students());
+      
+      return student;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -132,6 +153,10 @@ class StudentService {
   Future<void> deleteStudent(String studentId) async {
     try {
       await _apiClient.delete(Endpoints.deleteStudent(studentId));
+      
+      // Clear related buffers
+      await _buffer.clearBuffer(BufferKeys.studentDetails(studentId));
+      await _buffer.clearCategory('students');
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -139,50 +164,55 @@ class StudentService {
     }
   }
   
-  /// Get guardian's students
+  /// Get guardian's students with buffer fallback
   /// GET /api/guardians/get/students
   Future<List<Student>> getGuardianStudents() async {
-    try {
-      final response = await _apiClient.get(Endpoints.getGuardianStudents);
-      
-      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-      List<dynamic> studentsData;
-      if (response is List) {
-        studentsData = response;
-      } else if (response is Map && response['data'] != null) {
-        studentsData = response['data'] as List;
-      } else {
-        studentsData = [];
-      }
-      
-      final students = studentsData.map((student) => Student.fromJson(student)).toList();
-      return students;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    // Get guardian ID for buffer key
+    final guardianId = await _tokenStorage.getUserId();
+    
+    return _buffer.withBuffer<List<Student>>(
+      apiCall: () async {
+        final response = await _apiClient.get(Endpoints.getGuardianStudents);
+        
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> studentsData;
+        if (response is List) {
+          studentsData = response;
+        } else if (response is Map && response['data'] != null) {
+          studentsData = response['data'] as List;
+        } else {
+          studentsData = [];
+        }
+        
+        final students = studentsData.map((student) => Student.fromJson(student)).toList();
+        return students;
+      },
+      bufferKey: BufferKeys.students(guardianId: guardianId),
+      fallbackData: <Student>[],
+      cacheDuration: const Duration(minutes: 20),
+    );
   }
   
-  /// Get students by phone number
+  /// Get students by phone number with buffer fallback
   /// GET /api/guardians/get/students/by/phone
   Future<List<Student>> getStudentsByPhone(String phoneNumber) async {
-    try {
-      final response = await _apiClient.get(
-        Endpoints.getGuardianStudentsByPhone,
-        queryParams: {'phone': phoneNumber},
-      );
-      
-      final students = (response['data'] as List)
-          .map((student) => Student.fromJson(student))
-          .toList();
-      
-      return students;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    return _buffer.withBuffer<List<Student>>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.getGuardianStudentsByPhone,
+          queryParams: {'phone': phoneNumber},
+        );
+        
+        final students = (response['data'] as List? ?? [])
+            .map((student) => Student.fromJson(student))
+            .toList();
+        
+        return students;
+      },
+      bufferKey: '${BufferKeys.students()}_phone_$phoneNumber',
+      fallbackData: <Student>[],
+      cacheDuration: const Duration(minutes: 15),
+    );
   }
   
   /// Update student image
@@ -200,7 +230,13 @@ class StudentService {
         },
       );
       
-      return response['data']['image_url'];
+      final imageUrl = response['data']['image_url']?.toString() ?? '';
+      
+      // Clear student detail cache to force refresh
+      await _buffer.clearBuffer(BufferKeys.studentDetails(studentId));
+      await _buffer.clearCategory('students');
+      
+      return imageUrl;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -208,24 +244,40 @@ class StudentService {
     }
   }
   
-  /// Get student attendance
+  /// Get student attendance with buffer fallback
   /// GET /api/students/{id}/attendance
   Future<List<AttendanceRecord>> getStudentAttendance(String studentId) async {
-    try {
-      final response = await _apiClient.get(
-        Endpoints.studentAttendance(studentId),
-      );
-      
-      final records = (response['data'] as List)
-          .map((r) => AttendanceRecord.fromJson(r))
-          .toList();
-      
-      return records;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    return _buffer.withBuffer<List<AttendanceRecord>>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.studentAttendance(studentId),
+        );
+        
+        final records = (response['data'] as List? ?? [])
+            .map((r) => AttendanceRecord.fromJson(r))
+            .toList();
+        
+        return records;
+      },
+      bufferKey: 'students/attendance_$studentId',
+      fallbackData: <AttendanceRecord>[],
+      cacheDuration: const Duration(minutes: 30),
+    );
+  }
+
+  /// Refresh guardian students cache in background
+  Future<void> refreshGuardianStudentsCache() async {
+    final guardianId = await _tokenStorage.getUserId();
+    await _buffer.refreshBuffer<List<Student>>(
+      apiCall: () => getGuardianStudents(),
+      bufferKey: BufferKeys.students(guardianId: guardianId),
+      cacheDuration: const Duration(minutes: 20),
+    );
+  }
+
+  /// Clear all student-related buffers
+  Future<void> clearStudentBuffers() async {
+    await _buffer.clearCategory('students');
   }
 }
 
@@ -267,21 +319,21 @@ class Student {
   
   factory Student.fromJson(Map<String, dynamic> json) {
     return Student(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
-      photo: json['photo'],
-      className: json['class_name'] ?? json['class'] ?? '',
-      schoolId: json['school_id'],
-      schoolName: json['school_name'],
-      guardianId: json['guardian_id'],
-      guardianName: json['guardian_name'],
-      guardianPhone: json['guardian_phone'],
-      pickupLocation: json['pickup_location'],
-      dropoffLocation: json['dropoff_location'],
-      emergencyContact: json['emergency_contact'],
-      emergencyPhone: json['emergency_phone'],
-      isActive: json['is_active'] ?? true,
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      photo: json['photo'] ?? json['profileImage'] ?? json['image'],
+      className: json['class_name'] ?? json['class'] ?? json['className'] ?? '',
+      schoolId: json['school_id'] ?? json['schoolId'],
+      schoolName: json['school_name'] ?? json['schoolName'],
+      guardianId: json['guardian_id'] ?? json['guardianId'],
+      guardianName: json['guardian_name'] ?? json['guardianName'],
+      guardianPhone: json['guardian_phone'] ?? json['guardianPhone'],
+      pickupLocation: json['pickup_location'] ?? json['pickupLocation'],
+      dropoffLocation: json['dropoff_location'] ?? json['dropoffLocation'],
+      emergencyContact: json['emergency_contact'] ?? json['emergencyContact'],
+      emergencyPhone: json['emergency_phone'] ?? json['emergencyPhone'],
+      isActive: json['is_active'] ?? json['isActive'] ?? true,
+      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
     );
   }
   
@@ -303,6 +355,17 @@ class Student {
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
     };
+  }
+  
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (e) {
+      debugPrint('Failed to parse date: $value');
+      return null;
+    }
   }
 }
 
@@ -326,12 +389,23 @@ class AttendanceRecord {
   
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     return AttendanceRecord(
-      id: json['id'] ?? '',
-      studentId: json['student_id'] ?? '',
-      tripId: json['trip_id'] ?? '',
+      id: json['id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
+      tripId: json['trip_id']?.toString() ?? json['tripId']?.toString() ?? '',
       status: json['status'] ?? 'absent',
-      date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
+      date: Student._parseDateTime(json['date']) ?? DateTime.now(),
       notes: json['notes'],
     );
+  }
+  
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'student_id': studentId,
+      'trip_id': tripId,
+      'status': status,
+      'date': date.toIso8601String(),
+      'notes': notes,
+    };
   }
 }

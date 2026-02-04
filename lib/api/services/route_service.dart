@@ -1,59 +1,78 @@
+import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
+import '../../utils/buffer_manager.dart';
 
-/// Route Service - Handles route-related API calls
+/// Route Service - Handles route-related API calls with fallback buffers
 class RouteService {
   final ApiClient _apiClient = ApiClient();
+  final BufferManager _buffer = BufferManager();
   
-  /// Get all routes
+  /// Get all routes with buffer fallback
   /// GET /api/routes/get/all
   Future<List<BusRoute>> getAllRoutes() async {
-    try {
-      final response = await _apiClient.get(Endpoints.getAllRoutes);
-      
-      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-      List<dynamic> routesData;
-      if (response is List) {
-        routesData = response;
-      } else if (response is Map && response['data'] != null) {
-        routesData = response['data'] as List;
-      } else {
-        routesData = [];
-      }
-      
-      final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
-      return routes;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    return _buffer.withBuffer<List<BusRoute>>(
+      apiCall: () async {
+        final response = await _apiClient.get(Endpoints.getAllRoutes);
+        
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> routesData;
+        if (response is List) {
+          routesData = response;
+        } else if (response is Map && response['data'] != null) {
+          routesData = response['data'] as List;
+        } else {
+          routesData = [];
+        }
+        
+        final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
+        return routes;
+      },
+      bufferKey: BufferKeys.routes,
+      fallbackData: <BusRoute>[],
+      cacheDuration: const Duration(minutes: 30),
+    );
   }
   
-  /// Get routes by user
+  /// Get routes by user with buffer fallback
   /// GET /api/routes/get/by/user
   Future<List<BusRoute>> getRoutesByUser() async {
-    try {
-      final response = await _apiClient.get(Endpoints.getRoutesByUser);
-      
-      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-      List<dynamic> routesData;
-      if (response is List) {
-        routesData = response;
-      } else if (response is Map && response['data'] != null) {
-        routesData = response['data'] as List;
-      } else {
-        routesData = [];
-      }
-      
-      final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
-      return routes;
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(message: e.toString());
-    }
+    return _buffer.withBuffer<List<BusRoute>>(
+      apiCall: () async {
+        final response = await _apiClient.get(Endpoints.getRoutesByUser);
+        
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> routesData;
+        if (response is List) {
+          routesData = response;
+        } else if (response is Map && response['data'] != null) {
+          routesData = response['data'] as List;
+        } else {
+          routesData = [];
+        }
+        
+        final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
+        return routes;
+      },
+      bufferKey: '${BufferKeys.routes}_by_user',
+      fallbackData: <BusRoute>[],
+      cacheDuration: const Duration(minutes: 30),
+    );
+  }
+  
+  /// Get route details with buffer fallback
+  /// GET /api/routes/get/{id}
+  Future<BusRoute?> getRouteById(String routeId) async {
+    return _buffer.withOptionalBuffer<BusRoute>(
+      apiCall: () async {
+        // Using endpoints helper - assuming there's a get route by id endpoint
+        final response = await _apiClient.get('/api/routes/get/$routeId');
+        return BusRoute.fromJson(response['data'] ?? response);
+      },
+      bufferKey: BufferKeys.routeDetails(routeId),
+      cacheDuration: const Duration(minutes: 20),
+    );
   }
   
   /// Create a new route
@@ -75,7 +94,12 @@ class RouteService {
         },
       );
       
-      return BusRoute.fromJson(response['data']);
+      final route = BusRoute.fromJson(response['data']);
+      
+      // Clear routes cache to force refresh
+      await _buffer.clearCategory('routes');
+      
+      return route;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -102,7 +126,18 @@ class RouteService {
         body: body,
       );
       
-      return BusRoute.fromJson(response['data']);
+      final route = BusRoute.fromJson(response['data']);
+      
+      // Update buffers
+      await _buffer.saveBuffer(
+        key: BufferKeys.routeDetails(routeId),
+        data: route,
+        expiration: const Duration(minutes: 20),
+      );
+      await _buffer.clearBuffer(BufferKeys.routes);
+      await _buffer.clearBuffer('${BufferKeys.routes}_by_user');
+      
+      return route;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -115,11 +150,29 @@ class RouteService {
   Future<void> deleteRoute(String routeId) async {
     try {
       await _apiClient.delete(Endpoints.deleteRoute(routeId));
+      
+      // Clear related buffers
+      await _buffer.clearBuffer(BufferKeys.routeDetails(routeId));
+      await _buffer.clearCategory('routes');
     } on ApiException {
       rethrow;
     } catch (e) {
       throw ApiException(message: e.toString());
     }
+  }
+
+  /// Refresh routes cache in background
+  Future<void> refreshRoutesCache() async {
+    await _buffer.refreshBuffer<List<BusRoute>>(
+      apiCall: () => getAllRoutes(),
+      bufferKey: BufferKeys.routes,
+      cacheDuration: const Duration(minutes: 30),
+    );
+  }
+
+  /// Clear all route-related buffers
+  Future<void> clearRouteBuffers() async {
+    await _buffer.clearCategory('routes');
   }
 }
 
@@ -149,19 +202,17 @@ class BusRoute {
   
   factory BusRoute.fromJson(Map<String, dynamic> json) {
     return BusRoute(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       description: json['description'],
-      schoolId: json['school_id'],
-      schoolName: json['school_name'],
+      schoolId: json['school_id'] ?? json['schoolId'],
+      schoolName: json['school_name'] ?? json['schoolName'],
       stops: (json['stops'] as List?)
           ?.map((s) => RouteStop.fromJson(s))
           .toList() ?? [],
-      isActive: json['is_active'] ?? true,
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
-          : null,
+      isActive: json['is_active'] ?? json['isActive'] ?? true,
+      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
+      updatedAt: _parseDateTime(json['updated_at'] ?? json['updatedAt']),
     );
   }
   
@@ -180,6 +231,17 @@ class BusRoute {
   }
   
   int get stopCount => stops.length;
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (e) {
+      debugPrint('Failed to parse date: $value');
+      return null;
+    }
+  }
 }
 
 /// Route Stop Model
@@ -204,13 +266,13 @@ class RouteStop {
   
   factory RouteStop.fromJson(Map<String, dynamic> json) {
     return RouteStop(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       address: json['address'],
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
       order: json['order'] ?? 0,
-      estimatedTime: json['estimated_time'],
+      estimatedTime: json['estimated_time'] ?? json['estimatedTime'],
     );
   }
   

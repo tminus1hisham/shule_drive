@@ -36,6 +36,7 @@ import 'screens/notifications/notifications_screen.dart';
 import 'services/token_storage.dart';
 import 'widgets/route_guard.dart';
 
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -75,103 +76,8 @@ class ShuleDriveApp extends StatelessWidget {
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
             home: const AuthWrapper(),
-            routes: {
-              // Public routes (no auth required)
-              '/login': (context) => const LoginScreen(),
-              '/forgot-password': (context) => const ForgotPasswordScreen(),
-              '/verify-reset-otp': (context) => const VerifyResetOtpScreen(),
-              '/reset-password': (context) => const ResetPasswordScreen(),
-              
-              // Protected routes - require authentication
-              '/landing': (context) => const RouteGuard(
-                child: LandingScreen(),
-              ),
-              '/home': (context) => const RouteGuard(
-                child: HomeScreen(),
-              ),
-              
-              // Driver-only routes
-              '/start-trip': (context) => const RouteGuard(
-                allowedRoles: [UserRole.driver],
-                child: StartTripScreen(),
-              ),
-              '/select-students': (context) => const RouteGuard(
-                allowedRoles: [UserRole.driver],
-                child: SelectStudentsScreen(),
-              ),
-              '/active-trip': (context) => const RouteGuard(
-                allowedRoles: [UserRole.driver],
-                child: ActiveTripScreen(),
-              ),
-              
-              // Shared routes - any authenticated user
-              '/students-list': (context) => const RouteGuard(
-                child: StudentsListScreen(),
-              ),
-              '/profile': (context) => const RouteGuard(
-                child: ProfileScreen(),
-              ),
-              '/edit-profile': (context) => const RouteGuard(
-                child: EditProfileScreen(),
-              ),
-              '/change-password': (context) => const RouteGuard(
-                child: ChangePasswordScreen(),
-              ),
-              '/terms': (context) => const RouteGuard(
-                child: TermsServiceScreen(),
-              ),
-              '/privacy': (context) => const RouteGuard(
-                child: PrivacyPolicyScreen(),
-              ),
-              '/about': (context) => const RouteGuard(
-                child: AboutScreen(),
-              ),
-              '/contact': (context) => const RouteGuard(
-                child: ContactScreen(),
-              ),
-              '/trips': (context) => const RouteGuard(
-                child: TripsScreen(),
-              ),
-              '/routes': (context) => const RouteGuard(
-                child: RoutesListScreen(),
-              ),
-              '/trip-details': (context) => const RouteGuard(
-                child: TripDetailsScreen(),
-              ),
-              
-              // Notifications
-              '/notifications': (context) => const RouteGuard(
-                child: NotificationsScreen(),
-              ),
-              
-              // Guardian routes
-              '/manage-children': (context) => const RouteGuard(
-                allowedRoles: [UserRole.guardian],
-                child: ManageChildrenScreen(),
-              ),
-              '/child-profile': (context) => const RouteGuard(
-                allowedRoles: [UserRole.guardian],
-                child: ChildProfileScreen(),
-              ),
-              
-              // Chat (all authenticated roles)
-              '/chat': (context) => const RouteGuard(
-                child: ChatListScreen(),
-              ),
-              '/chat-users': (context) => const RouteGuard(
-                child: UserListScreen(),
-              ),
-              '/chat-detail': (context) {
-                final args = ModalRoute.of(context)!.settings.arguments 
-                    as Map<String, dynamic>?;
-                return RouteGuard(
-                  child: ChatScreen(
-                    receiverId: args?['receiverId'] as String?,
-                    receiverName: args?['receiverName'] as String?,
-                    receiverAvatar: args?['receiverAvatar'] as String?,
-                  ),
-                );
-              },
+            onGenerateRoute: (settings) {
+              return _buildPageRoute(settings);
             },
           );
         },
@@ -186,6 +92,12 @@ class ShuleDriveApp extends StatelessWidget {
       primaryColor: const Color(0xFF6B9B5B),
       scaffoldBackgroundColor: const Color(0xFFF5F5F0),
       fontFamily: 'Inter',
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       colorScheme: const ColorScheme.light(
         primary: Color(0xFF6B9B5B),
         secondary: Color(0xFF6B9B5B),
@@ -243,6 +155,12 @@ class ShuleDriveApp extends StatelessWidget {
       primaryColor: const Color(0xFF6B9B5B),
       scaffoldBackgroundColor: const Color(0xFF121212),
       fontFamily: 'Inter',
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       colorScheme: const ColorScheme.dark(
         primary: Color(0xFF6B9B5B),
         secondary: Color(0xFF6B9B5B),
@@ -295,6 +213,191 @@ class ShuleDriveApp extends StatelessWidget {
 }
 
 /// Authentication Wrapper - Handles auth state and redirects accordingly
+  /// Build page route with fast transitions
+  Route _buildPageRoute(RouteSettings settings) {
+    // Routes that are considered "tab switches" - use instant transition
+    const tabRoutes = <String>{
+      '/landing',
+      '/home',
+      '/chat',
+      '/notifications',
+      '/profile',
+    };
+    
+    Widget page;
+    bool protected = false;
+    List<UserRole>? allowedRoles;
+    bool isTabRoute = tabRoutes.contains(settings.name);
+
+    switch (settings.name) {
+      // Public routes
+      case '/login':
+        page = const LoginScreen();
+        break;
+      case '/forgot-password':
+        page = const ForgotPasswordScreen();
+        break;
+      case '/verify-reset-otp':
+        page = const VerifyResetOtpScreen();
+        break;
+      case '/reset-password':
+        page = const ResetPasswordScreen();
+        break;
+
+      // Protected routes
+      case '/landing':
+        page = const LandingScreen();
+        protected = true;
+        break;
+      case '/home':
+        page = const HomeScreen();
+        protected = true;
+        break;
+      case '/start-trip':
+        page = const StartTripScreen();
+        protected = true;
+        allowedRoles = [UserRole.driver];
+        break;
+      case '/select-students':
+        page = const SelectStudentsScreen();
+        protected = true;
+        allowedRoles = [UserRole.driver];
+        break;
+      case '/active-trip':
+        page = const ActiveTripScreen();
+        protected = true;
+        allowedRoles = [UserRole.driver];
+        break;
+      case '/students-list':
+        page = const StudentsListScreen();
+        protected = true;
+        break;
+      case '/profile':
+        page = const ProfileScreen();
+        protected = true;
+        break;
+      case '/edit-profile':
+        page = const EditProfileScreen();
+        protected = true;
+        break;
+      case '/change-password':
+        page = const ChangePasswordScreen();
+        protected = true;
+        break;
+      case '/terms':
+        page = const TermsServiceScreen();
+        protected = true;
+        break;
+      case '/privacy':
+        page = const PrivacyPolicyScreen();
+        protected = true;
+        break;
+      case '/about':
+        page = const AboutScreen();
+        protected = true;
+        break;
+      case '/contact':
+        page = const ContactScreen();
+        protected = true;
+        break;
+      case '/trips':
+        page = const TripsScreen();
+        protected = true;
+        break;
+      case '/routes':
+        page = const RoutesListScreen();
+        protected = true;
+        break;
+      case '/trip-details':
+        page = const TripDetailsScreen();
+        protected = true;
+        break;
+      case '/notifications':
+        page = const NotificationsScreen();
+        protected = true;
+        break;
+      case '/manage-children':
+        page = const ManageChildrenScreen();
+        protected = true;
+        allowedRoles = [UserRole.guardian];
+        break;
+      case '/child-profile':
+        page = const ChildProfileScreen();
+        protected = true;
+        allowedRoles = [UserRole.guardian];
+        break;
+      case '/chat':
+        page = const ChatListScreen();
+        protected = true;
+        break;
+      case '/chat-users':
+        page = const UserListScreen();
+        protected = true;
+        break;
+      case '/chat-detail':
+        final args = settings.arguments as Map<String, dynamic>?;
+        page = ChatScreen(
+          receiverId: args?['receiverId'] as String?,
+          receiverName: args?['receiverName'] as String?,
+          receiverAvatar: args?['receiverAvatar'] as String?,
+        );
+        protected = true;
+        break;
+
+      default:
+        return PageRouteBuilder(
+          settings: settings,
+          pageBuilder: (context, a1, a2) => const Scaffold(
+            body: Center(child: Text('Page not found')),
+          ),
+        );
+    }
+
+    // Wrap with RouteGuard if protected
+    if (protected) {
+      page = RouteGuard(
+        allowedRoles: allowedRoles,
+        child: page,
+      );
+    }
+
+    // Tab routes use instant transition for snappy switching
+    if (isTabRoute) {
+      return PageRouteBuilder(
+        settings: settings,
+        pageBuilder: (context, a1, a2) => page,
+        transitionsBuilder: (ctx, anim, anim2, child) => child,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      );
+    }
+
+    // Other routes use fast fade transition
+    return PageRouteBuilder(
+      settings: settings,
+      pageBuilder: (context, a1, a2) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          ),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.98, end: 1.0).animate(
+              CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOut,
+              ),
+            ),
+            child: child,
+          ),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 150),
+      reverseTransitionDuration: const Duration(milliseconds: 150),
+    );
+  }
+
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 

@@ -85,10 +85,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 
   Future<void> _loadNotifications() async {
-    setState(() => _isLoading = true);
+    // Show cached data immediately if available
+    final hasExistingData = _notifications.isNotEmpty;
+    if (!hasExistingData) {
+      setState(() => _isLoading = true);
+    }
     
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 1));
+    // TODO: Replace with actual API call using buffer manager
+    // For now, load mock data with minimal delay for responsiveness
+    await Future.delayed(hasExistingData ? Duration.zero : const Duration(milliseconds: 300));
     
     // Mock data for demonstration
     final mockNotifications = [
@@ -213,7 +218,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       bottomNavIndex: 2,
       onBottomNavTap: (index) {
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushNamed(context, '/landing');
         } else if (index == 1) {
           Navigator.pushNamed(context, '/chat');
         } else if (index == 3) {
