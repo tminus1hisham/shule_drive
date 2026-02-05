@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../api/api.dart' as api;
 import '../models/student.dart';
@@ -9,14 +10,14 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   final api.RouteService _routeService = api.RouteService();
   final api.StudentService _studentService = api.StudentService();
   final api.BusService _busService = api.BusService();
-  
+
   // Loading states
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-  
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
-  
+
   // Theme mode: null = system default, true = dark, false = light
   bool? _manualDarkMode;
 
@@ -85,40 +86,55 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   Color get cardColor => isDarkMode ? cardDark : cardLight;
   Color get textColor => isDarkMode ? Colors.white : textPrimary;
   Color get textMutedColor => isDarkMode ? Colors.white70 : textSecondary;
-  
+
   // ==========================================================================
   // API INTEGRATION - ROUTES
   // ==========================================================================
-  
+
   List<api.BusRoute> _routes = [];
   List<api.BusRoute> get routes => _routes;
-  
+
   /// Fetch all routes from API
   Future<void> fetchRoutes() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
+      if (kDebugMode) {
+        print('📍 AppProvider: Fetching all routes...');
+      }
       _routes = await _routeService.getAllRoutes();
+      if (kDebugMode) {
+        print('✅ AppProvider: Fetched ${_routes.length} routes');
+      }
       notifyListeners();
     } on api.NotFoundException catch (e) {
       // Endpoint not available - show empty list
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Routes endpoint not found (404)');
+      }
       _routes = [];
       notifyListeners();
     } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
       _setError(e.message);
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching routes - $e');
+      }
       _setError('Failed to fetch routes');
     } finally {
       _setLoading(false);
     }
   }
-  
+
   /// Fetch routes by current user
   Future<void> fetchRoutesByUser() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       _routes = await _routeService.getRoutesByUser();
       notifyListeners();
@@ -134,7 +150,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Create a new route
   Future<api.BusRoute?> createRoute({
     required String name,
@@ -144,7 +160,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       final route = await _routeService.createRoute(
         name: name,
@@ -165,7 +181,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Update a route
   Future<api.BusRoute?> updateRoute({
     required String routeId,
@@ -175,7 +191,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       final updatedRoute = await _routeService.updateRoute(
         routeId: routeId,
@@ -183,7 +199,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         description: description,
         stops: stops,
       );
-      
+
       final index = _routes.indexWhere((r) => r.id == routeId);
       if (index != -1) {
         _routes[index] = updatedRoute;
@@ -200,12 +216,12 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Delete a route
   Future<bool> deleteRoute(String routeId) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       await _routeService.deleteRoute(routeId);
       _routes.removeWhere((r) => r.id == routeId);
@@ -221,36 +237,54 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   // ==========================================================================
   // API INTEGRATION - BUSES/VEHICLES
   // ==========================================================================
-  
+
   List<api.Bus> _buses = [];
   List<api.Bus> get buses => _buses;
-  
+
   /// Fetch all buses from API
   Future<void> fetchBuses() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
+      if (kDebugMode) {
+        print('🚌 AppProvider: Fetching all buses...');
+      }
       _buses = await _busService.getAllBuses();
+      if (kDebugMode) {
+        print('✅ AppProvider: Fetched ${_buses.length} buses');
+      }
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Buses endpoint not found (404)');
+      }
+      _buses = [];
       notifyListeners();
     } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
       _setError(e.message);
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching buses - $e');
+      }
       _setError('Failed to fetch buses');
     } finally {
       _setLoading(false);
     }
   }
-  
+
   /// Fetch buses by current user
   Future<void> fetchBusesByUser() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       _buses = await _busService.getBusesByUser();
       notifyListeners();
@@ -266,12 +300,12 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Fetch active buses
   Future<void> fetchActiveBuses() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       _buses = await _busService.getActiveBuses();
       notifyListeners();
@@ -287,28 +321,32 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   // ==========================================================================
   // API INTEGRATION - CHILDREN/STUDENTS
   // ==========================================================================
-  
+
   List<api.Student> _apiStudents = [];
   List<api.Student> get apiStudents => _apiStudents;
-  
+
   // For UI compatibility - converts API students to model students
-  List<Student> get studentsList => _apiStudents.map((s) => Student(
-    id: s.id,
-    name: s.name,
-    className: s.className,
-    avatar: s.photo ?? 'https://i.pravatar.cc/150?img=1',
-    status: StudentStatus.pending,
-  )).toList();
-  
+  List<Student> get studentsList => _apiStudents
+      .map(
+        (s) => Student(
+          id: s.id,
+          name: s.name,
+          className: s.className,
+          avatar: s.photo ?? 'https://i.pravatar.cc/150?img=1',
+          status: StudentStatus.pending,
+        ),
+      )
+      .toList();
+
   /// Fetch all students from API
   Future<void> fetchStudents() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       _apiStudents = await _studentService.getAllStudents();
       notifyListeners();
@@ -324,12 +362,12 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Fetch guardian's students
   Future<void> fetchGuardianStudents() async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       _apiStudents = await _studentService.getGuardianStudents();
       notifyListeners();
@@ -345,31 +383,30 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
-  /// Add a new child/student
+
+  /// Add a new child/student via guardian API
+  /// Required: fullname, schoolname, pickupLocation (route)
   Future<api.Student?> addChildAPI({
-    required String name,
-    required String className,
-    String? schoolId,
-    String? photo,
+    required String fullname,
+    String? schoolname,
+    String? classname,
+    String? route,
     String? pickupLocation,
-    String? dropoffLocation,
-    String? emergencyContact,
-    String? emergencyPhone,
+    String? photo,
+    String? guardianPhoneNumber,
   }) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       final student = await _studentService.createStudent(
-        name: name,
-        className: className,
-        schoolId: schoolId,
-        photo: photo,
+        fullname: fullname,
+        schoolname: schoolname,
+        classname: classname,
+        route: route,
         pickupLocation: pickupLocation,
-        dropoffLocation: dropoffLocation,
-        emergencyContact: emergencyContact,
-        emergencyPhone: emergencyPhone,
+        photo: photo,
+        guardianPhoneNumber: guardianPhoneNumber,
       );
       _apiStudents.add(student);
       notifyListeners();
@@ -384,7 +421,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Update child/student
   Future<api.Student?> updateChildAPI({
     required String studentId,
@@ -399,7 +436,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       final updatedStudent = await _studentService.updateStudent(
         studentId: studentId,
@@ -412,7 +449,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         emergencyContact: emergencyContact,
         emergencyPhone: emergencyPhone,
       );
-      
+
       final index = _apiStudents.indexWhere((s) => s.id == studentId);
       if (index != -1) {
         _apiStudents[index] = updatedStudent;
@@ -429,12 +466,12 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Delete child/student
   Future<bool> deleteChildAPI(String studentId) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       await _studentService.deleteStudent(studentId);
       _apiStudents.removeWhere((s) => s.id == studentId);
@@ -450,7 +487,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   /// Upload and update student image
   Future<String?> uploadStudentImage({
     required String studentId,
@@ -458,13 +495,13 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       final imageUrl = await _studentService.updateStudentImage(
         studentId: studentId,
         imagePath: imagePath,
       );
-      
+
       // Update local student data
       final index = _apiStudents.indexWhere((s) => s.id == studentId);
       if (index != -1) {
@@ -488,7 +525,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         _apiStudents[index] = updatedStudent;
         notifyListeners();
       }
-      
+
       return imageUrl;
     } on api.ApiException catch (e) {
       _setError(e.message);
@@ -500,25 +537,25 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setLoading(false);
     }
   }
-  
+
   // ==========================================================================
   // HELPER METHODS
   // ==========================================================================
-  
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
   }
-  
+
   void _setError(String message) {
     _errorMessage = message;
     notifyListeners();
   }
-  
+
   void _clearError() {
     _errorMessage = null;
   }
-  
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();
@@ -708,8 +745,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   // Quick stats
   int get totalTrips => trips.length;
-  int get completedTrips => trips.where((t) => t.status == TripStatus.completed).length;
+  int get completedTrips =>
+      trips.where((t) => t.status == TripStatus.completed).length;
   double get totalDistance => trips.fold(0, (sum, t) => sum + t.distance);
 }
-
-

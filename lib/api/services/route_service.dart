@@ -8,14 +8,14 @@ import '../../utils/buffer_manager.dart';
 class RouteService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
-  
+
   /// Get all routes with buffer fallback
   /// GET /api/routes/get/all
   Future<List<BusRoute>> getAllRoutes() async {
     return _buffer.withBuffer<List<BusRoute>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getAllRoutes);
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> routesData;
         if (response is List) {
@@ -25,8 +25,14 @@ class RouteService {
         } else {
           routesData = [];
         }
-        
-        final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
+
+        if (kDebugMode && routesData.isNotEmpty) {
+          print('🛣️ First route raw data: ${routesData.first}');
+        }
+
+        final routes = routesData
+            .map((route) => BusRoute.fromJson(route))
+            .toList();
         return routes;
       },
       bufferKey: BufferKeys.routes,
@@ -34,14 +40,14 @@ class RouteService {
       cacheDuration: const Duration(minutes: 30),
     );
   }
-  
+
   /// Get routes by user with buffer fallback
   /// GET /api/routes/get/by/user
   Future<List<BusRoute>> getRoutesByUser() async {
     return _buffer.withBuffer<List<BusRoute>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getRoutesByUser);
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> routesData;
         if (response is List) {
@@ -51,8 +57,10 @@ class RouteService {
         } else {
           routesData = [];
         }
-        
-        final routes = routesData.map((route) => BusRoute.fromJson(route)).toList();
+
+        final routes = routesData
+            .map((route) => BusRoute.fromJson(route))
+            .toList();
         return routes;
       },
       bufferKey: '${BufferKeys.routes}_by_user',
@@ -60,7 +68,7 @@ class RouteService {
       cacheDuration: const Duration(minutes: 30),
     );
   }
-  
+
   /// Get route details with buffer fallback
   /// GET /api/routes/get/{id}
   Future<BusRoute?> getRouteById(String routeId) async {
@@ -74,7 +82,7 @@ class RouteService {
       cacheDuration: const Duration(minutes: 20),
     );
   }
-  
+
   /// Create a new route
   /// POST /api/routes/create
   Future<BusRoute> createRoute({
@@ -93,12 +101,12 @@ class RouteService {
           if (schoolId != null) 'school_id': schoolId,
         },
       );
-      
+
       final route = BusRoute.fromJson(response['data']);
-      
+
       // Clear routes cache to force refresh
       await _buffer.clearCategory('routes');
-      
+
       return route;
     } on ApiException {
       rethrow;
@@ -106,7 +114,7 @@ class RouteService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Update a route
   /// PUT /api/routes/update/{id}
   Future<BusRoute> updateRoute({
@@ -120,14 +128,14 @@ class RouteService {
       if (name != null) body['name'] = name;
       if (description != null) body['description'] = description;
       if (stops != null) body['stops'] = stops.map((s) => s.toJson()).toList();
-      
+
       final response = await _apiClient.put(
         Endpoints.updateRoute(routeId),
         body: body,
       );
-      
+
       final route = BusRoute.fromJson(response['data']);
-      
+
       // Update buffers
       await _buffer.saveBuffer(
         key: BufferKeys.routeDetails(routeId),
@@ -136,7 +144,7 @@ class RouteService {
       );
       await _buffer.clearBuffer(BufferKeys.routes);
       await _buffer.clearBuffer('${BufferKeys.routes}_by_user');
-      
+
       return route;
     } on ApiException {
       rethrow;
@@ -144,13 +152,13 @@ class RouteService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Delete a route
   /// DELETE /api/routes/delete/{id}
   Future<void> deleteRoute(String routeId) async {
     try {
       await _apiClient.delete(Endpoints.deleteRoute(routeId));
-      
+
       // Clear related buffers
       await _buffer.clearBuffer(BufferKeys.routeDetails(routeId));
       await _buffer.clearCategory('routes');
@@ -187,7 +195,7 @@ class BusRoute {
   final bool isActive;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  
+
   BusRoute({
     required this.id,
     required this.name,
@@ -199,23 +207,27 @@ class BusRoute {
     required this.createdAt,
     this.updatedAt,
   });
-  
+
   factory BusRoute.fromJson(Map<String, dynamic> json) {
     return BusRoute(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
+      name: json['routeName'] ?? json['name'] ?? '',
       description: json['description'],
       schoolId: json['school_id'] ?? json['schoolId'],
-      schoolName: json['school_name'] ?? json['schoolName'],
-      stops: (json['stops'] as List?)
-          ?.map((s) => RouteStop.fromJson(s))
-          .toList() ?? [],
+      schoolName: json['schoolName'] ?? json['school_name'],
+      stops:
+          (json['stops'] as List?)
+              ?.map((s) => RouteStop.fromJson(s))
+              .toList() ??
+          [],
       isActive: json['is_active'] ?? json['isActive'] ?? true,
-      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
+      createdAt:
+          _parseDateTime(json['created_at'] ?? json['createdAt']) ??
+          DateTime.now(),
       updatedAt: _parseDateTime(json['updated_at'] ?? json['updatedAt']),
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -229,7 +241,7 @@ class BusRoute {
       'updated_at': updatedAt?.toIso8601String(),
     };
   }
-  
+
   int get stopCount => stops.length;
 
   static DateTime? _parseDateTime(dynamic value) {
@@ -253,7 +265,7 @@ class RouteStop {
   final double? longitude;
   final int order;
   final String? estimatedTime;
-  
+
   RouteStop({
     required this.id,
     required this.name,
@@ -263,7 +275,7 @@ class RouteStop {
     required this.order,
     this.estimatedTime,
   });
-  
+
   factory RouteStop.fromJson(Map<String, dynamic> json) {
     return RouteStop(
       id: json['id']?.toString() ?? '',
@@ -275,7 +287,7 @@ class RouteStop {
       estimatedTime: json['estimated_time'] ?? json['estimatedTime'],
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

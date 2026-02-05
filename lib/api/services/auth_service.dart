@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
@@ -11,7 +12,7 @@ class AuthService {
   final ApiClient _apiClient = ApiClient();
   final TokenStorage _tokenStorage = TokenStorage();
   final BufferManager _buffer = BufferManager();
-  
+
   /// Login with phone number and password
   /// POST /api/auth/login
   Future<LoginResponse> login({
@@ -24,16 +25,13 @@ class AuthService {
       if (normalizedPhone.startsWith('+')) {
         normalizedPhone = normalizedPhone.substring(1);
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.login,
-        body: {
-          'PhoneNumber': normalizedPhone,
-          'Password': password,
-        },
+        body: {'PhoneNumber': normalizedPhone, 'Password': password},
         requiresAuth: false,
       );
-      
+
       return LoginResponse.fromJson(response);
     } on ApiException {
       rethrow;
@@ -41,7 +39,7 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Verify OTP
   /// POST /api/auth/verify-otp
   Future<VerifyOtpResponse> verifyOtp(String phoneNumber, String otp) async {
@@ -55,25 +53,22 @@ class AuthService {
       if (normalizedPhone.startsWith('254') && normalizedPhone.length == 12) {
         normalizedPhone = '0${normalizedPhone.substring(3)}';
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.verifyOtp,
-        body: {
-          'PhoneNumber': normalizedPhone,
-          'OTP': otp,
-        },
+        body: {'PhoneNumber': normalizedPhone, 'OTP': otp},
         requiresAuth: false,
       );
-      
+
       final verifyResponse = VerifyOtpResponse.fromJson(response);
-      
+
       // Save auth tokens and user data
       if (verifyResponse.token != null) {
         await _apiClient.saveTokens(
           accessToken: verifyResponse.token!,
           refreshToken: verifyResponse.refreshToken,
         );
-        
+
         // Save user data
         if (verifyResponse.user != null) {
           await _tokenStorage.saveUserData(
@@ -84,7 +79,7 @@ class AuthService {
           );
         }
       }
-      
+
       return verifyResponse;
     } on ApiException {
       rethrow;
@@ -92,25 +87,25 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Refresh access token
   /// POST /api/auth/refresh/token
   Future<RefreshTokenResponse> refreshToken() async {
     try {
       final refreshToken = await _tokenStorage.getRefreshToken();
-      
+
       if (refreshToken == null) {
         throw UnauthorizedException(message: 'No refresh token available');
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.refreshToken,
         body: {'refresh_token': refreshToken},
         requiresAuth: false,
       );
-      
+
       final refreshResponse = RefreshTokenResponse.fromJson(response);
-      
+
       // Update auth tokens
       if (refreshResponse.token != null) {
         await _apiClient.saveTokens(
@@ -118,7 +113,7 @@ class AuthService {
           refreshToken: refreshResponse.refreshToken,
         );
       }
-      
+
       return refreshResponse;
     } on ApiException {
       rethrow;
@@ -126,7 +121,7 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Logout
   /// POST /api/auth/logout
   Future<void> logout() async {
@@ -139,24 +134,26 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Check if user is logged in
   Future<bool> isLoggedIn() async {
     return await _apiClient.isAuthenticated();
   }
-  
+
   /// Get current user data from storage with buffer fallback
   Future<User?> getCurrentUser() async {
     // First try to get from buffer
-    final bufferedUser = await _buffer.getBuffer<User>(key: BufferKeys.currentUser);
+    final bufferedUser = await _buffer.getBuffer<User>(
+      key: BufferKeys.currentUser,
+    );
     if (bufferedUser != null) {
       return bufferedUser;
     }
-    
+
     // Fallback to stored user data
     final userId = await _tokenStorage.getUserId();
     if (userId == null) return null;
-    
+
     final user = User(
       id: userId,
       name: await _tokenStorage.getUserName() ?? '',
@@ -165,17 +162,17 @@ class AuthService {
       email: await _tokenStorage.getUserEmail(),
       avatar: await _tokenStorage.getUserAvatar(),
     );
-    
+
     // Save to buffer for future use
     await _buffer.saveBuffer(
       key: BufferKeys.currentUser,
       data: user,
       expiration: const Duration(hours: 1),
     );
-    
+
     return user;
   }
-  
+
   /// Save current user to buffer
   Future<void> cacheCurrentUser(User user) async {
     await _buffer.saveBuffer(
@@ -184,12 +181,12 @@ class AuthService {
       expiration: const Duration(hours: 1),
     );
   }
-  
+
   /// Clear auth-related buffers
   Future<void> clearAuthBuffers() async {
     await _buffer.clearBuffer(BufferKeys.currentUser);
   }
-  
+
   /// Update user profile
   /// PUT /api/user/profile
   Future<User> updateProfile({
@@ -207,7 +204,7 @@ class AuthService {
           if (email != null) 'Email': email,
         },
       );
-      
+
       return User.fromJson(response);
     } on ApiException {
       rethrow;
@@ -215,7 +212,7 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Request password reset OTP
   /// POST /api/auth/forgot-password
   Future<PasswordResetResponse> requestPasswordReset(String phoneNumber) async {
@@ -225,15 +222,13 @@ class AuthService {
       if (normalizedPhone.startsWith('+')) {
         normalizedPhone = normalizedPhone.substring(1);
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.forgotPassword,
-        body: {
-          'PhoneNumber': normalizedPhone,
-        },
+        body: {'PhoneNumber': normalizedPhone},
         requiresAuth: false,
       );
-      
+
       return PasswordResetResponse.fromJson(response);
     } on ApiException {
       rethrow;
@@ -241,7 +236,7 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Verify password reset OTP
   /// POST /api/auth/verify-reset-otp
   Future<PasswordResetResponse> verifyPasswordResetOtp({
@@ -254,16 +249,13 @@ class AuthService {
       if (normalizedPhone.startsWith('+')) {
         normalizedPhone = normalizedPhone.substring(1);
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.verifyResetOtp,
-        body: {
-          'PhoneNumber': normalizedPhone,
-          'OTP': otp,
-        },
+        body: {'PhoneNumber': normalizedPhone, 'OTP': otp},
         requiresAuth: false,
       );
-      
+
       return PasswordResetResponse.fromJson(response);
     } on ApiException {
       rethrow;
@@ -271,7 +263,7 @@ class AuthService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Reset password with OTP
   /// POST /api/auth/reset-password
   Future<PasswordResetResponse> resetPassword({
@@ -285,7 +277,7 @@ class AuthService {
       if (normalizedPhone.startsWith('+')) {
         normalizedPhone = normalizedPhone.substring(1);
       }
-      
+
       final response = await _apiClient.post(
         Endpoints.resetPassword,
         body: {
@@ -295,8 +287,75 @@ class AuthService {
         },
         requiresAuth: false,
       );
-      
+
       return PasswordResetResponse.fromJson(response);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Change password (for logged in users)
+  /// POST /api/auth/change/password
+  /// Requires: phoneNumber, currentPassword, newPassword
+  Future<ChangePasswordResponse> changePassword({
+    required String phoneNumber,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      // Normalize phone number
+      String normalizedPhone = phoneNumber.trim();
+      if (normalizedPhone.startsWith('+')) {
+        normalizedPhone = normalizedPhone.substring(1);
+      }
+
+      final response = await _apiClient.post(
+        Endpoints.changePassword,
+        body: {
+          'phoneNumber': normalizedPhone,
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        },
+      );
+
+      return ChangePasswordResponse.fromJson(response);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Update profile picture
+  /// POST /api/auth/update/profile/picture
+  /// Returns the new image URL
+  Future<String> updateProfilePicture({
+    required String userId,
+    required String imagePath,
+  }) async {
+    try {
+      // Create multipart file from path
+      final file = await http.MultipartFile.fromPath('profileImage', imagePath);
+
+      // Use multipart upload
+      final response = await _apiClient.postMultipart(
+        Endpoints.updateProfilePicture,
+        fields: {'userId': userId},
+        files: [file],
+      );
+
+      // Handle both wrapped ({"data": {"imageUrl": ...}}) and unwrapped responses
+      final data = response['data'] ?? response;
+      final imageUrl =
+          data['imageUrl'] ?? data['profileImage'] ?? data['photo'] ?? '';
+
+      if (imageUrl.isEmpty) {
+        throw ApiException(message: 'Failed to get image URL from response');
+      }
+
+      return imageUrl.toString();
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -305,25 +364,36 @@ class AuthService {
   }
 }
 
+/// Change Password Response Model
+class ChangePasswordResponse {
+  final bool success;
+  final String? message;
+  final List<String>? errors;
+
+  ChangePasswordResponse({required this.success, this.message, this.errors});
+
+  factory ChangePasswordResponse.fromJson(Map<String, dynamic> json) {
+    return ChangePasswordResponse(
+      success: json['success'] ?? json['isSuccess'] ?? false,
+      message: json['message'] ?? json['msg'],
+      errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
+    );
+  }
+}
+
 /// Password Reset Response Model
 class PasswordResetResponse {
   final bool success;
   final String? message;
   final List<String>? errors;
-  
-  PasswordResetResponse({
-    required this.success,
-    this.message,
-    this.errors,
-  });
-  
+
+  PasswordResetResponse({required this.success, this.message, this.errors});
+
   factory PasswordResetResponse.fromJson(Map<String, dynamic> json) {
     return PasswordResetResponse(
       success: json['success'] ?? false,
       message: json['message'],
-      errors: json['errors'] != null 
-          ? List<String>.from(json['errors']) 
-          : null,
+      errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
     );
   }
 }
@@ -336,7 +406,7 @@ class LoginResponse {
   final String? refreshToken;
   final User? user;
   final List<String>? errors;
-  
+
   LoginResponse({
     required this.success,
     this.message,
@@ -345,22 +415,22 @@ class LoginResponse {
     this.user,
     this.errors,
   });
-  
+
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     // Debug: print the raw response to understand structure
     debugPrint('LoginResponse raw: $json');
-    
+
     User? user;
-    
+
     // Try to extract user data from various API response formats
     // Priority: 1. userType from body, 2. role from body, 3. role from JWT token
-    
+
     String? extractedRole;
     String? extractedName;
     String? extractedId;
     String? extractedPhone;
     String? extractedEmail;
-    
+
     // Try to get from response body first
     if (json['userType'] != null) {
       extractedRole = json['userType'];
@@ -369,24 +439,24 @@ class LoginResponse {
       extractedRole = json['role'];
       debugPrint('Found role in response body: $extractedRole');
     }
-    
+
     // Get other user fields from body
     extractedName = json['fullname'] ?? json['userName'] ?? json['name'];
     extractedId = json['userId']?.toString() ?? json['id']?.toString();
     extractedPhone = json['phoneNumber'] ?? json['phone'];
     extractedEmail = json['email'];
-    
+
     // If no role in body, try JWT token
     if (extractedRole == null && json['token'] != null) {
       extractedRole = _extractRoleFromToken(json['token']);
       debugPrint('Extracted role from JWT: $extractedRole');
     }
-    
+
     // If we have a token but no ID, try to get ID from JWT
     if (extractedId == null && json['token'] != null) {
       extractedId = _extractUserIdFromToken(json['token']);
     }
-    
+
     // Create user if we have minimum data
     if (extractedRole != null || json['token'] != null) {
       user = User(
@@ -399,48 +469,48 @@ class LoginResponse {
       );
       debugPrint('Created user with role: ${user.role}');
     }
-    
+
     return LoginResponse(
-      success: json['success'] ?? (user != null), // Success if we have user data
+      success:
+          json['success'] ?? (user != null), // Success if we have user data
       message: json['message'],
       token: json['token'] ?? json['accessToken'],
       refreshToken: json['refreshToken'] ?? json['refresh_token'],
       user: user,
-      errors: json['errors'] != null 
-          ? List<String>.from(json['errors']) 
-          : null,
+      errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
     );
   }
-  
+
   /// Extract role from JWT token payload
   static String? _extractRoleFromToken(String token) {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return null;
-      
+
       // Base64 decode the payload (middle part)
       String payload = parts[1];
-      
+
       // Fix base64url encoding: replace - with + and _ with /
       payload = payload.replaceAll('-', '+').replaceAll('_', '/');
-      
+
       // Add padding if needed
       while (payload.length % 4 != 0) {
         payload += '=';
       }
-      
+
       // Use base64 decode instead of base64Url since we already converted
       final decoded = utf8.decode(base64.decode(payload));
       final payloadJson = jsonDecode(decoded);
-      
+
       debugPrint('JWT payload decoded: $payloadJson');
-      
+
       // Try different possible role fields in JWT
-      final role = payloadJson['role'] ?? 
-                   payloadJson['userType'] ?? 
-                   payloadJson['Role'] ?? 
-                   payloadJson['UserType'];
-      
+      final role =
+          payloadJson['role'] ??
+          payloadJson['userType'] ??
+          payloadJson['Role'] ??
+          payloadJson['UserType'];
+
       debugPrint('Extracted role from JWT: $role');
       return role;
     } catch (e, stackTrace) {
@@ -449,27 +519,27 @@ class LoginResponse {
       return null;
     }
   }
-  
+
   /// Extract user ID from JWT token payload
   static String? _extractUserIdFromToken(String token) {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return null;
-      
+
       String payload = parts[1];
       payload = payload.replaceAll('-', '+').replaceAll('_', '/');
       while (payload.length % 4 != 0) {
         payload += '=';
       }
-      
+
       final decoded = utf8.decode(base64.decode(payload));
       final payloadJson = jsonDecode(decoded);
-      
+
       // Try different possible ID fields
-      return payloadJson['UserId'] ?? 
-             payloadJson['userId'] ?? 
-             payloadJson['sub'] ??
-             payloadJson['id'];
+      return payloadJson['UserId'] ??
+          payloadJson['userId'] ??
+          payloadJson['sub'] ??
+          payloadJson['id'];
     } catch (e) {
       debugPrint('UserId extraction error: $e');
       return null;
@@ -484,7 +554,7 @@ class VerifyOtpResponse {
   final String? token;
   final String? refreshToken;
   final User? user;
-  
+
   VerifyOtpResponse({
     required this.success,
     required this.message,
@@ -492,7 +562,7 @@ class VerifyOtpResponse {
     this.refreshToken,
     this.user,
   });
-  
+
   factory VerifyOtpResponse.fromJson(Map<String, dynamic> json) {
     return VerifyOtpResponse(
       success: json['success'] ?? false,
@@ -509,13 +579,9 @@ class RefreshTokenResponse {
   final bool success;
   final String? token;
   final String? refreshToken;
-  
-  RefreshTokenResponse({
-    required this.success,
-    this.token,
-    this.refreshToken,
-  });
-  
+
+  RefreshTokenResponse({required this.success, this.token, this.refreshToken});
+
   factory RefreshTokenResponse.fromJson(Map<String, dynamic> json) {
     return RefreshTokenResponse(
       success: json['success'] ?? false,
@@ -535,7 +601,7 @@ class User {
   final String role;
   final String? licenseNumber;
   final String? vehicleNumber;
-  
+
   User({
     required this.id,
     required this.name,
@@ -546,7 +612,7 @@ class User {
     this.licenseNumber,
     this.vehicleNumber,
   });
-  
+
   factory User.fromJson(Map<String, dynamic> json) {
     // Support both API formats:
     // - Guardian/Driver API: fullname, userId, phoneNumber, userType, profileImage
@@ -556,7 +622,7 @@ class User {
     final phone = json['phoneNumber'] ?? json['phone'] ?? '';
     final role = json['userType'] ?? json['role'] ?? 'attendant';
     final avatar = json['profileImage'] ?? json['avatar'];
-    
+
     return User(
       id: id,
       name: _cleanName(name),
@@ -568,34 +634,34 @@ class User {
       vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
     );
   }
-  
+
   /// Clean up name - extract only first and last name
   /// e.g., "ObedMunyao-34016552457676507777686405413468" -> "Obed Munyao"
   static String _cleanName(String rawName) {
     if (rawName.isEmpty) return '';
-    
+
     // Remove any trailing IDs after hyphen (e.g., "-34016552457676507777686405413468")
     String cleaned = rawName.split('-').first.trim();
-    
+
     // Try to split camelCase into separate words
     // e.g., "ObedMunyao" -> "Obed Munyao"
     final camelCasePattern = RegExp(r'([a-z])([A-Z])');
     cleaned = cleaned.replaceAllMapped(camelCasePattern, (match) {
       return '${match.group(1)} ${match.group(2)}';
     });
-    
+
     // Clean up extra spaces
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-    
+
     // Extract only first and last name (if more than 2 words)
     final parts = cleaned.split(' ');
     if (parts.length > 2) {
       return '${parts.first} ${parts.last}';
     }
-    
+
     return cleaned;
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

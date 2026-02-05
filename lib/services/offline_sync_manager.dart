@@ -22,11 +22,11 @@ void _callbackDispatcher() {
     try {
       final syncManager = OfflineSyncManager();
       final result = await syncManager.syncPendingOperations();
-      
+
       if (kDebugMode) {
         print('🔄 Background sync completed: $result');
       }
-      
+
       return result.success;
     } catch (e) {
       if (kDebugMode) {
@@ -38,7 +38,7 @@ void _callbackDispatcher() {
 }
 
 /// Offline Sync Manager
-/// 
+///
 /// Handles synchronization of pending operations when connectivity is restored.
 /// Monitors network state and triggers automatic sync.
 class OfflineSyncManager {
@@ -48,19 +48,19 @@ class OfflineSyncManager {
 
   final LocalDatabaseService _db = LocalDatabaseService();
   final Connectivity _connectivity = Connectivity();
-  
+
   TripService? _tripService;
   StudentService? _studentService;
 
   // Stream subscription for connectivity changes
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
-  
+
   // Sync state
-  final StreamController<SyncState> _syncStateController = 
+  final StreamController<SyncState> _syncStateController =
       StreamController<SyncState>.broadcast();
-  
+
   Stream<SyncState> get syncStateStream => _syncStateController.stream;
-  
+
   bool _isInitialized = false;
   bool _isSyncing = false;
   DateTime? _lastSyncTime;
@@ -134,9 +134,10 @@ class OfflineSyncManager {
   /// Handle connectivity changes
   void _onConnectivityChanged(List<ConnectivityResult> results) async {
     // Check if any connection is available (not just the first one)
-    final hasConnection = results.isNotEmpty && 
+    final hasConnection =
+        results.isNotEmpty &&
         !results.every((r) => r == ConnectivityResult.none);
-    
+
     if (kDebugMode) {
       print('📶 Connectivity changed: $results');
     }
@@ -161,16 +162,16 @@ class OfflineSyncManager {
     }
 
     final pendingOps = await _db.getPendingOperations();
-    
+
     if (pendingOps.isEmpty) {
       _isSyncing = false;
       _lastSyncTime = DateTime.now();
       _syncStateController.add(SyncState.completed(0, 0));
-      
+
       if (kDebugMode) {
         print('✅ No pending operations to sync');
       }
-      
+
       return SyncResult.success(synced: 0, failed: 0);
     }
 
@@ -183,16 +184,18 @@ class OfflineSyncManager {
 
     for (final op in pendingOps) {
       if (kDebugMode) {
-        print('🔄 Processing: ${op.operationType} ${op.entityType} (ID: ${op.id})');
+        print(
+          '🔄 Processing: ${op.operationType} ${op.entityType} (ID: ${op.id})',
+        );
       }
 
       try {
         final success = await _processOperation(op);
-        
+
         if (success) {
           await _db.removePendingOperation(op.id);
           successCount++;
-          
+
           if (kDebugMode) {
             print('✅ Synced: ${op.operationType} ${op.entityType}');
           }
@@ -204,22 +207,24 @@ class OfflineSyncManager {
         failCount++;
         final errorMsg = e.toString();
         errors.add('${op.id}: $errorMsg');
-        
+
         await _handleOperationFailure(op, errorMsg);
-        
+
         if (kDebugMode) {
-          print('❌ Failed to sync: ${op.operationType} ${op.entityType} - $errorMsg');
+          print(
+            '❌ Failed to sync: ${op.operationType} ${op.entityType} - $errorMsg',
+          );
         }
       }
     }
 
     _isSyncing = false;
     _lastSyncTime = DateTime.now();
-    
+
     final state = failCount == 0
         ? SyncState.completed(successCount, failCount)
         : SyncState.partial(successCount, failCount, errors);
-    
+
     _syncStateController.add(state);
 
     // Clear completed operations
@@ -240,7 +245,7 @@ class OfflineSyncManager {
   /// Process a single operation
   Future<bool> _processOperation(PendingOperation op) async {
     final payload = _parsePayload(op.payload);
-    
+
     switch (op.entityType) {
       case 'trip':
         return await _processTripOperation(op, payload);
@@ -256,8 +261,8 @@ class OfflineSyncManager {
 
   /// Process trip-related operations
   Future<bool> _processTripOperation(
-    PendingOperation op, 
-    Map<String, dynamic> payload
+    PendingOperation op,
+    Map<String, dynamic> payload,
   ) async {
     if (_tripService == null) return false;
 
@@ -304,8 +309,8 @@ class OfflineSyncManager {
 
   /// Process student-related operations
   Future<bool> _processStudentOperation(
-    PendingOperation op, 
-    Map<String, dynamic> payload
+    PendingOperation op,
+    Map<String, dynamic> payload,
   ) async {
     if (_studentService == null) return false;
 
@@ -313,15 +318,15 @@ class OfflineSyncManager {
       switch (op.operationType) {
         case 'create':
           await _studentService!.createStudent(
-            name: payload['name'],
-            className: payload['class_name'],
-            schoolId: payload['school_id'],
-            guardianId: payload['guardian_id'],
-            photo: payload['photo'],
-            pickupLocation: payload['pickup_location'],
-            dropoffLocation: payload['dropoff_location'],
-            emergencyContact: payload['emergency_contact'],
-            emergencyPhone: payload['emergency_phone'],
+            fullname: payload['fullname'] ?? payload['name'],
+            schoolname: payload['schoolname'] ?? payload['school_name'],
+            classname: payload['classname'] ?? payload['class_name'],
+            route: payload['route'],
+            pickupLocation:
+                payload['pickupLocation'] ?? payload['pickup_location'],
+            photo: payload['profileImage'] ?? payload['photo'],
+            guardianPhoneNumber:
+                payload['guardianPhoneNumber'] ?? payload['guardian_phone'],
           );
           return true;
         case 'update':
@@ -358,7 +363,7 @@ class OfflineSyncManager {
   /// Process attendance-related operations
   Future<bool> _processAttendanceOperation(
     PendingOperation op,
-    Map<String, dynamic> payload
+    Map<String, dynamic> payload,
   ) async {
     // Attendance operations are handled through trip service
     if (_tripService == null) return false;
@@ -379,9 +384,12 @@ class OfflineSyncManager {
   }
 
   /// Handle operation failure
-  Future<void> _handleOperationFailure(PendingOperation op, String error) async {
+  Future<void> _handleOperationFailure(
+    PendingOperation op,
+    String error,
+  ) async {
     final newRetryCount = op.retryCount + 1;
-    
+
     await _db.updateOperationRetry(
       op.id,
       retryCount: newRetryCount,
@@ -432,7 +440,7 @@ class OfflineSyncManager {
   Future<SyncStatusInfo> getSyncStatus() async {
     final pendingCount = await getPendingCount();
     final metadata = await _db.getAllSyncMetadata();
-    
+
     return SyncStatusInfo(
       isSyncing: _isSyncing,
       lastSyncTime: _lastSyncTime,
@@ -475,23 +483,22 @@ class SyncState {
   });
 
   factory SyncState.idle() => SyncState(status: SyncStatus.idle);
-  factory SyncState.inProgress() => SyncState(
-    status: SyncStatus.inProgress,
-    timestamp: DateTime.now(),
-  );
+  factory SyncState.inProgress() =>
+      SyncState(status: SyncStatus.inProgress, timestamp: DateTime.now());
   factory SyncState.completed(int synced, int failed) => SyncState(
     status: SyncStatus.completed,
     syncedCount: synced,
     failedCount: failed,
     timestamp: DateTime.now(),
   );
-  factory SyncState.partial(int synced, int failed, List<String> errors) => SyncState(
-    status: SyncStatus.partial,
-    syncedCount: synced,
-    failedCount: failed,
-    errors: errors,
-    timestamp: DateTime.now(),
-  );
+  factory SyncState.partial(int synced, int failed, List<String> errors) =>
+      SyncState(
+        status: SyncStatus.partial,
+        syncedCount: synced,
+        failedCount: failed,
+        errors: errors,
+        timestamp: DateTime.now(),
+      );
   factory SyncState.error(List<String> errors) => SyncState(
     status: SyncStatus.error,
     errors: errors,
@@ -504,13 +511,7 @@ class SyncState {
   bool get hasErrors => failedCount > 0 || (errors?.isNotEmpty ?? false);
 }
 
-enum SyncStatus {
-  idle,
-  inProgress,
-  completed,
-  partial,
-  error,
-}
+enum SyncStatus { idle, inProgress, completed, partial, error }
 
 /// Sync result
 class SyncResult {
@@ -526,11 +527,12 @@ class SyncResult {
     this.errors = const [],
   });
 
-  factory SyncResult.success({required int synced, int failed = 0}) => SyncResult(
-    success: failed == 0,
-    syncedCount: synced,
-    failedCount: failed,
-  );
+  factory SyncResult.success({required int synced, int failed = 0}) =>
+      SyncResult(
+        success: failed == 0,
+        syncedCount: synced,
+        failedCount: failed,
+      );
 
   factory SyncResult.alreadySyncing() => SyncResult(
     success: false,
@@ -566,7 +568,7 @@ class SyncStatusInfo {
 
   String get lastSyncText {
     if (lastSyncTime == null) return 'Never synced';
-    
+
     final diff = DateTime.now().difference(lastSyncTime!);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';

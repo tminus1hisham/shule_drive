@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'screens/auth/splash.dart';
 import 'api/api_client.dart';
 import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
@@ -14,7 +15,6 @@ import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/main/home_screen.dart';
-import 'screens/main/landing_screen.dart';
 import 'screens/main/dashboard_screen.dart';
 import 'screens/main/start_trip_screen.dart';
 import 'screens/main/select_students_screen.dart';
@@ -46,40 +46,80 @@ import 'services/offline_sync_manager.dart';
 import 'widgets/route_guard.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+// ============================================================================
+// APP ENTRY POINT
+// ============================================================================
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase (optional - uncomment if using Firebase)
-  // await _initializeFirebase();
-  
-  // Initialize token storage (for web: shared_preferences, for mobile: secure_storage)
+
+  // Initialize critical services before app starts
+  await _initCriticalServices();
+
+  // Start non-critical services in background
+  _initNonCriticalServices();
+
+  runApp(const ShuleDriveApp());
+}
+
+/// Critical services that must be ready before showing UI
+Future<void> _initCriticalServices() async {
+  // Token storage (fast - shared prefs)
   await TokenStorage().init();
-  
-  // Initialize API client (loads saved tokens)
+
+  // API client (loads saved tokens, fast)
   await ApiClient().init();
-  
-  // Initialize local database (SQLite)
-  await LocalDatabaseService().database;
-  
-  // Initialize notification service (choose your backend)
-  await NotificationService().initialize(
-    preferredBackend: NotificationBackend.localOnly, // Change as needed
-  );
-  
-  // Initialize offline sync manager
-  await OfflineSyncManager().initialize();
-  
+}
+
+/// Non-critical services that can initialize in background
+void _initNonCriticalServices() {
+  // Skip on web
+  if (kIsWeb) return;
+
+  // Database - can be slow, do in background
+  LocalDatabaseService().database
+      .then((_) {
+        if (kDebugMode) print('📦 Database initialized');
+      })
+      .catchError((e) {
+        if (kDebugMode) print('⚠️ Database init error: $e');
+      });
+
+  // Notifications - can be slow
+  NotificationService()
+      .initialize(preferredBackend: NotificationBackend.localOnly)
+      .then((_) {
+        if (kDebugMode) print('🔔 Notifications initialized');
+      })
+      .catchError((e) {
+        if (kDebugMode) print('⚠️ Notification init error: $e');
+      });
+
+  // Offline sync - lowest priority
+  OfflineSyncManager()
+      .initialize()
+      .then((_) {
+        if (kDebugMode) print('🔄 Offline sync initialized');
+      })
+      .catchError((e) {
+        if (kDebugMode) print('⚠️ Offline sync init error: $e');
+      });
+
+  // System UI style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-  runApp(const ShuleDriveApp());
 }
 
+// ============================================================================
+// MAIN APP
+// ============================================================================
 
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 class ShuleDriveApp extends StatelessWidget {
   const ShuleDriveApp({super.key});
@@ -103,10 +143,9 @@ class ShuleDriveApp extends StatelessWidget {
             themeMode: appProvider.themeMode,
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
-            home: const AuthWrapper(),
-            onGenerateRoute: (settings) {
-              return _buildPageRoute(settings);
-            },
+            home: const SplashWithTransition(),
+            navigatorObservers: [routeObserver],
+            onGenerateRoute: _buildPageRoute,
           );
         },
       ),
@@ -240,216 +279,262 @@ class ShuleDriveApp extends StatelessWidget {
   }
 }
 
-/// Authentication Wrapper - Handles auth state and redirects accordingly
-  /// Build page route with fast transitions
-  Route _buildPageRoute(RouteSettings settings) {
-    // Routes that are considered "tab switches" - use instant transition
-    const tabRoutes = <String>{
-      '/landing',
-      '/home',
-      '/chat',
-      '/notifications',
-      '/profile',
-    };
-    
-    Widget page;
-    bool protected = false;
-    List<UserRole>? allowedRoles;
-    bool isTabRoute = tabRoutes.contains(settings.name);
+/// Splash screen wrapper that handles the transition to main content
+class SplashWithTransition extends StatefulWidget {
+  const SplashWithTransition({super.key});
 
-    switch (settings.name) {
-      // Public routes
-      case '/login':
-        page = const LoginScreen();
-        break;
-      case '/forgot-password':
-        page = const ForgotPasswordScreen();
-        break;
-      case '/verify-reset-otp':
-        page = const VerifyResetOtpScreen();
-        break;
-      case '/reset-password':
-        page = const ResetPasswordScreen();
-        break;
+  @override
+  State<SplashWithTransition> createState() => _SplashWithTransitionState();
+}
 
-      // Protected routes
-      case '/':
-      case '/dashboard':
-        page = const DashboardScreen();
-        protected = true;
-        break;
-      case '/landing':
-        page = const LandingScreen();
-        protected = true;
-        break;
-      case '/home':
-        page = const HomeScreen();
-        protected = true;
-        break;
-      case '/start-trip':
-        page = const StartTripScreen();
-        protected = true;
-        allowedRoles = [UserRole.driver];
-        break;
-      case '/select-students':
-        page = const SelectStudentsScreen();
-        protected = true;
-        allowedRoles = [UserRole.driver];
-        break;
-      case '/active-trip':
-        page = const ActiveTripScreen();
-        protected = true;
-        allowedRoles = [UserRole.driver];
-        break;
-      case '/students-list':
-        page = const StudentsListScreen();
-        protected = true;
-        break;
-      case '/profile':
-        page = const ProfileScreen();
-        protected = true;
-        break;
-      case '/edit-profile':
-        page = const EditProfileScreen();
-        protected = true;
-        break;
-      case '/change-password':
-        page = const ChangePasswordScreen();
-        protected = true;
-        break;
-      case '/terms':
-        page = const TermsServiceScreen();
-        protected = true;
-        break;
-      case '/privacy':
-        page = const PrivacyPolicyScreen();
-        protected = true;
-        break;
-      case '/about':
-        page = const AboutScreen();
-        protected = true;
-        break;
-      case '/contact':
-        page = const ContactScreen();
-        protected = true;
-        break;
-      case '/trips':
-        page = const TripsScreen();
-        protected = true;
-        break;
-      case '/routes':
-        page = const RoutesListScreen();
-        protected = true;
-        break;
-      case '/trip-details':
-        page = const TripDetailsScreen();
-        protected = true;
-        break;
-      case '/notifications':
-        page = const NotificationsScreen();
-        protected = true;
-        break;
-      case '/manage-children':
-        page = const ManageChildrenScreen();
-        protected = true;
-        allowedRoles = [UserRole.guardian];
-        break;
-      case '/child-profile':
-        page = const ChildProfileScreen();
-        protected = true;
-        allowedRoles = [UserRole.guardian];
-        break;
-      case '/chat':
-        page = const ChatListScreen();
-        protected = true;
-        break;
-      case '/chat-users':
-        page = const UserListScreen();
-        protected = true;
-        break;
-      case '/chat-detail':
-        final args = settings.arguments as Map<String, dynamic>?;
-        page = ChatScreen(
-          receiverId: args?['receiverId'] as String?,
-          receiverName: args?['receiverName'] as String?,
-          receiverAvatar: args?['receiverAvatar'] as String?,
-        );
-        protected = true;
-        break;
-      
-      case '/live-tracking':
-        final args = settings.arguments as Map<String, dynamic>?;
-        page = LiveTrackingScreen(
-          tripId: args?['tripId'] as String?,
-          busId: args?['busId'] as String?,
-          routeId: args?['routeId'] as String?,
-        );
-        protected = true;
-        break;
-      
-      case '/osm-tracking':
-        final args = settings.arguments as Map<String, dynamic>?;
-        page = OsmTrackingScreen(
-          tripId: args?['tripId'] as String?,
-          busId: args?['busId'] as String?,
-          routeId: args?['routeId'] as String?,
-        );
-        protected = true;
-        break;
+class _SplashWithTransitionState extends State<SplashWithTransition> {
+  bool _showSplash = true;
 
-      default:
-        return PageRouteBuilder(
-          settings: settings,
-          pageBuilder: (context, a1, a2) => const Scaffold(
-            body: Center(child: Text('Page not found')),
-          ),
-        );
+  @override
+  void initState() {
+    super.initState();
+    // Delay to show splash, then transition
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAndTransition();
+    });
+  }
+
+  Future<void> _initializeAndTransition() async {
+    // Initialize auth
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.initialize();
+
+    // Minimum splash display time (1 second for good UX)
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (mounted) {
+      setState(() => _showSplash = false);
     }
+  }
 
-    // Wrap with RouteGuard if protected
-    if (protected) {
-      page = RouteGuard(
-        allowedRoles: allowedRoles,
-        child: page,
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 2500),
+      reverseDuration: const Duration(milliseconds: 2500),
+      switchInCurve: Curves.easeInOutCubic,
+      switchOutCurve: Curves.easeInOutCubic,
+      transitionBuilder: (child, animation) {
+        // Determine if this is the splash or the main content
+        final isSplash = child is Splash;
+
+        if (isSplash) {
+          // Splash slides out to bottom
+          final slideOut = Tween<Offset>(
+            begin: Offset.zero,
+            end: const Offset(0.0, 1.0),
+          ).animate(animation);
+          return SlideTransition(position: slideOut, child: child);
+        } else {
+          // Main content slides in from top
+          final slideIn = Tween<Offset>(
+            begin: const Offset(0.0, -1.0),
+            end: Offset.zero,
+          ).animate(animation);
+          return SlideTransition(position: slideIn, child: child);
+        }
+      },
+      child: _showSplash
+          ? const Splash(key: ValueKey('splash'))
+          : const AuthWrapper(key: ValueKey('main')),
+    );
+  }
+}
+
+Route _buildPageRoute(RouteSettings settings) {
+  const tabRoutes = <String>{
+    '/landing',
+    '/home',
+    '/chat',
+    '/notifications',
+    '/profile',
+  };
+
+  Widget page;
+  bool protected = false;
+  List<UserRole>? allowedRoles;
+  bool isTabRoute = tabRoutes.contains(settings.name);
+
+  switch (settings.name) {
+    case '/login':
+      page = const LoginScreen();
+      break;
+    case '/forgot-password':
+      page = const ForgotPasswordScreen();
+      break;
+    case '/verify-reset-otp':
+      page = const VerifyResetOtpScreen();
+      break;
+    case '/reset-password':
+      page = const ResetPasswordScreen();
+      break;
+    case '/':
+    case '/dashboard':
+      page = const DashboardScreen();
+      protected = true;
+      break;
+    case '/landing':
+      page = const DashboardScreen();
+      protected = true;
+      break;
+    case '/home':
+      page = const HomeScreen();
+      protected = true;
+      break;
+    case '/start-trip':
+      page = const StartTripScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/select-students':
+      page = const SelectStudentsScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/active-trip':
+      page = const ActiveTripScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/students-list':
+      page = const StudentsListScreen();
+      protected = true;
+      break;
+    case '/profile':
+      page = const ProfileScreen();
+      protected = true;
+      break;
+    case '/edit-profile':
+      page = const EditProfileScreen();
+      protected = true;
+      break;
+    case '/change-password':
+      page = const ChangePasswordScreen();
+      protected = true;
+      break;
+    case '/terms':
+      page = const TermsServiceScreen();
+      protected = true;
+      break;
+    case '/privacy':
+      page = const PrivacyPolicyScreen();
+      protected = true;
+      break;
+    case '/about':
+      page = const AboutScreen();
+      protected = true;
+      break;
+    case '/contact':
+      page = const ContactScreen();
+      protected = true;
+      break;
+    case '/trips':
+      page = const TripsScreen();
+      protected = true;
+      break;
+    case '/routes':
+      page = const RoutesListScreen();
+      protected = true;
+      break;
+    case '/trip-details':
+      page = const TripDetailsScreen();
+      protected = true;
+      break;
+    case '/notifications':
+      page = const NotificationsScreen();
+      protected = true;
+      break;
+    case '/manage-children':
+      page = const ManageChildrenScreen();
+      protected = true;
+      allowedRoles = [UserRole.guardian];
+      break;
+    case '/child-profile':
+      page = const ChildProfileScreen();
+      protected = true;
+      allowedRoles = [UserRole.guardian];
+      break;
+    case '/chat':
+      page = const ChatListScreen();
+      protected = true;
+      break;
+    case '/chat-users':
+      page = const UserListScreen();
+      protected = true;
+      break;
+    case '/chat-detail':
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = ChatScreen(
+        receiverId: args?['receiverId'] as String?,
+        receiverName: args?['receiverName'] as String?,
+        receiverAvatar: args?['receiverAvatar'] as String?,
       );
-    }
-
-    // Tab routes use instant transition for snappy switching
-    if (isTabRoute) {
+      protected = true;
+      break;
+    case '/live-tracking':
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = LiveTrackingScreen(
+        tripId: args?['tripId'] as String?,
+        busId: args?['busId'] as String?,
+        routeId: args?['routeId'] as String?,
+      );
+      protected = true;
+      break;
+    case '/osm-tracking':
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = OsmTrackingScreen(
+        tripId: args?['tripId'] as String?,
+        busId: args?['busId'] as String?,
+        routeId: args?['routeId'] as String?,
+      );
+      protected = true;
+      break;
+    default:
       return PageRouteBuilder(
         settings: settings,
-        pageBuilder: (context, a1, a2) => page,
-        transitionsBuilder: (ctx, anim, anim2, child) => child,
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (context, a1, a2) =>
+            const Scaffold(body: Center(child: Text('Page not found'))),
       );
-    }
+  }
 
-    // Other routes use fast fade transition
+  if (protected) {
+    page = RouteGuard(allowedRoles: allowedRoles, child: page);
+  }
+
+  if (isTabRoute) {
     return PageRouteBuilder(
       settings: settings,
       pageBuilder: (context, a1, a2) => page,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOut,
-          ),
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.98, end: 1.0).animate(
-              CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOut,
-              ),
-            ),
-            child: child,
-          ),
-        );
-      },
-      transitionDuration: const Duration(milliseconds: 150),
-      reverseTransitionDuration: const Duration(milliseconds: 150),
+      transitionsBuilder: (ctx, anim, anim2, child) => child,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
     );
   }
+
+  return PageRouteBuilder(
+    settings: settings,
+    pageBuilder: (context, a1, a2) => page,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween<double>(
+            begin: 0.98,
+            end: 1.0,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
+        ),
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 150),
+    reverseTransitionDuration: const Duration(milliseconds: 150),
+  );
+}
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -459,65 +544,55 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
-    // Delay initialization to avoid setState during build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeAuth();
+    // Services init happens in background
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.isAuthenticated && !kIsWeb) {
+      _initializeServices(authProvider);
+    }
+
+    if (mounted) {
+      setState(() => _initialized = true);
+    }
+  }
+
+  void _initializeServices(AuthProvider authProvider) {
+    // Fire and forget - don't await
+    final connectivityProvider = context.read<ConnectivityProvider>();
+    connectivityProvider.initialize().catchError((e) {
+      if (kDebugMode) print('⚠️ Connectivity init error: $e');
+    });
+
+    // Welcome notification after delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted && authProvider.isAuthenticated) {
+        _showWelcomeNotification(authProvider);
+      }
     });
   }
 
-  Future<void> _initializeAuth() async {
-    final authProvider = context.read<AuthProvider>();
-    await authProvider.initialize();
-    
-    // Initialize connectivity monitoring after auth is ready
-    if (authProvider.isAuthenticated) {
-      await _initializeServices(authProvider);
-    }
-  }
-  
-  Future<void> _initializeServices(AuthProvider authProvider) async {
-    // Initialize connectivity provider
-    final connectivityProvider = context.read<ConnectivityProvider>();
-    await connectivityProvider.initialize();
-    
-    // Show welcome notification
-    await _showWelcomeNotification(authProvider);
-    
-    // Register FCM token with backend
-    final notificationService = NotificationService();
-    if (authProvider.userId != null) {
-      await notificationService.sendTokenToBackend(authProvider.userId!);
-      
-      // Subscribe to user's student topics (for guardians)
-      if (authProvider.isGuardian) {
-        // TODO: Subscribe to guardian's children topics
-      }
-    }
-  }
-  
-  /// Show welcome notification to the user
   Future<void> _showWelcomeNotification(AuthProvider authProvider) async {
-    // Wait for app to fully initialize before showing notification
-    await Future.delayed(const Duration(seconds: 2));
-    
+    if (kIsWeb) return;
+
     final userName = authProvider.userName;
-    final role = authProvider.isDriver ? 'Driver' : 
-                 authProvider.isGuardian ? 'Guardian' : 'User';
-    
-    final title = userName != null 
-        ? '👋 Welcome back, $userName!' 
+    final role = authProvider.isDriver
+        ? 'Driver'
+        : authProvider.isGuardian
+        ? 'Guardian'
+        : 'User';
+
+    final title = userName != null
+        ? '👋 Welcome back, $userName!'
         : '👋 Welcome back!';
-    
-    final body = 'Thank you for being a part of ShuleDrive. '
+
+    final body =
+        'Thank you for being a part of ShuleDrive. '
         'Your $role dashboard is ready. Have a great day! 🚌';
-    
-    if (kDebugMode) {
-      print('🔔 Showing welcome notification to $userName ($role)');
-    }
-    
+
     await NotificationService().showLocalNotification(
       title: title,
       body: body,
@@ -530,33 +605,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
-        // Show loading while initializing
-        if (authProvider.isLoading) {
+        if (authProvider.isLoading && !_initialized) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF6B9B5B),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
             ),
           );
         }
 
-        // If authenticated, show screen based on role
         if (authProvider.isAuthenticated) {
-          // Initialize services when becoming authenticated
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _initializeServices(authProvider);
-          });
-          
-          // Unified dashboard - adapts based on role and trip status
           return const DashboardScreen();
         }
 
-        // Not authenticated, show login
         return const LoginScreen();
       },
     );
   }
 }
-
-

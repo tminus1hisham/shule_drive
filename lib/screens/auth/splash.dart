@@ -1,17 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'login_screen.dart';
-import '../main/landing_screen.dart';
+import '../main/dashboard_screen.dart';
 
+/// Optimized Splash Screen - Shows immediately while app initializes in background
+/// Uses the original logo image with improved startup performance
 class Splash extends StatefulWidget {
   const Splash({super.key});
 
   @override
-  State<Splash> createState() => _SplashState();
+  State<Splash> createState() => SplashState();
 }
 
-class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
+class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
   bool _isCheckingAuth = true;
@@ -20,22 +24,24 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+
+    // Set immersive mode for splash
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: [SystemUiOverlay.top],
+    );
+
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
+
     _slideAnimation =
-        Tween<Offset>(
-          begin: const Offset(
-            2.0,
-            0.0,
-          ), // Start further off-screen to the right
-          end: Offset.zero, // End at center
-        ).animate(
+        Tween<Offset>(begin: const Offset(2.0, 0.0), end: Offset.zero).animate(
           CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
         );
 
-    // Start animation after a short delay to ensure widget is built
+    // Start animation immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _animationController.forward();
       _checkAuthState();
@@ -47,63 +53,15 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
       final authProvider = context.read<AuthProvider>();
       await authProvider.initialize();
 
-      // Wait for animation to complete before navigating
-      await Future.delayed(const Duration(seconds: 2));
+      // Minimum display time for splash (1 second for better UX)
+      await Future.delayed(const Duration(seconds: 1));
 
       if (!mounted) return;
 
       if (authProvider.isAuthenticated) {
-        // Navigate to landing/home
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LandingScreen(),
-            transitionDuration: const Duration(milliseconds: 1500),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              const begin = Offset(0.0, -1.0);
-              const end = Offset.zero;
-              const curve = Curves.easeInOut;
-
-              var tween = Tween(
-                begin: begin,
-                end: end,
-              ).chain(CurveTween(curve: curve));
-              var offsetAnimation = animation.drive(tween);
-
-              return SlideTransition(
-                position: offsetAnimation,
-                child: child,
-              );
-            },
-          ),
-        );
+        _navigateTo(const DashboardScreen());
       } else {
-        // Navigate to login
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LoginScreen(),
-            transitionDuration: const Duration(milliseconds: 1500),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              const begin = Offset(0.0, -1.0);
-              const end = Offset.zero;
-              const curve = Curves.easeInOut;
-
-              var tween = Tween(
-                begin: begin,
-                end: end,
-              ).chain(CurveTween(curve: curve));
-              var offsetAnimation = animation.drive(tween);
-
-              return SlideTransition(
-                position: offsetAnimation,
-                child: child,
-              );
-            },
-          ),
-        );
+        _navigateTo(const LoginScreen());
       }
     } catch (e) {
       setState(() {
@@ -111,6 +69,30 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
         _isCheckingAuth = false;
       });
     }
+  }
+
+  void _navigateTo(Widget screen) {
+    if (!mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionDuration: const Duration(milliseconds: 800),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, -1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(position: offsetAnimation, child: child);
+        },
+      ),
+    );
   }
 
   @override
@@ -131,8 +113,16 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Transform.translate(
-                  offset: _slideAnimation.value * MediaQuery.of(context).size.width,
-                  child: Image.asset('images/logo.png', width: 200, height: 200),
+                  offset:
+                      _slideAnimation.value * MediaQuery.of(context).size.width,
+                  child: Hero(
+                    tag: 'app_logo',
+                    child: Image.asset(
+                      'images/logo.png',
+                      width: 200,
+                      height: 200,
+                    ),
+                  ),
                 ),
                 if (_isCheckingAuth) ...[
                   const SizedBox(height: 40),
@@ -141,7 +131,9 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                     height: 40,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6B9B5B),
+                      ),
                     ),
                   ),
                 ],
@@ -152,10 +144,7 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                     child: Text(
                       _errorMessage!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: Colors.red, fontSize: 14),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -178,3 +167,6 @@ class _SplashState extends State<Splash> with SingleTickerProviderStateMixin {
     );
   }
 }
+
+/// Global key to control splash screen from outside
+final GlobalKey<SplashState> splashKey = GlobalKey<SplashState>();

@@ -7,14 +7,14 @@ import '../../utils/buffer_manager.dart';
 class BusService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
-  
+
   /// Get all buses with buffer fallback
   /// GET /api/buses/get/all
   Future<List<Bus>> getAllBuses() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getAllBuses);
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> busesData;
         if (response is List) {
@@ -24,7 +24,17 @@ class BusService {
         } else {
           busesData = [];
         }
-        
+
+        if (kDebugMode && busesData.isNotEmpty) {
+          final first = busesData.first as Map<String, dynamic>;
+          print('🚌 First bus raw data: $first');
+          print('🚌 Available fields: ${first.keys.toList()}');
+          // Print all field values for debugging
+          for (final key in first.keys) {
+            print('🚌 $key: ${first[key]}');
+          }
+        }
+
         final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
         return buses;
       },
@@ -33,14 +43,14 @@ class BusService {
       cacheDuration: const Duration(minutes: 30),
     );
   }
-  
+
   /// Get buses by user with buffer fallback
   /// GET /api/buses/get/by/user
   Future<List<Bus>> getBusesByUser() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getBusesByUser);
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> busesData;
         if (response is List) {
@@ -50,7 +60,7 @@ class BusService {
         } else {
           busesData = [];
         }
-        
+
         final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
         return buses;
       },
@@ -59,26 +69,28 @@ class BusService {
       cacheDuration: const Duration(minutes: 30),
     );
   }
-  
+
   /// Get active buses with buffer fallback
   /// GET /api/buses/get/active
   Future<List<Bus>> getActiveBuses() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getActiveBuses);
-        
+
         final buses = (response['data'] as List? ?? [])
             .map((bus) => Bus.fromJson(bus))
             .toList();
-        
+
         return buses;
       },
       bufferKey: '${BufferKeys.buses}_active',
       fallbackData: <Bus>[],
-      cacheDuration: const Duration(minutes: 10), // Short cache for active buses
+      cacheDuration: const Duration(
+        minutes: 10,
+      ), // Short cache for active buses
     );
   }
-  
+
   /// Get bus by ID with buffer fallback
   /// GET /api/buses/get/{id}
   Future<Bus?> getBusById(String busId) async {
@@ -120,7 +132,7 @@ class Bus {
   final bool isActive;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  
+
   Bus({
     required this.id,
     required this.registrationNumber,
@@ -134,23 +146,40 @@ class Bus {
     required this.createdAt,
     this.updatedAt,
   });
-  
+
   factory Bus.fromJson(Map<String, dynamic> json) {
     return Bus(
       id: json['id']?.toString() ?? '',
-      registrationNumber: json['registration_number'] ?? json['registrationNumber'] ?? '',
+      registrationNumber:
+          json['numberplate'] ??
+          json['numberPlate'] ??
+          json['plate_number'] ??
+          json['plateNumber'] ??
+          json['license_plate'] ??
+          json['licensePlate'] ??
+          json['bus_number'] ??
+          json['busNumber'] ??
+          json['registration_number'] ??
+          json['registrationNumber'] ??
+          json['reg_number'] ??
+          json['regNumber'] ??
+          '',
       model: json['model'],
-      capacity: json['capacity']?.toString(),
-      schoolId: json['school_id'] ?? json['schoolId'],
+      capacity:
+          json['seatingCapacity']?.toString() ?? json['capacity']?.toString(),
+      schoolId: json['companyOrgId'] ?? json['school_id'] ?? json['schoolId'],
       schoolName: json['school_name'] ?? json['schoolName'],
       driverId: json['driver_id'] ?? json['driverId'],
       driverName: json['driver_name'] ?? json['driverName'],
-      isActive: json['is_active'] ?? json['isActive'] ?? true,
-      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
+      isActive:
+          json['isBusActive'] ?? json['is_active'] ?? json['isActive'] ?? true,
+      createdAt:
+          _parseDateTime(json['created_at'] ?? json['createdAt']) ??
+          DateTime.now(),
       updatedAt: _parseDateTime(json['updated_at'] ?? json['updatedAt']),
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

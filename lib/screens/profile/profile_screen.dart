@@ -14,8 +14,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final int _currentIndex = 3;
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -30,10 +28,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       showBottomNav: true,
       bottomNavIndex: 3,
       onBottomNavTap: (index) {
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
-        } else if (index == 1) {
-          Navigator.pushNamed(context, '/chat');
+        switch (index) {
+          case 0:
+            Navigator.pushReplacementNamed(context, '/dashboard');
+            break;
+          case 1:
+            Navigator.pushNamed(context, '/chat');
+            break;
+          case 2:
+            Navigator.pushNamed(context, '/notifications');
+            break;
+          case 3:
+            // Already on profile/settings
+            break;
+          case 4:
+            // Center + button
+            Navigator.pushNamed(context, '/start-trip');
+            break;
         }
       },
       body: SingleChildScrollView(

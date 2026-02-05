@@ -10,7 +10,7 @@ class StudentService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
   final TokenStorage _tokenStorage = TokenStorage();
-  
+
   /// Get all students with buffer fallback
   /// GET /api/students
   Future<List<Student>> getAllStudents({int page = 1, int limit = 20}) async {
@@ -18,12 +18,9 @@ class StudentService {
       apiCall: () async {
         final response = await _apiClient.get(
           Endpoints.students,
-          queryParams: {
-            'page': page.toString(),
-            'limit': limit.toString(),
-          },
+          queryParams: {'page': page.toString(), 'limit': limit.toString()},
         );
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> studentsData;
         if (response is List) {
@@ -33,8 +30,10 @@ class StudentService {
         } else {
           studentsData = [];
         }
-        
-        final students = studentsData.map((student) => Student.fromJson(student)).toList();
+
+        final students = studentsData
+            .map((student) => Student.fromJson(student))
+            .toList();
         return students;
       },
       bufferKey: BufferKeys.students(),
@@ -42,7 +41,7 @@ class StudentService {
       cacheDuration: const Duration(minutes: 20),
     );
   }
-  
+
   /// Get student by ID with buffer fallback
   /// GET /api/students/get/{id}
   Future<Student?> getStudentById(String studentId) async {
@@ -51,48 +50,50 @@ class StudentService {
         final response = await _apiClient.get(
           Endpoints.studentDetails(studentId),
         );
-        
+
         return Student.fromJson(response['data'] ?? response);
       },
       bufferKey: BufferKeys.studentDetails(studentId),
       cacheDuration: const Duration(minutes: 15),
     );
   }
-  
+
   /// Create a new student (through guardian)
   /// POST /api/guardians/student/create
+  /// API expects: fullname, schoolname, classname, route, pickupLocation, profileImage
   Future<Student> createStudent({
-    required String name,
-    required String className,
-    String? schoolId,
-    String? guardianId,
-    String? photo,
+    required String fullname,
+    String? schoolname,
+    String? classname,
+    String? route,
     String? pickupLocation,
-    String? dropoffLocation,
-    String? emergencyContact,
-    String? emergencyPhone,
+    String? photo,
+    String? guardianPhoneNumber,
   }) async {
     try {
       final response = await _apiClient.post(
         Endpoints.createGuardianStudent,
         body: {
-          'name': name,
-          'class_name': className,
-          if (schoolId != null) 'school_id': schoolId,
-          if (guardianId != null) 'guardian_id': guardianId,
-          if (photo != null) 'photo': photo,
-          if (pickupLocation != null) 'pickup_location': pickupLocation,
-          if (dropoffLocation != null) 'dropoff_location': dropoffLocation,
-          if (emergencyContact != null) 'emergency_contact': emergencyContact,
-          if (emergencyPhone != null) 'emergency_phone': emergencyPhone,
+          'fullname': fullname,
+          if (schoolname != null && schoolname.isNotEmpty)
+            'schoolname': schoolname,
+          if (classname != null && classname.isNotEmpty) 'classname': classname,
+          if (route != null && route.isNotEmpty) 'route': route,
+          if (pickupLocation != null && pickupLocation.isNotEmpty)
+            'pickupLocation': pickupLocation,
+          if (photo != null && photo.isNotEmpty) 'profileImage': photo,
+          if (guardianPhoneNumber != null && guardianPhoneNumber.isNotEmpty)
+            'guardianPhoneNumber': guardianPhoneNumber,
         },
       );
-      
-      final student = Student.fromJson(response['data']);
-      
+
+      // Handle both wrapped ({"data": {...}}) and unwrapped ({...}) responses
+      final studentData = response['data'] ?? response;
+      final student = Student.fromJson(studentData);
+
       // Clear students cache to force refresh
       await _buffer.clearCategory('students');
-      
+
       return student;
     } on ApiException {
       rethrow;
@@ -100,7 +101,7 @@ class StudentService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Update student
   /// PUT /api/students/update/{id}
   Future<Student> updateStudent({
@@ -122,16 +123,17 @@ class StudentService {
       if (photo != null) body['photo'] = photo;
       if (pickupLocation != null) body['pickup_location'] = pickupLocation;
       if (dropoffLocation != null) body['dropoff_location'] = dropoffLocation;
-      if (emergencyContact != null) body['emergency_contact'] = emergencyContact;
+      if (emergencyContact != null)
+        body['emergency_contact'] = emergencyContact;
       if (emergencyPhone != null) body['emergency_phone'] = emergencyPhone;
-      
+
       final response = await _apiClient.put(
         Endpoints.updateStudent(studentId),
         body: body,
       );
-      
+
       final student = Student.fromJson(response['data']);
-      
+
       // Update buffers
       await _buffer.saveBuffer(
         key: BufferKeys.studentDetails(studentId),
@@ -139,7 +141,7 @@ class StudentService {
         expiration: const Duration(minutes: 15),
       );
       await _buffer.clearBuffer(BufferKeys.students());
-      
+
       return student;
     } on ApiException {
       rethrow;
@@ -147,13 +149,13 @@ class StudentService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Delete student
   /// DELETE /api/students/delete/{id}
   Future<void> deleteStudent(String studentId) async {
     try {
       await _apiClient.delete(Endpoints.deleteStudent(studentId));
-      
+
       // Clear related buffers
       await _buffer.clearBuffer(BufferKeys.studentDetails(studentId));
       await _buffer.clearCategory('students');
@@ -163,17 +165,17 @@ class StudentService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Get guardian's students with buffer fallback
   /// GET /api/guardians/get/students
   Future<List<Student>> getGuardianStudents() async {
     // Get guardian ID for buffer key
     final guardianId = await _tokenStorage.getUserId();
-    
+
     return _buffer.withBuffer<List<Student>>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getGuardianStudents);
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> studentsData;
         if (response is List) {
@@ -183,8 +185,10 @@ class StudentService {
         } else {
           studentsData = [];
         }
-        
-        final students = studentsData.map((student) => Student.fromJson(student)).toList();
+
+        final students = studentsData
+            .map((student) => Student.fromJson(student))
+            .toList();
         return students;
       },
       bufferKey: BufferKeys.students(guardianId: guardianId),
@@ -192,7 +196,7 @@ class StudentService {
       cacheDuration: const Duration(minutes: 20),
     );
   }
-  
+
   /// Get students by phone number with buffer fallback
   /// GET /api/guardians/get/students/by/phone
   Future<List<Student>> getStudentsByPhone(String phoneNumber) async {
@@ -202,11 +206,11 @@ class StudentService {
           Endpoints.getGuardianStudentsByPhone,
           queryParams: {'phone': phoneNumber},
         );
-        
+
         final students = (response['data'] as List? ?? [])
             .map((student) => Student.fromJson(student))
             .toList();
-        
+
         return students;
       },
       bufferKey: '${BufferKeys.students()}_phone_$phoneNumber',
@@ -214,7 +218,7 @@ class StudentService {
       cacheDuration: const Duration(minutes: 15),
     );
   }
-  
+
   /// Update student image
   /// POST /api/guardians/update/child/image
   Future<String> updateStudentImage({
@@ -224,18 +228,15 @@ class StudentService {
     try {
       final response = await _apiClient.post(
         Endpoints.updateGuardianChildImage,
-        body: {
-          'student_id': studentId,
-          'image_path': imagePath,
-        },
+        body: {'student_id': studentId, 'image_path': imagePath},
       );
-      
+
       final imageUrl = response['data']['image_url']?.toString() ?? '';
-      
+
       // Clear student detail cache to force refresh
       await _buffer.clearBuffer(BufferKeys.studentDetails(studentId));
       await _buffer.clearCategory('students');
-      
+
       return imageUrl;
     } on ApiException {
       rethrow;
@@ -243,7 +244,7 @@ class StudentService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Get student attendance with buffer fallback
   /// GET /api/students/{id}/attendance
   Future<List<AttendanceRecord>> getStudentAttendance(String studentId) async {
@@ -252,11 +253,11 @@ class StudentService {
         final response = await _apiClient.get(
           Endpoints.studentAttendance(studentId),
         );
-        
+
         final records = (response['data'] as List? ?? [])
             .map((r) => AttendanceRecord.fromJson(r))
             .toList();
-        
+
         return records;
       },
       bufferKey: 'students/attendance_$studentId',
@@ -298,7 +299,11 @@ class Student {
   final String? emergencyPhone;
   final bool isActive;
   final DateTime createdAt;
-  
+  // Additional fields from guardian API
+  final String? route;
+  final String? studentRegNumber;
+  final String? transportOrg;
+
   Student({
     required this.id,
     required this.name,
@@ -315,28 +320,58 @@ class Student {
     this.emergencyPhone,
     this.isActive = true,
     required this.createdAt,
+    this.route,
+    this.studentRegNumber,
+    this.transportOrg,
   });
-  
+
   factory Student.fromJson(Map<String, dynamic> json) {
+    // Debug logging to see raw API response
+    if (kDebugMode) {
+      print('👨‍🎓 Student raw JSON: $json');
+    }
+
     return Student(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      photo: json['photo'] ?? json['profileImage'] ?? json['image'],
-      className: json['class_name'] ?? json['class'] ?? json['className'] ?? '',
+      // Support both API formats: fullname (guardian API) and name (standard)
+      name: json['fullname'] ?? json['name'] ?? '',
+      photo: json['profileImage'] ?? json['photo'] ?? json['image'],
+      className:
+          json['classname'] ??
+          json['class_name'] ??
+          json['class'] ??
+          json['className'] ??
+          '',
       schoolId: json['school_id'] ?? json['schoolId'],
-      schoolName: json['school_name'] ?? json['schoolName'],
+      // Support both schoolname (guardian API) and school_name
+      schoolName:
+          json['schoolname'] ?? json['school_name'] ?? json['schoolName'],
       guardianId: json['guardian_id'] ?? json['guardianId'],
       guardianName: json['guardian_name'] ?? json['guardianName'],
-      guardianPhone: json['guardian_phone'] ?? json['guardianPhone'],
+      // Support guardianPhoneNumber from guardian API
+      guardianPhone:
+          json['guardianPhoneNumber'] ??
+          json['guardian_phone'] ??
+          json['guardianPhone'],
       pickupLocation: json['pickup_location'] ?? json['pickupLocation'],
       dropoffLocation: json['dropoff_location'] ?? json['dropoffLocation'],
       emergencyContact: json['emergency_contact'] ?? json['emergencyContact'],
       emergencyPhone: json['emergency_phone'] ?? json['emergencyPhone'],
-      isActive: json['is_active'] ?? json['isActive'] ?? true,
-      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
+      // Additional fields from guardian API
+      route: json['route'],
+      studentRegNumber: json['studentRegNumber'],
+      transportOrg: json['transportOrg'],
+      isActive:
+          json['isStudentActive'] ??
+          json['is_active'] ??
+          json['isActive'] ??
+          true,
+      createdAt:
+          _parseDateTime(json['createdAt'] ?? json['created_at']) ??
+          DateTime.now(),
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -354,9 +389,12 @@ class Student {
       'emergency_phone': emergencyPhone,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
+      'route': route,
+      'studentRegNumber': studentRegNumber,
+      'transportOrg': transportOrg,
     };
   }
-  
+
   static DateTime? _parseDateTime(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
@@ -377,7 +415,7 @@ class AttendanceRecord {
   final String status; // 'present', 'absent', 'picked', 'dropped'
   final DateTime date;
   final String? notes;
-  
+
   AttendanceRecord({
     required this.id,
     required this.studentId,
@@ -386,18 +424,19 @@ class AttendanceRecord {
     required this.date,
     this.notes,
   });
-  
+
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     return AttendanceRecord(
       id: json['id']?.toString() ?? '',
-      studentId: json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
+      studentId:
+          json['student_id']?.toString() ?? json['studentId']?.toString() ?? '',
       tripId: json['trip_id']?.toString() ?? json['tripId']?.toString() ?? '',
       status: json['status'] ?? 'absent',
       date: Student._parseDateTime(json['date']) ?? DateTime.now(),
       notes: json['notes'],
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

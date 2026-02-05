@@ -184,14 +184,26 @@ class ApiClient {
       
       final headers = await _getHeaders(requiresAuth: requiresAuth);
       
+      // Debug logging
+      debugPrint('🔷 API Request: GET $uri');
+      
       final response = await _client
           .get(uri, headers: headers)
           .timeout(
             const Duration(milliseconds: ApiConstants.connectionTimeout),
           );
       
+      // Debug logging for response
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        debugPrint('✅ API Response: ${response.statusCode} from GET $endpoint');
+      } else {
+        debugPrint('❌ API Error: ${response.statusCode} from GET $endpoint');
+        debugPrint('Response body: ${response.body}');
+      }
+      
       return _handleResponse(response);
     } catch (e) {
+      debugPrint('❌ API Exception on GET $endpoint: $e');
       throw _handleException(e);
     }
   }

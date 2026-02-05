@@ -107,10 +107,22 @@ class _ChatListScreenState extends State<ChatListScreen>
       showBottomNav: true,
       bottomNavIndex: 1,
       onBottomNavTap: (index) {
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
-        } else if (index == 3) {
-          Navigator.pushNamed(context, '/profile');
+        switch (index) {
+          case 0:
+            Navigator.pushReplacementNamed(context, '/dashboard');
+            break;
+          case 1:
+            // Already on chat
+            break;
+          case 2:
+            Navigator.pushNamed(context, '/notifications');
+            break;
+          case 3:
+            Navigator.pushNamed(context, '/profile');
+            break;
+          case 4:
+            Navigator.pushNamed(context, '/start-trip');
+            break;
         }
       },
       actions: [

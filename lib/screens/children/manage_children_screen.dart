@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../utils/permission_helper.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -66,9 +67,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
     // Show loading
     if (isLoading && children.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF6B9B5B),
-        ),
+        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
       );
     }
 
@@ -78,11 +77,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: provider.textMutedColor,
-            ),
+            Icon(Icons.error_outline, size: 64, color: provider.textMutedColor),
             const SizedBox(height: 16),
             Text(
               'Error loading children',
@@ -95,10 +90,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             const SizedBox(height: 8),
             Text(
               errorMessage,
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-              ),
+              style: TextStyle(fontSize: 14, color: provider.textMutedColor),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -138,10 +130,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             const SizedBox(height: 8),
             Text(
               'Tap the + button to add your first child',
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-              ),
+              style: TextStyle(fontSize: 14, color: provider.textMutedColor),
             ),
           ],
         ),
@@ -175,10 +164,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
           borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-        ),
+        child: const Icon(Icons.delete, color: Colors.white),
       ),
       confirmDismiss: (direction) async {
         return await showDialog(
@@ -206,9 +192,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
       onDismissed: (_) async {
         final success = await provider.deleteChildAPI(child.id);
         if (success && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${child.name} removed')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('${child.name} removed')));
         }
       },
       child: GestureDetector(
@@ -233,24 +219,12 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
           ),
           child: Row(
             children: [
+              // Profile Image with placeholder
               GestureDetector(
                 onTap: () => _showImagePickerOptions(context, child),
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundImage: child.photo != null
-                          ? NetworkImage(child.photo!)
-                          : null,
-                      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
-                      child: child.photo == null
-                          ? const Icon(
-                              Icons.person,
-                              color: Color(0xFF6B9B5B),
-                              size: 32,
-                            )
-                          : null,
-                    ),
+                    _buildProfileImage(child.photo, provider),
                     // Edit icon overlay
                     Positioned(
                       right: 0,
@@ -276,12 +250,14 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                 ),
               ),
               const SizedBox(width: 16),
+              // Child Info: fullName, schoolName, route
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Full Name
                     Text(
-                      child.name,
+                      child.name.isNotEmpty ? child.name : 'Unknown',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -289,6 +265,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
+                    // School Name
                     Text(
                       child.schoolName ?? 'No School',
                       style: TextStyle(
@@ -297,22 +274,201 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      child.className,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: provider.textMutedColor,
-                      ),
+                    // Route
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.route,
+                          size: 12,
+                          color: const Color(0xFF6B9B5B),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            child.route ?? 'No Route Assigned',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: child.route != null
+                                  ? const Color(0xFF6B9B5B)
+                                  : provider.textMutedColor,
+                              fontWeight: child.route != null
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: provider.textMutedColor,
-              ),
+              // Phone icon - shows guardian phone on tap
+              if (child.guardianPhone != null &&
+                  child.guardianPhone!.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _showGuardianPhone(context, child),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6B9B5B).withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.phone,
+                      color: Color(0xFF6B9B5B),
+                      size: 20,
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(width: 40),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: provider.textMutedColor),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Build profile image with placeholder
+  Widget _buildProfileImage(String? photoUrl, AppProvider provider) {
+    // Default placeholder widget
+    Widget placeholder = Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: const Color(0xFF6B9B5B).withAlpha(50),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.person, color: Color(0xFF6B9B5B), size: 32),
+    );
+
+    if (photoUrl == null || photoUrl.isEmpty) {
+      return ClipOval(child: placeholder);
+    }
+
+    return ClipOval(
+      child: Image.network(
+        photoUrl,
+        width: 64,
+        height: 64,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6B9B5B).withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return placeholder;
+        },
+      ),
+    );
+  }
+
+  /// Show guardian phone number dialog
+  void _showGuardianPhone(BuildContext context, api.Student child) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildProfileImage(child.photo, context.read<AppProvider>()),
+            const SizedBox(height: 16),
+            Text(
+              child.name,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Guardian Contact',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6B9B5B).withAlpha(20),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.phone, color: Color(0xFF6B9B5B)),
+                  const SizedBox(width: 12),
+                  Text(
+                    child.guardianPhone!,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B9B5B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // TODO: Implement phone call functionality
+                  // url_launcher can be used: launchUrl(Uri.parse('tel:${child.guardianPhone}'))
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Calling ${child.guardianPhone}...'),
+                      backgroundColor: const Color(0xFF6B9B5B),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.call),
+                label: const Text('Call Guardian'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B9B5B),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       ),
     );
@@ -359,10 +515,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                     color: const Color(0xFF6B9B5B).withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Color(0xFF6B9B5B),
-                  ),
+                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
                 ),
                 title: Text(
                   'Take Photo',
@@ -380,9 +533,14 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                 onTap: () async {
                   Navigator.pop(context);
                   // Request camera permission first
-                  final hasPermission = await PermissionHelper.requestCameraPermission(context);
+                  final hasPermission =
+                      await PermissionHelper.requestCameraPermission(context);
                   if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(context, child, ImageSource.camera);
+                    await _pickAndUploadImage(
+                      context,
+                      child,
+                      ImageSource.camera,
+                    );
                   }
                 },
               ),
@@ -414,9 +572,16 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                 onTap: () async {
                   Navigator.pop(context);
                   // Request photo library permission first
-                  final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(context);
+                  final hasPermission =
+                      await PermissionHelper.requestPhotoLibraryPermission(
+                        context,
+                      );
                   if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(context, child, ImageSource.gallery);
+                    await _pickAndUploadImage(
+                      context,
+                      child,
+                      ImageSource.gallery,
+                    );
                   }
                 },
               ),
@@ -429,10 +594,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
                       color: Colors.red.withAlpha(30),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                    ),
+                    child: const Icon(Icons.delete_outline, color: Colors.red),
                   ),
                   title: const Text(
                     'Remove Photo',
@@ -501,7 +663,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             content: Text('${child.name}\'s photo updated successfully'),
             backgroundColor: const Color(0xFF6B9B5B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -511,7 +675,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             content: const Text('Failed to upload photo. Please try again.'),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -524,7 +690,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             content: Text('Error: $e'),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -532,13 +700,13 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
     }
   }
 
-  Future<void> _removeStudentImage(BuildContext context, api.Student child) async {
+  Future<void> _removeStudentImage(
+    BuildContext context,
+    api.Student child,
+  ) async {
     try {
       final provider = context.read<AppProvider>();
-      await provider.updateChildAPI(
-        studentId: child.id,
-        photo: null,
-      );
+      await provider.updateChildAPI(studentId: child.id, photo: null);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -546,7 +714,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             content: Text('${child.name}\'s photo removed'),
             backgroundColor: const Color(0xFF6B9B5B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -558,7 +728,9 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             content: const Text('Failed to remove photo'),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -567,7 +739,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
   }
 }
 
-/// Add Child Form with Validation
+/// Add Child Form with Dropdowns for School and Route
 class AddChildForm extends StatefulWidget {
   const AddChildForm({super.key});
 
@@ -579,23 +751,50 @@ class _AddChildFormState extends State<AddChildForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _classController = TextEditingController();
-  final _schoolController = TextEditingController();
-  final _pickupController = TextEditingController();
-  final _emergencyContactController = TextEditingController();
-  final _emergencyPhoneController = TextEditingController();
+
+  // Dropdown selections
+  String? _selectedSchool;
+  String? _selectedRoute;
 
   bool _isLoading = false;
   XFile? _selectedImage;
 
   @override
+  void initState() {
+    super.initState();
+    // Fetch routes when form opens (for school and route dropdowns)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppProvider>().fetchRoutes();
+    });
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _classController.dispose();
-    _schoolController.dispose();
-    _pickupController.dispose();
-    _emergencyContactController.dispose();
-    _emergencyPhoneController.dispose();
     super.dispose();
+  }
+
+  /// Get unique schools from routes
+  List<String> _getSchoolsFromRoutes(List<api.BusRoute> routes) {
+    final schools = routes
+        .where((r) => r.schoolName != null && r.schoolName!.isNotEmpty)
+        .map((r) => r.schoolName!)
+        .toSet()
+        .toList();
+    schools.sort();
+    return schools;
+  }
+
+  /// Get unique route names from routes
+  List<String> _getRouteNames(List<api.BusRoute> routes) {
+    final routeNames = routes
+        .where((r) => r.name.isNotEmpty)
+        .map((r) => r.name)
+        .toSet()
+        .toList();
+    routeNames.sort();
+    return routeNames;
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -650,10 +849,7 @@ class _AddChildFormState extends State<AddChildForm> {
                     color: const Color(0xFF6B9B5B).withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Color(0xFF6B9B5B),
-                  ),
+                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
                 ),
                 title: Text(
                   'Take Photo',
@@ -664,7 +860,8 @@ class _AddChildFormState extends State<AddChildForm> {
                 onTap: () async {
                   Navigator.pop(context);
                   // Request camera permission first
-                  final hasPermission = await PermissionHelper.requestCameraPermission(context);
+                  final hasPermission =
+                      await PermissionHelper.requestCameraPermission(context);
                   if (hasPermission && context.mounted) {
                     _pickImage(ImageSource.camera);
                   }
@@ -692,7 +889,10 @@ class _AddChildFormState extends State<AddChildForm> {
                 onTap: () async {
                   Navigator.pop(context);
                   // Request photo library permission first
-                  final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(context);
+                  final hasPermission =
+                      await PermissionHelper.requestPhotoLibraryPermission(
+                        context,
+                      );
                   if (hasPermission && context.mounted) {
                     _pickImage(ImageSource.gallery);
                   }
@@ -742,10 +942,7 @@ class _AddChildFormState extends State<AddChildForm> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: Icon(
-                        Icons.close,
-                        color: provider.textMutedColor,
-                      ),
+                      icon: Icon(Icons.close, color: provider.textMutedColor),
                     ),
                   ],
                 ),
@@ -777,7 +974,9 @@ class _AddChildFormState extends State<AddChildForm> {
                             ),
                             image: _selectedImage != null
                                 ? DecorationImage(
-                                    image: FileImage(File(_selectedImage!.path)),
+                                    image: FileImage(
+                                      File(_selectedImage!.path),
+                                    ),
                                     fit: BoxFit.cover,
                                   )
                                 : null,
@@ -818,7 +1017,9 @@ class _AddChildFormState extends State<AddChildForm> {
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    _selectedImage != null ? 'Change Photo' : 'Add Photo (Optional)',
+                    _selectedImage != null
+                        ? 'Change Photo'
+                        : 'Add Photo (Optional)',
                     style: TextStyle(
                       fontSize: 13,
                       color: provider.textMutedColor,
@@ -846,78 +1047,23 @@ class _AddChildFormState extends State<AddChildForm> {
                 ),
                 const SizedBox(height: 16),
 
-                // Class Field
+                // Class Field (Optional)
                 _buildTextField(
                   controller: _classController,
-                  label: 'Class/Grade',
+                  label: 'Class/Grade (Optional)',
                   hint: 'e.g. Class 4 West',
                   icon: Icons.school,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter class or grade';
-                    }
-                    return null;
-                  },
                   isDarkMode: isDarkMode,
                 ),
                 const SizedBox(height: 16),
 
-                // School Field
-                _buildTextField(
-                  controller: _schoolController,
-                  label: 'School (Optional)',
-                  hint: 'e.g. Ozone Valley Day School',
-                  icon: Icons.account_balance,
-                  isDarkMode: isDarkMode,
-                ),
+                // School Dropdown (Required)
+                _buildSchoolDropdown(provider, isDarkMode),
                 const SizedBox(height: 16),
 
-                // Pickup Location Field
-                _buildTextField(
-                  controller: _pickupController,
-                  label: 'Pickup Location (Optional)',
-                  hint: 'e.g. Home Address',
-                  icon: Icons.location_on,
-                  isDarkMode: isDarkMode,
-                ),
-                const SizedBox(height: 16),
-
-                // Emergency Contact Section
-                Text(
-                  'Emergency Contact (Optional)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: provider.textColor,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildTextField(
-                  controller: _emergencyContactController,
-                  label: 'Contact Name',
-                  hint: 'e.g. Jane Doe',
-                  icon: Icons.contact_phone,
-                  isDarkMode: isDarkMode,
-                ),
-                const SizedBox(height: 8),
-                _buildTextField(
-                  controller: _emergencyPhoneController,
-                  label: 'Contact Phone',
-                  hint: 'e.g. +254 712 345 678',
-                  icon: Icons.phone,
-                  keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    if (value != null && value.isNotEmpty) {
-                      // Simple phone validation
-                      final phoneRegex = RegExp(r'^[+\d\s\-\(\)]{10,}$');
-                      if (!phoneRegex.hasMatch(value)) {
-                        return 'Please enter a valid phone number';
-                      }
-                    }
-                    return null;
-                  },
-                  isDarkMode: isDarkMode,
-                ),
+                // Route/Pickup Location Dropdown (Required)
+                _buildRouteDropdown(provider, isDarkMode),
+                const SizedBox(height: 24),
                 const SizedBox(height: 24),
 
                 // Submit Button
@@ -932,8 +1078,9 @@ class _AddChildFormState extends State<AddChildForm> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      disabledBackgroundColor:
-                          const Color(0xFF6B9B5B).withValues(alpha: 128),
+                      disabledBackgroundColor: const Color(
+                        0xFF6B9B5B,
+                      ).withValues(alpha: 128),
                     ),
                     child: _isLoading
                         ? const SizedBox(
@@ -941,8 +1088,9 @@ class _AddChildFormState extends State<AddChildForm> {
                             width: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Text(
@@ -960,6 +1108,175 @@ class _AddChildFormState extends State<AddChildForm> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Build School Dropdown
+  Widget _buildSchoolDropdown(AppProvider provider, bool isDarkMode) {
+    final schools = _getSchoolsFromRoutes(provider.routes);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'School *',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: provider.textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedSchool,
+            isExpanded: true,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(
+                Icons.account_balance,
+                color: Color(0xFF6B9B5B),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+            hint: Text(
+              'Select School',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+              ),
+            ),
+            dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+            style: TextStyle(
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              fontSize: 15,
+            ),
+            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6B9B5B)),
+            items: schools.map((school) {
+              return DropdownMenuItem<String>(
+                value: school,
+                child: Text(school, overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedSchool = value;
+                // Reset route when school changes (optional - routes might be school-specific)
+                _selectedRoute = null;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select a school';
+              }
+              return null;
+            },
+          ),
+        ),
+        if (schools.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'No schools available. Please check your routes.',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build Route/Pickup Location Dropdown
+  Widget _buildRouteDropdown(AppProvider provider, bool isDarkMode) {
+    final routes = _getRouteNames(provider.routes);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Route (Pickup Location) *',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: provider.textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedRoute,
+            isExpanded: true,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.route, color: Color(0xFF6B9B5B)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+            hint: Text(
+              'Select Route',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+              ),
+            ),
+            dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+            style: TextStyle(
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              fontSize: 15,
+            ),
+            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6B9B5B)),
+            items: routes.map((route) {
+              return DropdownMenuItem<String>(
+                value: route,
+                child: Text(route, overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedRoute = value;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please select a route';
+              }
+              return null;
+            },
+          ),
+        ),
+        if (routes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'No routes available.',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+            ),
+          ),
+      ],
     );
   }
 
@@ -988,9 +1305,13 @@ class _AddChildFormState extends State<AddChildForm> {
           borderSide: BorderSide.none,
         ),
         filled: true,
-        fillColor: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        fillColor: isDarkMode
+            ? const Color(0xFF2C2C2C)
+            : const Color(0xFFF5F5F5),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
     );
   }
@@ -1005,7 +1326,7 @@ class _AddChildFormState extends State<AddChildForm> {
     final provider = context.read<AppProvider>();
 
     String? photoUrl;
-    
+
     // Upload image if selected
     if (_selectedImage != null) {
       // Show loading for image upload
@@ -1018,27 +1339,27 @@ class _AddChildFormState extends State<AddChildForm> {
           ),
         );
       }
-      
+
       // For new students, we need to create the student first, then upload the image
       // This is a simplified approach - in production, you might want to handle this differently
     }
 
+    // Get logged-in guardian's phone number
+    final authProvider = context.read<AuthProvider>();
+    final guardianPhone = authProvider.userPhone;
+
+    // Create student using guardian API
+    // Required fields: fullname, schoolname, route (pickup location)
     final student = await provider.addChildAPI(
-      name: _nameController.text.trim(),
-      className: _classController.text.trim(),
-      schoolId: _schoolController.text.trim().isEmpty
+      fullname: _nameController.text.trim(),
+      schoolname: _selectedSchool,
+      classname: _classController.text.trim().isEmpty
           ? null
-          : _schoolController.text.trim(),
+          : _classController.text.trim(),
+      route: _selectedRoute,
+      pickupLocation: _selectedRoute, // Using route as pickup location
       photo: photoUrl,
-      pickupLocation: _pickupController.text.trim().isEmpty
-          ? null
-          : _pickupController.text.trim(),
-      emergencyContact: _emergencyContactController.text.trim().isEmpty
-          ? null
-          : _emergencyContactController.text.trim(),
-      emergencyPhone: _emergencyPhoneController.text.trim().isEmpty
-          ? null
-          : _emergencyPhoneController.text.trim(),
+      guardianPhoneNumber: guardianPhone,
     );
 
     // Upload image after student is created (if image was selected)
@@ -1047,7 +1368,7 @@ class _AddChildFormState extends State<AddChildForm> {
         studentId: student.id,
         imagePath: _selectedImage!.path,
       );
-      
+
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
       }

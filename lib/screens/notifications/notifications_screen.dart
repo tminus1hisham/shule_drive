@@ -217,12 +217,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       showBottomNav: true,
       bottomNavIndex: 2,
       onBottomNavTap: (index) {
-        if (index == 0) {
-          Navigator.pushNamed(context, '/landing');
-        } else if (index == 1) {
-          Navigator.pushNamed(context, '/chat');
-        } else if (index == 3) {
-          Navigator.pushNamed(context, '/profile');
+        switch (index) {
+          case 0:
+            Navigator.pushReplacementNamed(context, '/dashboard');
+            break;
+          case 1:
+            Navigator.pushNamed(context, '/chat');
+            break;
+          case 2:
+            // Already on notifications/alerts
+            break;
+          case 3:
+            Navigator.pushNamed(context, '/profile');
+            break;
+          case 4:
+            Navigator.pushNamed(context, '/start-trip');
+            break;
         }
       },
       actions: [

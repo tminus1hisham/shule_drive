@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../main.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
@@ -8,7 +10,7 @@ import '../../widgets/main_scaffold.dart';
 import '../../widgets/bus_illustration.dart';
 
 /// Unified Dashboard - Single home screen that adapts based on role and trip status
-/// 
+///
 /// Driver View:
 /// - No active trip: Shows "Start Trip" CTA
 /// - Active trip: Shows live trip progress, students list, end trip button
@@ -23,11 +25,66 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with RouteAware, WidgetsBindingObserver {
+  // Timer for periodic refresh
+  Timer? _refreshTimer;
+
+  // Refresh interval (30 seconds)
+  static const Duration _refreshInterval = Duration(seconds: 30);
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _startPeriodicRefresh();
+    // Subscribe to app lifecycle
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Subscribe to route observer
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void dispose() {
+    // Stop timer and unsubscribe
+    _refreshTimer?.cancel();
+    routeObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh when app comes to foreground
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+      _startPeriodicRefresh();
+    } else if (state == AppLifecycleState.paused) {
+      // Stop timer when app is in background
+      _refreshTimer?.cancel();
+    }
+  }
+
+  /// Called when the route is popped and this screen becomes visible again
+  @override
+  void didPopNext() {
+    // Reload data when coming back from another screen
+    _refresh();
+  }
+
+  /// Start periodic refresh timer
+  void _startPeriodicRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(_refreshInterval, (_) {
+      if (mounted) {
+        _refresh();
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -61,32 +118,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: SafeArea(
           child: CustomScrollView(
             slivers: [
+              SliverToBoxAdapter(child: _buildHeader(userData, isDarkMode)),
               SliverToBoxAdapter(
-                child: _buildHeader(userData, isDarkMode),
+                child: _buildGreeting(
+                  userData,
+                  isDriver,
+                  hasActiveTrip,
+                  isDarkMode,
+                ),
               ),
-              SliverToBoxAdapter(
-                child: _buildGreeting(userData, isDriver, hasActiveTrip, isDarkMode),
-              ),
-              
+
               // Main content based on role and trip status
               if (isDriver)
                 SliverToBoxAdapter(
                   child: hasActiveTrip
-                    ? _buildDriverActiveTrip(context, tripProvider, isDarkMode)
-                    : _buildDriverStartTrip(context, isDarkMode),
+                      ? _buildDriverActiveTrip(
+                          context,
+                          tripProvider,
+                          isDarkMode,
+                        )
+                      : _buildDriverStartTrip(context, isDarkMode),
                 )
               else if (isGuardian)
                 SliverToBoxAdapter(
                   child: hasActiveTrip
-                    ? _buildGuardianActiveTrip(context, tripProvider, isDarkMode)
-                    : _buildGuardianIdle(context, isDarkMode),
+                      ? _buildGuardianActiveTrip(
+                          context,
+                          tripProvider,
+                          isDarkMode,
+                        )
+                      : _buildGuardianIdle(context, isDarkMode),
                 ),
-              
+
               // Quick actions section
               SliverToBoxAdapter(
-                child: _buildQuickActions(context, isDriver, hasActiveTrip, isDarkMode),
+                child: _buildQuickActions(
+                  context,
+                  isDriver,
+                  hasActiveTrip,
+                  isDarkMode,
+                ),
               ),
-              
+
               const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
             ],
           ),
@@ -98,7 +171,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _handleNavigation(int index, bool isDriver) {
     switch (index) {
       case 0:
-        // Already on home
+        // Already on home - refresh data instead
+        _refresh();
         break;
       case 1:
         Navigator.pushNamed(context, '/chat');
@@ -154,10 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   const Text(
                     'ShuleDrive',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     'Safe School Transport',
@@ -184,21 +255,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(30),
-                      blurRadius: 8,
-                    ),
+                    BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 8),
                   ],
                 ),
                 child: userData['avatar'] != null
-                  ? ClipOval(
-                      child: Image.network(
-                        userData['avatar'],
-                        fit: BoxFit.cover,
-                        errorBuilder: (ctx, err, stack) => _buildAvatarFallback(userData),
-                      ),
-                    )
-                  : _buildAvatarFallback(userData),
+                    ? ClipOval(
+                        child: Image.network(
+                          userData['avatar'],
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, stack) =>
+                              _buildAvatarFallback(userData),
+                        ),
+                      )
+                    : _buildAvatarFallback(userData),
               ),
             ),
           ),
@@ -221,7 +290,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildGreeting(Map<String, dynamic> userData, bool isDriver, bool hasActiveTrip, bool isDarkMode) {
+  Widget _buildGreeting(
+    Map<String, dynamic> userData,
+    bool isDriver,
+    bool hasActiveTrip,
+    bool isDarkMode,
+  ) {
     final hour = DateTime.now().hour;
     String greeting;
     if (hour < 12) {
@@ -234,13 +308,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     String subtitle;
     if (isDriver) {
-      subtitle = hasActiveTrip 
-        ? 'Trip in progress. Drive safe!'
-        : 'Ready to start your next trip?';
+      subtitle = hasActiveTrip
+          ? 'Trip in progress. Drive safe!'
+          : 'Ready to start your next trip?';
     } else {
       subtitle = hasActiveTrip
-        ? 'Your child\'s bus is on the way'
-        : 'Track your child\'s journey safely';
+          ? 'Your child\'s bus is on the way'
+          : 'Track your child\'s journey safely';
     }
 
     return Padding(
@@ -347,7 +421,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDriverActiveTrip(BuildContext context, TripProvider tripProvider, bool isDarkMode) {
+  Widget _buildDriverActiveTrip(
+    BuildContext context,
+    TripProvider tripProvider,
+    bool isDarkMode,
+  ) {
     final trip = tripProvider.activeTrip!;
     final pickedCount = trip.students.where((s) => s.status == 'picked').length;
     final totalCount = trip.students.length;
@@ -410,7 +488,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green.withAlpha(30),
                         borderRadius: BorderRadius.circular(20),
@@ -434,7 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Progress bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
@@ -453,7 +534,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       '$pickedCount of $totalCount students picked up',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+                        color: isDarkMode
+                            ? Colors.white70
+                            : Colors.grey.shade700,
                       ),
                     ),
                     Text(
@@ -466,13 +549,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Action buttons
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () => Navigator.pushNamed(context, '/students-list'),
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/students-list'),
                         icon: const Icon(Icons.people_outline),
                         label: const Text('View Students'),
                         style: ElevatedButton.styleFrom(
@@ -489,7 +573,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _showEndTripDialog(context),
-                        icon: const Icon(Icons.stop_circle_outlined, color: Colors.red),
+                        icon: const Icon(
+                          Icons.stop_circle_outlined,
+                          color: Colors.red,
+                        ),
                         label: const Text(
                           'End Trip',
                           style: TextStyle(color: Colors.red),
@@ -555,7 +642,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/manage-children'),
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/manage-children'),
                 icon: const Icon(Icons.child_care),
                 label: const Text('Manage Children'),
                 style: OutlinedButton.styleFrom(
@@ -573,14 +661,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildGuardianActiveTrip(BuildContext context, TripProvider tripProvider, bool isDarkMode) {
+  Widget _buildGuardianActiveTrip(
+    BuildContext context,
+    TripProvider tripProvider,
+    bool isDarkMode,
+  ) {
     final trip = tripProvider.activeTrip!;
-    
+
     // Get the guardian's children from the trip
-    final guardianChildren = trip.students.where((s) => 
-      // In real app, filter by guardian's child IDs
-      true
-    ).toList();
+    final guardianChildren = trip.students
+        .where(
+          (s) =>
+              // In real app, filter by guardian's child IDs
+              true,
+        )
+        .toList();
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -640,7 +735,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withAlpha(30),
                         borderRadius: BorderRadius.circular(20),
@@ -696,7 +794,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.pushNamed(
-                      context, 
+                      context,
                       '/osm-tracking',
                       arguments: {
                         'tripId': trip.id,
@@ -719,9 +817,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Child status section
           Align(
             alignment: Alignment.centerLeft,
@@ -735,18 +833,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          
+
           // Child status cards
-          ...guardianChildren.map((student) => _buildChildStatusCard(
-            student,
-            isDarkMode,
-          )),
-          
+          ...guardianChildren.map(
+            (student) => _buildChildStatusCard(student, isDarkMode),
+          ),
+
           if (guardianChildren.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -791,10 +890,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withAlpha(200),
-            fontSize: 11,
-          ),
+          style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 11),
         ),
       ],
     );
@@ -803,11 +899,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildChildStatusCard(StudentPickup student, bool isDarkMode) {
     final isPicked = student.status == 'picked';
     final isDropped = student.status == 'dropped';
-    
+
     Color statusColor;
     String statusText;
     IconData statusIcon;
-    
+
     if (isPicked) {
       statusColor = Colors.green;
       statusText = 'Picked Up';
@@ -828,10 +924,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: statusColor.withAlpha(50),
-          width: 1,
-        ),
+        border: Border.all(color: statusColor.withAlpha(50), width: 1),
       ),
       child: Row(
         children: [
@@ -883,7 +976,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ==================== QUICK ACTIONS ====================
 
-  Widget _buildQuickActions(BuildContext context, bool isDriver, bool hasActiveTrip, bool isDarkMode) {
+  Widget _buildQuickActions(
+    BuildContext context,
+    bool isDriver,
+    bool hasActiveTrip,
+    bool isDarkMode,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -926,7 +1024,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     icon: Icons.child_care,
                     label: 'My Children',
                     color: const Color(0xFFE91E63),
-                    onTap: () => Navigator.pushNamed(context, '/manage-children'),
+                    onTap: () =>
+                        Navigator.pushNamed(context, '/manage-children'),
                     isDarkMode: isDarkMode,
                   ),
                 ),
@@ -1032,9 +1131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // TODO: Implement end trip logic
               _endTrip();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('End Trip'),
           ),
         ],

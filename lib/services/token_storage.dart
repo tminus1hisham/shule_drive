@@ -12,7 +12,7 @@ class TokenStorage {
 
   // Mobile secure storage
   final SecureTokenStorage _secureStorage = SecureTokenStorage();
-  
+
   // Web shared preferences
   SharedPreferences? _prefs;
   final bool _isWeb = kIsWeb;
@@ -157,6 +157,21 @@ class TokenStorage {
     } else {
       return await _secureStorage.getUserAvatar();
     }
+  }
+
+  /// Get all user data as a map (for fast cached access)
+  Future<Map<String, String>?> getUserData() async {
+    final userId = await getUserId();
+    if (userId == null) return null;
+
+    return {
+      'userId': userId,
+      'name': await getUserName() ?? '',
+      'phone': await getUserPhone() ?? '',
+      'role': await getUserRole() ?? 'unknown',
+      'email': await getUserEmail() ?? '',
+      'avatar': await getUserAvatar() ?? '',
+    };
   }
 
   /// Check if user is logged in (has access token)

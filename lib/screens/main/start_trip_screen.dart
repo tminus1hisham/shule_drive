@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -18,10 +19,10 @@ class _StartTripScreenState extends State<StartTripScreen>
   String? _selectedVehicle;
   String? _selectedRoute;
   String? _selectedAttendant;
-  
+
   bool _isLoading = false;
   int _currentStep = 0;
-  
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -33,22 +34,22 @@ class _StartTripScreenState extends State<StartTripScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
-    
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+
     _animationController.forward();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -62,29 +63,50 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    
+
     final provider = context.read<AppProvider>();
-    
-    await Future.wait([
-      provider.fetchRoutesByUser(),
-      provider.fetchBusesByUser(),
-    ]);
-    
+
+    if (kDebugMode) {
+      print('🚀 StartTripScreen: Loading data from API...');
+    }
+
+    try {
+      // Fetch all routes and buses from API
+      await Future.wait([
+        provider.fetchRoutes(), // GET /api/routes/get/all
+        provider.fetchBuses(), // GET /api/buses/get/all
+      ]);
+
+      if (kDebugMode) {
+        print('✅ StartTripScreen: Data loaded successfully');
+        print('📍 Routes: ${provider.routes.length}');
+        print('🚌 Buses: ${provider.buses.length}');
+        for (final route in provider.routes) {
+          print('  - Route: ${route.name} (ID: ${route.id})');
+        }
+        for (final bus in provider.buses) {
+          print('  - Bus: ${bus.registrationNumber} (ID: ${bus.id})');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ StartTripScreen: Error loading data: $e');
+      }
+    }
+
     if (mounted) {
       setState(() => _isLoading = false);
     }
   }
 
-  bool get _canStartTrip => 
-      _selectedRoute != null && 
-      _selectedVehicle != null;
+  bool get _canStartTrip => _selectedRoute != null && _selectedVehicle != null;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
-    
+
     return MainScaffold(
       title: 'New Trip',
       showBackButton: true,
@@ -104,23 +126,23 @@ class _StartTripScreenState extends State<StartTripScreen>
             children: [
               // Header Section with Animation
               _buildHeader(isDarkMode, authProvider),
-              
+
               // Progress Indicator
               _buildProgressIndicator(isDarkMode),
-              
+
               // Main Content
               Expanded(
                 child: FadeTransition(
                   opacity: _fadeAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: _isLoading 
+                    child: _isLoading
                         ? _buildLoadingState(isDarkMode)
                         : _buildSelectionContent(provider, isDarkMode),
                   ),
                 ),
               ),
-              
+
               // Bottom Action Button
               _buildBottomButton(isDarkMode),
             ],
@@ -206,11 +228,12 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   Widget _buildStepDot(int step, String label, bool isDarkMode) {
     final isActive = step <= _currentStep;
-    final isCompleted = step < _currentStep || 
+    final isCompleted =
+        step < _currentStep ||
         (step == 0 && _selectedRoute != null) ||
         (step == 1 && _selectedVehicle != null) ||
         (step == 2 && _selectedAttendant != null);
-    
+
     return Expanded(
       child: Column(
         children: [
@@ -227,15 +250,13 @@ class _StartTripScreenState extends State<StartTripScreen>
               color: isCompleted
                   ? null
                   : isActive
-                      ? const Color(0xFF6B9B5B).withAlpha(30)
-                      : isDarkMode
-                          ? const Color(0xFF2C2C2C)
-                          : Colors.grey.shade200,
+                  ? const Color(0xFF6B9B5B).withAlpha(30)
+                  : isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : Colors.grey.shade200,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isActive
-                    ? const Color(0xFF6B9B5B)
-                    : Colors.transparent,
+                color: isActive ? const Color(0xFF6B9B5B) : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -249,8 +270,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                         color: isActive
                             ? const Color(0xFF6B9B5B)
                             : isDarkMode
-                                ? Colors.white38
-                                : Colors.grey,
+                            ? Colors.white38
+                            : Colors.grey,
                       ),
                     ),
             ),
@@ -264,8 +285,8 @@ class _StartTripScreenState extends State<StartTripScreen>
               color: isActive
                   ? const Color(0xFF6B9B5B)
                   : isDarkMode
-                      ? Colors.white38
-                      : Colors.grey,
+                  ? Colors.white38
+                  : Colors.grey,
             ),
           ),
         ],
@@ -289,8 +310,8 @@ class _StartTripScreenState extends State<StartTripScreen>
           color: isCompleted
               ? null
               : isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : Colors.grey.shade200,
+              ? const Color(0xFF2C2C2C)
+              : Colors.grey.shade200,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -321,7 +342,7 @@ class _StartTripScreenState extends State<StartTripScreen>
   Widget _buildSelectionContent(AppProvider provider, bool isDarkMode) {
     final routes = provider.routes;
     final buses = provider.buses;
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -330,54 +351,84 @@ class _StartTripScreenState extends State<StartTripScreen>
           // Route Selection
           _buildSectionTitle('Select Route', isDarkMode),
           const SizedBox(height: 12),
-          ...routes.map((route) => _buildSelectionCard(
-            title: route.name,
-            subtitle: '${route.stopCount} stops',
-            icon: Icons.route,
-            isSelected: _selectedRoute == route.name,
-            onTap: () {
-              setState(() {
-                _selectedRoute = route.name;
-                _currentStep = 1;
-              });
-              HapticFeedback.lightImpact();
-            },
-            isDarkMode: isDarkMode,
-          )),
-          
+          ...routes.map((route) {
+            final title = route.schoolName ?? 'School Route';
+            final subtitle = route.name.isNotEmpty
+                ? route.name
+                : 'Route ${route.id}';
+            
+
+            if (kDebugMode) {
+              print(
+                '🛣️ Route Card: id=${route.id}, title=$title, school=$subtitle',
+              );
+            }
+
+            return _buildSelectionCard(
+              title: title,
+              subtitle: subtitle,
+              icon: Icons.route,
+              isSelected: _selectedRoute == route.id, // Use ID for selection
+              onTap: () {
+                setState(() {
+                  _selectedRoute = route.id; // Store ID instead of name
+                  _currentStep = 1;
+                });
+                HapticFeedback.lightImpact();
+              },
+              isDarkMode: isDarkMode,
+            );
+          }),
+
           if (routes.isEmpty)
             _buildEmptyState('No routes available', isDarkMode),
-          
+
           const SizedBox(height: 28),
-          
+
           // Vehicle Selection
           _buildSectionTitle('Select Vehicle', isDarkMode),
           const SizedBox(height: 12),
-          ...buses.map((bus) => _buildSelectionCard(
-            title: bus.registrationNumber,
-            subtitle: bus.model ?? 'School Bus',
-            icon: Icons.directions_bus_filled,
-            isSelected: _selectedVehicle == bus.registrationNumber,
-            onTap: () {
-              setState(() {
-                _selectedVehicle = bus.registrationNumber;
-                _currentStep = 2;
-              });
-              HapticFeedback.lightImpact();
-            },
-            isDarkMode: isDarkMode,
-          )),
-          
+          ...buses.map((bus) {
+            // Try multiple possible field names for the numberplate
+            final numberplate = bus.registrationNumber.isNotEmpty
+                ? bus.registrationNumber
+                : 'Vehicle ${bus.id}';
+            final subtitle = bus.capacity != null && bus.capacity!.isNotEmpty
+                ? '${bus.capacity} seats'
+                : 'School Bus';
+
+            if (kDebugMode) {
+              print(
+                '🚌 Bus Card: id=${bus.id}, numberplate=$numberplate, capacity=${bus.capacity}',
+              );
+            }
+
+            return _buildSelectionCard(
+              title: numberplate,
+              subtitle: subtitle,
+              icon: Icons.directions_bus_filled,
+              isSelected: _selectedVehicle == bus.id, // Use ID for selection
+              onTap: () {
+                setState(() {
+                  _selectedVehicle = bus.id; // Store ID instead of numberplate
+                  _currentStep = 2;
+                });
+                HapticFeedback.lightImpact();
+              },
+              isDarkMode: isDarkMode,
+            );
+          }),
+
           if (buses.isEmpty)
             _buildEmptyState('No vehicles available', isDarkMode),
-          
+
           const SizedBox(height: 28),
-          
+
           // Attendant Selection
           _buildSectionTitle('Select Attendant (Optional)', isDarkMode),
           const SizedBox(height: 12),
           _buildAttendantChips(isDarkMode),
-          
+
           const SizedBox(height: 100),
         ],
       ),
@@ -435,15 +486,15 @@ class _StartTripScreenState extends State<StartTripScreen>
               color: isSelected
                   ? null
                   : isDarkMode
-                      ? const Color(0xFF1E1E1E)
-                      : Colors.white,
+                  ? const Color(0xFF1E1E1E)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isSelected
                     ? Colors.transparent
                     : isDarkMode
-                        ? Colors.white12
-                        : Colors.grey.shade200,
+                    ? Colors.white12
+                    : Colors.grey.shade200,
                 width: 1,
               ),
               boxShadow: isSelected
@@ -474,9 +525,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                   ),
                   child: Icon(
                     icon,
-                    color: isSelected
-                        ? Colors.white
-                        : const Color(0xFF6B9B5B),
+                    color: isSelected ? Colors.white : const Color(0xFF6B9B5B),
                     size: 24,
                   ),
                 ),
@@ -493,8 +542,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                           color: isSelected
                               ? Colors.white
                               : isDarkMode
-                                  ? Colors.white
-                                  : const Color(0xFF1A1A1A),
+                              ? Colors.white
+                              : const Color(0xFF1A1A1A),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -505,8 +554,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                           color: isSelected
                               ? Colors.white.withAlpha(230)
                               : isDarkMode
-                                  ? Colors.white60
-                                  : Colors.grey,
+                              ? Colors.white60
+                              : Colors.grey,
                         ),
                       ),
                     ],
@@ -517,16 +566,14 @@ class _StartTripScreenState extends State<StartTripScreen>
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.transparent,
+                    color: isSelected ? Colors.white : Colors.transparent,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: isSelected
                           ? Colors.white
                           : isDarkMode
-                              ? Colors.white24
-                              : Colors.grey.shade300,
+                          ? Colors.white24
+                          : Colors.grey.shade300,
                       width: 2,
                     ),
                   ),
@@ -548,14 +595,15 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   Widget _buildAttendantChips(bool isDarkMode) {
     final attendants = ['James Kadere', 'John Doe', 'Jane Smith', 'None'];
-    
+
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: attendants.map((attendant) {
-        final isSelected = _selectedAttendant == attendant ||
+        final isSelected =
+            _selectedAttendant == attendant ||
             (attendant == 'None' && _selectedAttendant == null);
-        
+
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           child: Material(
@@ -582,26 +630,22 @@ class _StartTripScreenState extends State<StartTripScreen>
                   color: isSelected
                       ? null
                       : isDarkMode
-                          ? const Color(0xFF1E1E1E)
-                          : Colors.grey.shade100,
+                      ? const Color(0xFF1E1E1E)
+                      : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(25),
                   border: Border.all(
                     color: isSelected
                         ? Colors.transparent
                         : isDarkMode
-                            ? Colors.white12
-                            : Colors.grey.shade300,
+                        ? Colors.white12
+                        : Colors.grey.shade300,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (isSelected)
-                      const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      const Icon(Icons.check, color: Colors.white, size: 16),
                     if (isSelected) const SizedBox(width: 8),
                     Text(
                       attendant,
@@ -613,8 +657,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                         color: isSelected
                             ? Colors.white
                             : isDarkMode
-                                ? Colors.white70
-                                : Colors.grey.shade700,
+                            ? Colors.white70
+                            : Colors.grey.shade700,
                       ),
                     ),
                   ],
@@ -631,14 +675,10 @@ class _StartTripScreenState extends State<StartTripScreen>
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? const Color(0xFF1E1E1E)
-            : Colors.grey.shade50,
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode
-              ? Colors.white12
-              : Colors.grey.shade200,
+          color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
         ),
       ),
       child: Row(
@@ -672,9 +712,7 @@ class _StartTripScreenState extends State<StartTripScreen>
             isDarkMode
                 ? const Color(0xFF0D0D0D).withAlpha(0)
                 : Colors.white.withAlpha(0),
-            isDarkMode
-                ? const Color(0xFF0D0D0D)
-                : Colors.white,
+            isDarkMode ? const Color(0xFF0D0D0D) : Colors.white,
           ],
         ),
       ),

@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
@@ -17,6 +20,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
   String _completePhoneNumber = '';
+  File? _selectedImage;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -36,6 +41,137 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+        // Automatically upload after selection
+        await _uploadProfilePicture();
+      }
+    } catch (e) {
+      _showError('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _uploadProfilePicture() async {
+    if (_selectedImage == null) return;
+
+    final authProvider = context.read<AuthProvider>();
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+      ),
+    );
+
+    final imageUrl = await authProvider.updateProfilePicture(
+      _selectedImage!.path,
+    );
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+
+    if (imageUrl != null) {
+      _showSuccess('Profile picture updated successfully');
+      setState(() {
+        _selectedImage = null; // Clear selected image
+      });
+    } else {
+      _showError(
+        authProvider.errorMessage ?? 'Failed to upload profile picture',
+      );
+    }
+  }
+
+  void _showImagePickerOptions() {
+    final provider = context.read<AppProvider>();
+    final isDarkMode = provider.isDarkMode;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Update Profile Photo',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
+                ),
+                title: Text(
+                  'Take Photo',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2196F3).withAlpha(30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFF2196F3),
+                  ),
+                ),
+                title: Text(
+                  'Choose from Gallery',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveProfile() async {
     if (_nameController.text.trim().isEmpty) {
       _showError('Please enter your name');
@@ -43,12 +179,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
 
     final authProvider = context.read<AuthProvider>();
-    
+
     final success = await authProvider.updateUserProfile(
       name: _nameController.text.trim(),
       phone: _completePhoneNumber.isNotEmpty ? _completePhoneNumber : null,
-      email: _emailController.text.trim().isNotEmpty 
-          ? _emailController.text.trim() 
+      email: _emailController.text.trim().isNotEmpty
+          ? _emailController.text.trim()
           : null,
     );
 
@@ -120,32 +256,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               child: Column(
                 children: [
-                  // Avatar
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundImage: NetworkImage(userData['avatar']),
-                        backgroundColor: Colors.grey.shade200,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: provider.cardColor, width: 2),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 16,
+                  // Avatar with tap to change
+                  GestureDetector(
+                    onTap: _showImagePickerOptions,
+                    child: Stack(
+                      children: [
+                        _buildAvatar(userData['avatar']),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6B9B5B),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: provider.cardColor,
+                                width: 2,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -161,6 +299,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       color: provider.textMutedColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _showImagePickerOptions,
+                    icon: const Icon(Icons.camera_alt, size: 16),
+                    label: const Text('Change Photo'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF6B9B5B),
                     ),
                   ),
                 ],
@@ -212,7 +359,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   elevation: 0,
-                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                  disabledBackgroundColor: const Color(
+                    0xFF6B9B5B,
+                  ).withValues(alpha: 0.5),
                 ),
                 child: authProvider.isLoading
                     ? const SizedBox(
@@ -220,7 +369,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(
@@ -235,6 +386,42 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Build avatar widget with proper image handling
+  Widget _buildAvatar(String? avatarUrl) {
+    final provider = context.read<AppProvider>();
+
+    // If we have a selected image file, show it
+    if (_selectedImage != null) {
+      return CircleAvatar(
+        radius: 50,
+        backgroundImage: FileImage(_selectedImage!),
+        backgroundColor: Colors.grey.shade200,
+      );
+    }
+
+    // If we have a valid network URL, show it
+    if (avatarUrl != null &&
+        avatarUrl.isNotEmpty &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
+      return CircleAvatar(
+        radius: 50,
+        backgroundImage: NetworkImage(avatarUrl),
+        backgroundColor: Colors.grey.shade200,
+        onBackgroundImageError: (e, s) {
+          // Fallback to placeholder on error
+          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
+        },
+      );
+    }
+
+    // Default placeholder
+    return CircleAvatar(
+      radius: 50,
+      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+      child: const Icon(Icons.person, size: 50, color: Color(0xFF6B9B5B)),
     );
   }
 
@@ -264,7 +451,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           decoration: InputDecoration(
             prefixIcon: Icon(icon, color: provider.textMutedColor),
             filled: true,
-            fillColor: provider.isDarkMode ? Colors.grey[800] : const Color(0xFFF5F5F5),
+            fillColor: provider.isDarkMode
+                ? Colors.grey[800]
+                : const Color(0xFFF5F5F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -303,7 +492,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: provider.isDarkMode ? Colors.grey[800] : const Color(0xFFF5F5F5),
+            fillColor: provider.isDarkMode
+                ? Colors.grey[800]
+                : const Color(0xFFF5F5F5),
           ),
           style: TextStyle(color: provider.textColor),
           dropdownTextStyle: TextStyle(color: provider.textColor),

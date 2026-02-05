@@ -13,10 +13,21 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Redirect to DashboardScreen immediately
+    // This screen is deprecated, use DashboardScreen instead
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacementNamed(context, '/dashboard');
+    });
+  }
+
   void _handleNavigation(int index) {
     switch (index) {
       case 0:
-        // Already on home (legacy screen)
+        // Navigate to Dashboard (consistent home)
+        Navigator.pushReplacementNamed(context, '/dashboard');
         break;
       case 1:
         Navigator.pushNamed(context, '/chat');
