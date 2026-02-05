@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../api/api.dart' as api;
 import '../services/mqtt_service.dart';
+import '../utils/notification_helper.dart';
 
 /// Trip States
 enum TripState {
@@ -150,6 +152,14 @@ class TripProvider extends ChangeNotifier {
         },
       );
       
+      // Show notification
+      await NotificationHelper.showTripStarted(
+        tripId: trip.id,
+        routeName: trip.routeName,
+        vehicleNumber: trip.vehicleNumber,
+        studentCount: trip.students.length,
+      );
+      
       notifyListeners();
       return trip;
     } on api.ApiException catch (e) {
@@ -188,6 +198,17 @@ class TripProvider extends ChangeNotifier {
         },
       );
       
+      // Show notification
+      final pickedCount = trip.pickedCount;
+      final totalStudents = trip.students.length;
+      await NotificationHelper.showTripCompleted(
+        tripId: tripId,
+        routeName: trip.routeName,
+        totalStudents: totalStudents,
+        pickedCount: pickedCount,
+        absentCount: trip.absentCount,
+      );
+      
       notifyListeners();
       return true;
     } on api.ApiException catch (e) {
@@ -209,6 +230,16 @@ class TripProvider extends ChangeNotifier {
     String? notes,
   }) async {
     try {
+      // Get student info before updating
+      String? studentName;
+      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
+      if (tripIndex != -1) {
+        final studentIndex = _trips[tripIndex].students.indexWhere((s) => s.id == studentId);
+        if (studentIndex != -1) {
+          studentName = _trips[tripIndex].students[studentIndex].name;
+        }
+      }
+      
       await _tripService.updateStudentStatus(
         tripId: tripId,
         studentId: studentId,
@@ -217,12 +248,27 @@ class TripProvider extends ChangeNotifier {
       );
       
       // Update local state
-      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
       if (tripIndex != -1) {
         final studentIndex = _trips[tripIndex].students.indexWhere((s) => s.id == studentId);
         if (studentIndex != -1) {
           // Update student status locally
           notifyListeners();
+        }
+      }
+      
+      // Show notification based on status
+      if (studentName != null) {
+        if (status == 'picked') {
+          await NotificationHelper.showChildPickedUp(
+            studentName: studentName,
+            tripId: tripId,
+          );
+        } else if (status == 'absent') {
+          await NotificationHelper.showChildAbsent(
+            studentName: studentName,
+            tripId: tripId,
+            reason: notes,
+          );
         }
       }
       

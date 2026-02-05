@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'providers/app_provider.dart';
@@ -7,6 +8,7 @@ import 'providers/auth_provider.dart';
 import 'providers/trip_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/tracking_provider.dart';
+import 'providers/connectivity_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
@@ -38,17 +40,35 @@ import 'screens/tracking/live_tracking_screen.dart';
 import 'screens/tracking/osm_tracking_screen.dart';
 
 import 'services/token_storage.dart';
+import 'services/local_database_service.dart';
+import 'services/notification_service.dart';
+import 'services/offline_sync_manager.dart';
 import 'widgets/route_guard.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase (optional - uncomment if using Firebase)
+  // await _initializeFirebase();
   
   // Initialize token storage (for web: shared_preferences, for mobile: secure_storage)
   await TokenStorage().init();
   
   // Initialize API client (loads saved tokens)
   await ApiClient().init();
+  
+  // Initialize local database (SQLite)
+  await LocalDatabaseService().database;
+  
+  // Initialize notification service (choose your backend)
+  await NotificationService().initialize(
+    preferredBackend: NotificationBackend.localOnly, // Change as needed
+  );
+  
+  // Initialize offline sync manager
+  await OfflineSyncManager().initialize();
   
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -58,6 +78,8 @@ void main() async {
   );
   runApp(const ShuleDriveApp());
 }
+
+
 
 class ShuleDriveApp extends StatelessWidget {
   const ShuleDriveApp({super.key});
@@ -71,6 +93,7 @@ class ShuleDriveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TripProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => TrackingProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
@@ -448,6 +471,59 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _initializeAuth() async {
     final authProvider = context.read<AuthProvider>();
     await authProvider.initialize();
+    
+    // Initialize connectivity monitoring after auth is ready
+    if (authProvider.isAuthenticated) {
+      await _initializeServices(authProvider);
+    }
+  }
+  
+  Future<void> _initializeServices(AuthProvider authProvider) async {
+    // Initialize connectivity provider
+    final connectivityProvider = context.read<ConnectivityProvider>();
+    await connectivityProvider.initialize();
+    
+    // Show welcome notification
+    await _showWelcomeNotification(authProvider);
+    
+    // Register FCM token with backend
+    final notificationService = NotificationService();
+    if (authProvider.userId != null) {
+      await notificationService.sendTokenToBackend(authProvider.userId!);
+      
+      // Subscribe to user's student topics (for guardians)
+      if (authProvider.isGuardian) {
+        // TODO: Subscribe to guardian's children topics
+      }
+    }
+  }
+  
+  /// Show welcome notification to the user
+  Future<void> _showWelcomeNotification(AuthProvider authProvider) async {
+    // Wait for app to fully initialize before showing notification
+    await Future.delayed(const Duration(seconds: 2));
+    
+    final userName = authProvider.userName;
+    final role = authProvider.isDriver ? 'Driver' : 
+                 authProvider.isGuardian ? 'Guardian' : 'User';
+    
+    final title = userName != null 
+        ? '👋 Welcome back, $userName!' 
+        : '👋 Welcome back!';
+    
+    final body = 'Thank you for being a part of ShuleDrive. '
+        'Your $role dashboard is ready. Have a great day! 🚌';
+    
+    if (kDebugMode) {
+      print('🔔 Showing welcome notification to $userName ($role)');
+    }
+    
+    await NotificationService().showLocalNotification(
+      title: title,
+      body: body,
+      channelId: 'trip_updates',
+      importance: Importance.high,
+    );
   }
 
   @override
@@ -467,6 +543,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         // If authenticated, show screen based on role
         if (authProvider.isAuthenticated) {
+          // Initialize services when becoming authenticated
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _initializeServices(authProvider);
+          });
+          
           // Unified dashboard - adapts based on role and trip status
           return const DashboardScreen();
         }
