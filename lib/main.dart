@@ -616,6 +616,9 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _initialized = false;
   bool? _hasSeenOnboarding;
+  
+  // TODO: Set to false for production - currently true for testing to always show onboarding
+  static const bool _alwaysShowOnboarding = true;
 
   @override
   void initState() {
@@ -631,6 +634,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   /// Check if user has completed onboarding
   Future<void> _checkOnboardingStatus() async {
+    // TESTING: Always show onboarding during testing phase
+    if (_alwaysShowOnboarding) {
+      if (mounted) {
+        setState(() {
+          _hasSeenOnboarding = false; // Force show onboarding
+          _initialized = true;
+        });
+      }
+      return;
+    }
+    
     final prefs = await SharedPreferences.getInstance();
     final hasSeen = prefs.getBool('has_seen_onboarding') ?? false;
     

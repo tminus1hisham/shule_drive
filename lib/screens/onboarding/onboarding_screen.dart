@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 
-/// Onboarding Screen - Beautiful 3-page preview of the app
+/// Advanced Onboarding Screen with animations, glassmorphism, and parallax effects
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -10,45 +12,88 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with TickerProviderStateMixin {
+  late PageController _pageController;
+  double _currentPage = 0;
+  int _currentIndex = 0;
 
-  final List<OnboardingPage> _pages = [
-    OnboardingPage(
-      icon: Icons.directions_bus_filled_rounded,
+  late AnimationController _floatController;
+  late AnimationController _particleController;
+  late AnimationController _scaleController;
+
+  final List<OnboardingData> _pages = [
+    OnboardingData(
       title: 'Safe School Transport',
       description:
-          "Track your child's school bus in real-time. Know exactly when they board, travel, and arrive at school or home.",
-      gradient: const [Color(0xFF6B9B5B), Color(0xFF4A7C44)],
+          "Track your child's school bus in real-time. Know exactly when they board, travel, and arrive safely.",
+      primaryColor: const Color(0xFF6B9B5B),
+      secondaryColor: const Color(0xFF8BC48A),
+      illustration: const BusIllustration(),
     ),
-    OnboardingPage(
-      icon: Icons.location_on_rounded,
-      title: 'Live Tracking',
+    OnboardingData(
+      title: 'Live GPS Tracking',
       description:
-          'Watch the bus move on the map in real-time. Get instant notifications at every stop and never miss a pickup.',
-      gradient: const [Color(0xFF5B8B9B), Color(0xFF446C7C)],
+          'Watch the bus move on the map in real-time. Get instant notifications at every stop.',
+      primaryColor: const Color(0xFF5B8B9B),
+      secondaryColor: const Color(0xFF7AB8C4),
+      illustration: const MapIllustration(),
     ),
-    OnboardingPage(
-      icon: Icons.chat_bubble_rounded,
+    OnboardingData(
       title: 'Stay Connected',
       description:
-          'Chat directly with drivers and school staff. Get updates about delays, route changes, and important announcements.',
-      gradient: const [Color(0xFF9B5B8B), Color(0xFF7C446C)],
+          'Chat directly with drivers and school staff. Get instant updates about delays and changes.',
+      primaryColor: const Color(0xFF9B5B8B),
+      secondaryColor: const Color(0xFFC47A9B),
+      illustration: const ChatIllustration(),
     ),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _pageController.addListener(_onPageChanged);
+
+    // Floating animation for illustrations
+    _floatController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    // Particle animation
+    _particleController = AnimationController(
+      duration: const Duration(seconds: 10),
+      vsync: this,
+    )..repeat();
+
+    // Scale animation for cards
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _scaleController.forward();
+  }
+
+  void _onPageChanged() {
+    setState(() {
+      _currentPage = _pageController.page ?? 0;
+      _currentIndex = _pageController.page?.round() ?? 0;
+    });
+  }
+
+  @override
   void dispose() {
+    _pageController.removeListener(_onPageChanged);
     _pageController.dispose();
+    _floatController.dispose();
+    _particleController.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
-  void _onPageChanged(int page) {
-    setState(() => _currentPage = page);
-  }
-
   Future<void> _completeOnboarding() async {
+    HapticFeedback.mediumImpact();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
 
@@ -60,16 +105,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 500),
+          transitionDuration: const Duration(milliseconds: 400),
         ),
       );
     }
   }
 
   void _nextPage() {
-    if (_currentPage < _pages.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
+    HapticFeedback.lightImpact();
+    if (_currentIndex < _pages.length - 1) {
+      _pageController.animateToPage(
+        _currentIndex + 1,
+        duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOutCubic,
       );
     } else {
@@ -78,113 +125,232 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _skipToLogin() {
+    HapticFeedback.lightImpact();
     _completeOnboarding();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      backgroundColor: isDark ? const Color(0xFF0A0A0F) : const Color(0xFFF8F9FA),
       body: Stack(
         children: [
-          PageView.builder(
-            controller: _pageController,
-            onPageChanged: _onPageChanged,
-            itemCount: _pages.length,
-            itemBuilder: (context, index) {
-              return _buildPage(_pages[index], isDark);
+          // Animated background particles
+          AnimatedBuilder(
+            animation: _particleController,
+            builder: (context, child) {
+              return CustomPaint(
+                size: size,
+                painter: ParticlePainter(
+                  animation: _particleController.value,
+                  color: _pages[_currentIndex].primaryColor.withOpacity(0.1),
+                ),
+              );
             },
           ),
+
+          // Gradient orbs
           Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            right: 24,
-            child: AnimatedOpacity(
-              opacity: _currentPage < _pages.length - 1 ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              child: TextButton(
-                onPressed: _skipToLogin,
-                style: TextButton.styleFrom(
-                  foregroundColor: isDark ? Colors.white70 : Colors.black54,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                child: const Text(
-                  'Skip',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            top: -100,
+            right: -100,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 800),
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    _pages[_currentIndex].primaryColor.withOpacity(0.3),
+                    _pages[_currentIndex].primaryColor.withOpacity(0.0),
+                  ],
                 ),
               ),
             ),
           ),
+
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
+            bottom: -150,
+            left: -100,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 800),
+              width: 400,
+              height: 400,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
                   colors: [
-                    (isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0))
-                        .withAlpha(0),
-                    isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+                    _pages[_currentIndex].secondaryColor.withOpacity(0.2),
+                    _pages[_currentIndex].secondaryColor.withOpacity(0.0),
                   ],
                 ),
               ),
-              child: SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        _pages.length,
-                        (index) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: _currentPage == index ? 24 : 8,
-                          height: 8,
+            ),
+          ),
+
+          // Main content
+          SafeArea(
+            child: Column(
+              children: [
+                // Top bar with skip
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Page counter
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '0${_currentIndex + 1}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: _pages[_currentIndex].primaryColor,
+                              ),
+                            ),
+                            Text(
+                              ' / 03',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.white38
+                                    : Colors.black38,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Skip button
+                      if (_currentIndex < _pages.length - 1)
+                        TextButton.icon(
+                          onPressed: _skipToLogin,
+                          icon: Text(
+                            'Skip',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white60 : Colors.black54,
+                            ),
+                          ),
+                          label: Icon(
+                            Icons.arrow_forward,
+                            size: 16,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // PageView with parallax
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _pages.length,
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final page = _pages[index];
+                      final progress = _currentPage - index;
+                      final scale = 1 - (progress.abs() * 0.15).clamp(0.0, 0.3);
+                      final opacity = 1 - progress.abs().clamp(0.0, 1.0);
+
+                      return Opacity(
+                        opacity: opacity,
+                        child: Transform.scale(
+                          scale: scale,
+                          child: _buildPage(page, index),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Bottom controls
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Animated page indicator
+                      _buildPageIndicator(),
+
+                      const SizedBox(height: 32),
+
+                      // Next/Get Started button with glassmorphism
+                      GestureDetector(
+                        onTap: _nextPage,
+                        child: Container(
+                          width: double.infinity,
+                          height: 64,
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(4),
-                            color: _currentPage == index
-                                ? const Color(0xFF6B9B5B)
-                                : (isDark ? Colors.white24 : Colors.black12),
+                            borderRadius: BorderRadius.circular(24),
+                            gradient: LinearGradient(
+                              colors: [
+                                _pages[_currentIndex].primaryColor,
+                                _pages[_currentIndex].secondaryColor,
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _pages[_currentIndex]
+                                    .primaryColor
+                                    .withOpacity(0.4),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _currentIndex == _pages.length - 1
+                                    ? 'Get Started'
+                                    : 'Continue',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                child: Icon(
+                                  _currentIndex == _pages.length - 1
+                                      ? Icons.check_rounded
+                                      : Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _nextPage,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6B9B5B),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          _currentPage == _pages.length - 1
-                              ? 'Get Started'
-                              : 'Next',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -192,59 +358,120 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildPage(OnboardingPage page, bool isDark) {
-    return Column(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(24, 80, 24, 24),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(32),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: page.gradient,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: page.gradient[0].withAlpha(102),
-                  blurRadius: 30,
-                  offset: const Offset(0, 15),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withAlpha(38),
-                ),
-                child: Icon(
-                  page.icon,
-                  size: 80,
-                  color: Colors.white,
-                ),
-              ),
+  Widget _buildPage(OnboardingData page, int index) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+
+          // Glassmorphism card with illustration
+          Expanded(
+            flex: 5,
+            child: AnimatedBuilder(
+              animation: _floatController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatController.value * 10 - 5),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(40),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          page.primaryColor.withOpacity(0.15),
+                          page.secondaryColor.withOpacity(0.05),
+                        ],
+                      ),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: page.primaryColor.withOpacity(0.1),
+                          blurRadius: 40,
+                          offset: const Offset(0, 20),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: Stack(
+                        children: [
+                          // Background pattern
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: GridPatternPainter(
+                                color: page.primaryColor.withOpacity(0.1),
+                              ),
+                            ),
+                          ),
+
+                          // Illustration
+                          Center(
+                            child: AnimatedBuilder(
+                              animation: _scaleController,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _scaleController.value,
+                                  child: page.illustration,
+                                );
+                              },
+                            ),
+                          ),
+
+                          // Decorative circles
+                          Positioned(
+                            top: 20,
+                            right: 20,
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: page.primaryColor.withOpacity(0.2),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 30,
+                            left: 30,
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: page.secondaryColor.withOpacity(0.3),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
+
+          const SizedBox(height: 40),
+
+          // Title and description
+          Expanded(
+            flex: 3,
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 Text(
                   page.title,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    fontWeight: FontWeight.w800,
                     height: 1.2,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -253,30 +480,446 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
-                    height: 1.6,
-                    color: isDark ? Colors.white70 : Colors.black54,
+                    height: 1.7,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withOpacity(0.6),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 160),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageIndicator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        _pages.length,
+        (index) {
+          final isActive = index == _currentIndex;
+          final distance = (index - _currentIndex).abs();
+          final scale = math.max(0.5, 1 - (distance * 0.3));
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            width: isActive ? 32 : 8,
+            height: 8,
+            transform: Matrix4.identity()..scale(scale, 1.0),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: isActive
+                  ? _pages[_currentIndex].primaryColor
+                  : (_pages[_currentIndex].primaryColor.withOpacity(0.2)),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
-class OnboardingPage {
-  final IconData icon;
+class OnboardingData {
   final String title;
   final String description;
-  final List<Color> gradient;
+  final Color primaryColor;
+  final Color secondaryColor;
+  final Widget illustration;
 
-  OnboardingPage({
-    required this.icon,
+  OnboardingData({
     required this.title,
     required this.description,
-    required this.gradient,
+    required this.primaryColor,
+    required this.secondaryColor,
+    required this.illustration,
   });
+}
+
+// Custom Illustrations using CustomPainter
+class BusIllustration extends StatelessWidget {
+  const BusIllustration({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 200,
+      height: 200,
+      child: CustomPaint(
+        painter: BusPainter(),
+      ),
+    );
+  }
+}
+
+class MapIllustration extends StatelessWidget {
+  const MapIllustration({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 200,
+      height: 200,
+      child: CustomPaint(
+        painter: MapPainter(),
+      ),
+    );
+  }
+}
+
+class ChatIllustration extends StatelessWidget {
+  const ChatIllustration({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 200,
+      height: 200,
+      child: CustomPaint(
+        painter: ChatPainter(),
+      ),
+    );
+  }
+}
+
+// Bus Custom Painter
+class BusPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF6B9B5B)
+      ..style = PaintingStyle.fill;
+
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF6B9B5B).withOpacity(0.2)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
+
+    // Shadow
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(size.width / 2, size.height / 2 + 10),
+          width: 140,
+          height: 100,
+        ),
+        const Radius.circular(20),
+      ),
+      shadowPaint,
+    );
+
+    // Bus body
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(size.width / 2, size.height / 2),
+          width: 140,
+          height: 90,
+        ),
+        const Radius.circular(20),
+      ),
+      paint,
+    );
+
+    // Windows
+    final windowPaint = Paint()
+      ..color = Colors.white.withOpacity(0.9)
+      ..style = PaintingStyle.fill;
+
+    // Front window
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width / 2 - 55, size.height / 2 - 25, 35, 30),
+        const Radius.circular(8),
+      ),
+      windowPaint,
+    );
+
+    // Side windows
+    for (int i = 0; i < 3; i++) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+              size.width / 2 - 15 + (i * 25), size.height / 2 - 25, 20, 30),
+          const Radius.circular(6),
+        ),
+        windowPaint,
+      );
+    }
+
+    // Wheels
+    final wheelPaint = Paint()
+      ..color = const Color(0xFF3D5A3F)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(
+      Offset(size.width / 2 - 40, size.height / 2 + 35),
+      18,
+      wheelPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width / 2 + 40, size.height / 2 + 35),
+      18,
+      wheelPaint,
+    );
+
+    // Headlight
+    canvas.drawCircle(
+      Offset(size.width / 2 - 60, size.height / 2 + 10),
+      6,
+      Paint()..color = const Color(0xFFFFD54F),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Map Custom Painter
+class MapPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF5B8B9B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+
+    final fillPaint = Paint()
+      ..color = const Color(0xFF5B8B9B).withOpacity(0.1)
+      ..style = PaintingStyle.fill;
+
+    // Map grid lines
+    final path = Path()
+      ..moveTo(40, 60)
+      ..lineTo(80, 40)
+      ..lineTo(120, 70)
+      ..lineTo(160, 50)
+      ..lineTo(160, 140)
+      ..lineTo(120, 160)
+      ..lineTo(80, 130)
+      ..lineTo(40, 150)
+      ..close();
+
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, paint);
+
+    // Vertical lines
+    canvas.drawLine(
+      const Offset(80, 40),
+      const Offset(80, 150),
+      paint,
+    );
+    canvas.drawLine(
+      const Offset(120, 70),
+      const Offset(120, 160),
+      paint,
+    );
+
+    // Location pin
+    final pinPaint = Paint()
+      ..color = const Color(0xFFE74C3C)
+      ..style = PaintingStyle.fill;
+
+    final pinShadow = Paint()
+      ..color = const Color(0xFFE74C3C).withOpacity(0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+
+    // Pin shadow
+    canvas.drawCircle(
+      const Offset(100, 100),
+      20,
+      pinShadow,
+    );
+
+    // Pin body
+    final pinPath = Path()
+      ..moveTo(100, 75)
+      ..quadraticBezierTo(125, 75, 125, 100)
+      ..quadraticBezierTo(125, 120, 100, 145)
+      ..quadraticBezierTo(75, 120, 75, 100)
+      ..quadraticBezierTo(75, 75, 100, 75)
+      ..close();
+
+    canvas.drawPath(pinPath, pinPaint);
+
+    // Pin center
+    canvas.drawCircle(
+      const Offset(100, 100),
+      10,
+      Paint()..color = Colors.white,
+    );
+
+    // Pulse rings
+    canvas.drawCircle(
+      const Offset(100, 100),
+      35,
+      Paint()
+        ..color = const Color(0xFFE74C3C).withOpacity(0.2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter) => false;
+}
+
+// Chat Custom Painter
+class ChatPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Chat bubbles
+    final bubble1Paint = Paint()
+      ..color = const Color(0xFF9B5B8B)
+      ..style = PaintingStyle.fill;
+
+    final bubble2Paint = Paint()
+      ..color = const Color(0xFFE8D5E0)
+      ..style = PaintingStyle.fill;
+
+    // Shadow
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.1)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+
+    // First bubble shadow
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(50, 50, 100, 50),
+        const Radius.circular(16),
+      ),
+      shadowPaint,
+    );
+
+    // First bubble (sender)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(45, 45, 100, 50),
+        const Radius.circular(16),
+      ),
+      bubble1Paint,
+    );
+
+    // Bubble tail
+    final tailPath = Path()
+      ..moveTo(45, 85)
+      ..lineTo(35, 95)
+      ..lineTo(55, 90)
+      ..close();
+    canvas.drawPath(tailPath, bubble1Paint);
+
+    // Second bubble shadow
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(60, 110, 90, 45),
+        const Radius.circular(16),
+      ),
+      shadowPaint,
+    );
+
+    // Second bubble (receiver)
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(55, 105, 90, 45),
+        const Radius.circular(16),
+      ),
+      bubble2Paint,
+    );
+
+    // Second bubble tail
+    final tail2Path = Path()
+      ..moveTo(145, 140)
+      ..lineTo(155, 150)
+      ..lineTo(135, 145)
+      ..close();
+    canvas.drawPath(tail2Path, bubble2Paint);
+
+    // Notification dot
+    canvas.drawCircle(
+      const Offset(155, 55),
+      12,
+      Paint()..color = const Color(0xFF6B9B5B),
+    );
+
+    // Typing indicator dots
+    for (int i = 0; i < 3; i++) {
+      canvas.drawCircle(
+        Offset(75 + (i * 12), 127),
+        4,
+        Paint()..color = const Color(0xFF9B5B8B).withOpacity(0.5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Background Particle Painter
+class ParticlePainter extends CustomPainter {
+  final double animation;
+  final Color color;
+
+  ParticlePainter({required this.animation, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final random = math.Random(42); // Fixed seed for consistency
+
+    for (int i = 0; i < 20; i++) {
+      final x = (random.nextDouble() * size.width);
+      final y = ((random.nextDouble() * size.height) +
+          (animation * 100)) %
+          size.height;
+      final radius = random.nextDouble() * 4 + 2;
+      final opacity = (1 - (y / size.height)) * 0.5;
+
+      canvas.drawCircle(
+        Offset(x, y),
+        radius,
+        paint..color = color.withOpacity(opacity),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ParticlePainter oldDelegate) =>
+      oldDelegate.animation != animation;
+}
+
+// Grid Pattern Painter
+class GridPatternPainter extends CustomPainter {
+  final Color color;
+
+  GridPatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+
+    const spacing = 30.0;
+
+    // Diagonal lines
+    for (double i = -size.height; i < size.width + size.height; i += spacing) {
+      canvas.drawLine(
+        Offset(i, 0),
+        Offset(i + size.height, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
