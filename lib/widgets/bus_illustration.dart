@@ -13,17 +13,21 @@ class BusIllustration extends StatefulWidget {
 class _BusIllustrationState extends State<BusIllustration>
     with TickerProviderStateMixin {
   late AnimationController _mainController;
-  
+  late AnimationController _wheelController;
+
   // Bus animation
   late Animation<double> _busPosition;
   late Animation<double> _busBounce;
-  
+
   // Child animation
   late Animation<double> _childOpacity;
   late Animation<double> _childPosition;
-  
+
   // Door animation
   late Animation<double> _doorOpen;
+
+  // Wheel rotation
+  late Animation<double> _wheelRotation;
 
   @override
   void initState() {
@@ -33,29 +37,35 @@ class _BusIllustrationState extends State<BusIllustration>
       duration: const Duration(seconds: 10),
     );
 
-    // Bus enters from left (0-20%)
+    _wheelController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _setupAnimations();
+    _mainController.repeat();
+    _wheelController.repeat();
+  }
+
+  void _setupAnimations() {
+    // Bus animation: enters, stops, exits
     _busPosition = TweenSequence<double>([
       // Drive in from left
       TweenSequenceItem(
-        tween: Tween<double>(begin: -0.3, end: 0.5)
+        tween: Tween<double>(begin: -0.35, end: 0.5)
             .chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 20,
+        weight: 22,
       ),
-      // Stop and wait for child (20-50%)
+      // Stop and wait for child
       TweenSequenceItem(
         tween: ConstantTween<double>(0.5),
-        weight: 30,
+        weight: 28,
       ),
-      // Drive off to right (50-80%)
+      // Drive off to right
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.5, end: 1.3)
+        tween: Tween<double>(begin: 0.5, end: 1.35)
             .chain(CurveTween(curve: Curves.easeInCubic)),
-        weight: 30,
-      ),
-      // Reset pause (80-100%)
-      TweenSequenceItem(
-        tween: ConstantTween<double>(1.3),
-        weight: 20,
+        weight: 50,
       ),
     ]).animate(_mainController);
 
@@ -86,7 +96,7 @@ class _BusIllustrationState extends State<BusIllustration>
       ),
     ]).animate(_mainController);
 
-    // Child appears and walks to bus
+    // Child appears and walks to bus (day) or exits bus (night)
     _childOpacity = TweenSequence<double>([
       // Hidden while bus drives in
       TweenSequenceItem(
@@ -173,21 +183,28 @@ class _BusIllustrationState extends State<BusIllustration>
       ),
     ]).animate(_mainController);
 
-    _mainController.repeat();
+    // Wheel rotation
+    _wheelRotation = Tween<double>(
+      begin: 0,
+      end: 2 * pi,
+    ).animate(_wheelController);
   }
 
   @override
   void dispose() {
     _mainController.dispose();
+    _wheelController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SizedBox(
       height: widget.height,
       child: AnimatedBuilder(
-        animation: _mainController,
+        animation: Listenable.merge([_mainController, _wheelController]),
         builder: (context, child) {
           return CustomPaint(
             size: Size(double.infinity, widget.height),
@@ -197,6 +214,8 @@ class _BusIllustrationState extends State<BusIllustration>
               childOpacity: _childOpacity.value,
               childPosition: _childPosition.value,
               doorOpen: _doorOpen.value,
+              wheelRotation: _wheelRotation.value,
+              isDark: isDark,
             ),
           );
         },
@@ -211,6 +230,8 @@ class ModernBusIllustrationPainter extends CustomPainter {
   final double childOpacity;
   final double childPosition;
   final double doorOpen;
+  final double wheelRotation;
+  final bool isDark;
 
   ModernBusIllustrationPainter({
     required this.busPosition,
@@ -218,20 +239,26 @@ class ModernBusIllustrationPainter extends CustomPainter {
     required this.childOpacity,
     required this.childPosition,
     required this.doorOpen,
+    required this.wheelRotation,
+    required this.isDark,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw sky gradient
+    // Draw sky/background
     _drawSky(canvas, size);
 
-    // Draw sun with glow
-    _drawSun(canvas, size);
-
-    // Draw clouds
-    _drawCloud(canvas, size.width * 0.15, size.height * 0.18, 30);
-    _drawCloud(canvas, size.width * 0.55, size.height * 0.12, 25);
-    _drawCloud(canvas, size.width * 0.85, size.height * 0.22, 28);
+    if (!isDark) {
+      // Day mode elements
+      _drawSun(canvas, size);
+      _drawCloud(canvas, size.width * 0.15, size.height * 0.18, 30);
+      _drawCloud(canvas, size.width * 0.55, size.height * 0.12, 25);
+      _drawCloud(canvas, size.width * 0.85, size.height * 0.22, 28);
+    } else {
+      // Night mode elements
+      _drawMoon(canvas, size);
+      _drawStars(canvas, size);
+    }
 
     // Draw hills/background
     _drawHills(canvas, size);
@@ -243,14 +270,51 @@ class ModernBusIllustrationPainter extends CustomPainter {
     _drawModernTree(canvas, size.width * 0.08, size.height - 50, 30);
     _drawModernTree(canvas, size.width * 0.92, size.height - 55, 35);
 
-    // Draw child waiting
+    // Calculate adjusted position based on day/night mode
+    // Day: left to right (0 -> 1), Night: right to left (1 -> 0)
+    final adjustedBusPosition = isDark ? (1 - busPosition) : busPosition;
+    final adjustedChildPosition = isDark ? (1 - childPosition) : childPosition;
+    
+    // Calculate bus opacity - fade in at start, fade out at end
+    double busOpacity = 1.0;
+    if (adjustedBusPosition < 0) {
+      // Entering from left
+      busOpacity = ((adjustedBusPosition + 0.35) / 0.15).clamp(0.0, 1.0);
+    } else if (adjustedBusPosition > 1.0) {
+      // Exiting to right
+      busOpacity = ((1.35 - adjustedBusPosition) / 0.15).clamp(0.0, 1.0);
+    }
+
+    // Draw child
     if (childOpacity > 0) {
-      _drawChild(
-        canvas,
-        size.width * childPosition,
-        size.height - 70,
-        childOpacity,
-      );
+      if (isDark) {
+        // Night mode: Child exits bus and walks away to the right
+        // Bus stops at center (0.5), facing left (door on right side at ~0.58)
+        // Child exits door and walks right (away from bus)
+        // childPosition goes 0.2 -> 0.45 during the walk
+        // We want child to go from door (0.58) to away (0.78)
+        final walkProgress = (childPosition - 0.2) / 0.25; // 0.0 to 1.0
+        final exitPosition = 0.58 + walkProgress * 0.25; // 0.58 (door) to 0.83 (away)
+        
+        _drawChild(
+          canvas,
+          size.width * exitPosition,
+          size.height - 70,
+          childOpacity,
+          isExiting: true,
+          exitProgress: walkProgress,
+        );
+      } else {
+        // Day: child walks to bus
+        _drawChild(
+          canvas,
+          size.width * adjustedChildPosition,
+          size.height - 70,
+          childOpacity,
+          isExiting: false,
+          exitProgress: 0,
+        );
+      }
     }
 
     // Calculate bus bounce offset (idle vibration when stopped)
@@ -259,49 +323,73 @@ class ModernBusIllustrationPainter extends CustomPainter {
       bounceY = sin(busBounce * 3) * 1.5;
     }
 
-    // Draw bus
-    final busX = size.width * busPosition;
+    // Draw bus with wheels touching the road
+    // Bus sits at size.height - 60 (road level) + bounce
+    final busY = size.height - 60 + bounceY;
+    final busX = size.width * adjustedBusPosition;
+
     _drawModernBus(
       canvas,
       busX,
-      size.height - 95 + bounceY,
+      busY,
       140,
       72,
       doorOpen,
+      wheelRotation,
+      busOpacity,
     );
   }
 
   void _drawSky(Canvas canvas, Size size) {
-    final skyPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFFE3F2FD),
-          const Color(0xFFF5F5F0).withValues(alpha: 0.8),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      skyPaint,
-    );
+    if (isDark) {
+      // Night sky gradient
+      final skyPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0D1B2A),
+            const Color(0xFF1B263B),
+            const Color(0xFF415A77).withValues(alpha: 0.5),
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        skyPaint,
+      );
+    } else {
+      // Day sky gradient
+      final skyPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFFE3F2FD),
+            const Color(0xFFF5F5F0).withValues(alpha: 0.8),
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        skyPaint,
+      );
+    }
   }
 
   void _drawSun(Canvas canvas, Size size) {
     final sunCenter = Offset(size.width * 0.88, size.height * 0.22);
-    
+
     // Sun glow
     final glowPaint = Paint()
       ..color = const Color(0xFFFFB800).withValues(alpha: 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 25);
     canvas.drawCircle(sunCenter, 50, glowPaint);
-    
+
     // Sun body
     final sunPaint = Paint()
       ..color = const Color(0xFFFFB800)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
     canvas.drawCircle(sunCenter, 28, sunPaint);
-    
+
     // Sun core
     canvas.drawCircle(
       sunCenter,
@@ -310,26 +398,74 @@ class ModernBusIllustrationPainter extends CustomPainter {
     );
   }
 
+  void _drawMoon(Canvas canvas, Size size) {
+    final moonCenter = Offset(size.width * 0.85, size.height * 0.18);
+
+    // Moon glow
+    final glowPaint = Paint()
+      ..color = const Color(0xFFF5F5F5).withValues(alpha: 0.1)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
+    canvas.drawCircle(moonCenter, 40, glowPaint);
+
+    // Moon body
+    canvas.drawCircle(
+      moonCenter,
+      22,
+      Paint()..color = const Color(0xFFF5F5F5),
+    );
+
+    // Moon craters
+    canvas.drawCircle(
+      Offset(moonCenter.dx - 6, moonCenter.dy - 4),
+      4,
+      Paint()..color = const Color(0xFFE0E0E0),
+    );
+    canvas.drawCircle(
+      Offset(moonCenter.dx + 5, moonCenter.dy + 6),
+      3,
+      Paint()..color = const Color(0xFFE0E0E0),
+    );
+    canvas.drawCircle(
+      Offset(moonCenter.dx + 3, moonCenter.dy - 8),
+      2,
+      Paint()..color = const Color(0xFFE0E0E0),
+    );
+  }
+
+  void _drawStars(Canvas canvas, Size size) {
+    final starPaint = Paint()..color = Colors.white;
+    final random = [0.1, 0.25, 0.35, 0.45, 0.6, 0.7, 0.8, 0.92];
+
+    for (int i = 0; i < random.length; i++) {
+      final x = size.width * random[i];
+      final y = size.height * (0.08 + (i % 3) * 0.08);
+      final radius = 1.0 + (i % 2);
+      canvas.drawCircle(Offset(x, y), radius, starPaint);
+    }
+  }
+
   void _drawCloud(Canvas canvas, double x, double y, double size) {
     final cloudPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.9)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-    
+
     // Main cloud body
     canvas.drawCircle(Offset(x, y), size * 0.5, cloudPaint);
     canvas.drawCircle(Offset(x + size * 0.35, y), size * 0.4, cloudPaint);
     canvas.drawCircle(Offset(x - size * 0.35, y), size * 0.35, cloudPaint);
     canvas.drawCircle(Offset(x, y - size * 0.25), size * 0.35, cloudPaint);
-    
+
     // Additional puffs
-    canvas.drawCircle(Offset(x + size * 0.5, y + size * 0.1), size * 0.25, cloudPaint);
-    canvas.drawCircle(Offset(x - size * 0.5, y + size * 0.1), size * 0.25, cloudPaint);
+    canvas.drawCircle(
+        Offset(x + size * 0.5, y + size * 0.1), size * 0.25, cloudPaint);
+    canvas.drawCircle(
+        Offset(x - size * 0.5, y + size * 0.1), size * 0.25, cloudPaint);
   }
 
   void _drawHills(Canvas canvas, Size size) {
     // Back hills - lighter
     final backHillsPaint = Paint()
-      ..color = const Color(0xFFC8E6C9)
+      ..color = isDark ? const Color(0xFF1B263B) : const Color(0xFFC8E6C9)
       ..style = PaintingStyle.fill;
 
     final backPath = Path()
@@ -354,7 +490,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
 
     // Front hills - darker
     final frontHillsPaint = Paint()
-      ..color = const Color(0xFFA5D6A7)
+      ..color = isDark ? const Color(0xFF0D1B2A) : const Color(0xFFA5D6A7)
       ..style = PaintingStyle.fill;
 
     final frontPath = Path()
@@ -381,9 +517,9 @@ class ModernBusIllustrationPainter extends CustomPainter {
   void _drawRoad(Canvas canvas, Size size) {
     // Road surface
     final roadPaint = Paint()
-      ..color = const Color(0xFFE0E0E0)
+      ..color = isDark ? const Color(0xFF2C3E50) : const Color(0xFFE0E0E0)
       ..style = PaintingStyle.fill;
-    
+
     canvas.drawRect(
       Rect.fromLTWH(0, size.height - 28, size.width, 28),
       roadPaint,
@@ -394,18 +530,18 @@ class ModernBusIllustrationPainter extends CustomPainter {
       Offset(0, size.height - 28),
       Offset(size.width, size.height - 28),
       Paint()
-        ..color = const Color(0xFFBDBDBD)
+        ..color = isDark ? const Color(0xFF34495E) : const Color(0xFFBDBDBD)
         ..strokeWidth = 1,
     );
 
     // Road markings (dashed line)
     final markingPaint = Paint()
-      ..color = const Color(0xFFFFB800)
+      ..color = isDark ? const Color(0xFF7F8C8D) : const Color(0xFFFFB800)
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
-    final dashWidth = 25.0;
-    final dashSpace = 35.0;
+    const dashWidth = 25.0;
+    const dashSpace = 35.0;
     final y = size.height - 14;
 
     double startX = 0;
@@ -424,7 +560,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
     final trunkPaint = Paint()
       ..color = const Color(0xFF795548)
       ..style = PaintingStyle.fill;
-    
+
     final trunkRect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(x, y - size * 0.1),
@@ -437,7 +573,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
 
     // Tree foliage (modern triangle shape)
     final foliagePaint = Paint()
-      ..color = const Color(0xFF66BB6A)
+      ..color = isDark ? const Color(0xFF1E3A2F) : const Color(0xFF66BB6A)
       ..style = PaintingStyle.fill;
 
     final path = Path()
@@ -449,9 +585,9 @@ class ModernBusIllustrationPainter extends CustomPainter {
 
     // Highlight
     final highlightPaint = Paint()
-      ..color = const Color(0xFF81C784)
+      ..color = isDark ? const Color(0xFF2D5A45) : const Color(0xFF81C784)
       ..style = PaintingStyle.fill;
-    
+
     final highlightPath = Path()
       ..moveTo(x, y - size * 0.7)
       ..lineTo(x + size * 0.15, y - size * 0.35)
@@ -460,72 +596,79 @@ class ModernBusIllustrationPainter extends CustomPainter {
     canvas.drawPath(highlightPath, highlightPaint);
   }
 
-  void _drawChild(Canvas canvas, double x, double y, double opacity) {
-    final childPaint = Paint()
-      ..color = Colors.black.withValues(alpha: opacity);
+  void _drawChild(Canvas canvas, double x, double y, double opacity,
+      {required bool isExiting, required double exitProgress}) {
+    if (opacity <= 0) return;
+
+    // For night mode exit animation
+    final walkOffset = isExiting ? exitProgress * 30 : 0;
+    final finalX = isExiting ? x - walkOffset : x;
+
+    // Helper to create color with opacity
+    Color withOpacity(Color color) => color.withValues(alpha: opacity);
 
     // Head
     canvas.drawCircle(
-      Offset(x, y - 25),
+      Offset(finalX, y - 25),
       8,
-      Paint()..color = Color.fromRGBO(255, 200, 150, opacity),
+      Paint()..color = withOpacity(const Color(0xFFC89696)), // Skin tone
     );
 
     // Body
     canvas.drawRect(
       Rect.fromCenter(
-        center: Offset(x, y - 12),
+        center: Offset(finalX, y - 12),
         width: 14,
         height: 18,
       ),
-      Paint()..color = Color.fromRGBO(100, 150, 255, opacity),
+      Paint()..color = withOpacity(const Color(0xFF6496FF)), // Blue shirt
     );
 
     // Backpack
     canvas.drawRect(
       Rect.fromCenter(
-        center: Offset(x - 10, y - 12),
+        center: Offset(finalX - 10, y - 12),
         width: 8,
         height: 14,
       ),
-      Paint()..color = Color.fromRGBO(255, 100, 100, opacity),
+      Paint()..color = withOpacity(const Color(0xFFFF6464)), // Red backpack
     );
 
     // Legs
     canvas.drawRect(
       Rect.fromCenter(
-        center: Offset(x - 4, y + 5),
+        center: Offset(finalX - 4, y + 5),
         width: 5,
         height: 16,
       ),
-      Paint()..color = Color.fromRGBO(80, 80, 100, opacity),
+      Paint()..color = withOpacity(const Color(0xFF505064)), // Dark pants
     );
     canvas.drawRect(
       Rect.fromCenter(
-        center: Offset(x + 4, y + 5),
+        center: Offset(finalX + 4, y + 5),
         width: 5,
         height: 16,
       ),
-      Paint()..color = Color.fromRGBO(80, 80, 100, opacity),
+      Paint()..color = withOpacity(const Color(0xFF505064)),
     );
 
     // Arms (waving)
     final armPaint = Paint()
-      ..color = Color.fromRGBO(255, 200, 150, opacity)
+      ..color = withOpacity(const Color(0xFFC89696)) // Skin tone
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
-    
+
     // Right arm waving
     canvas.drawLine(
-      Offset(x + 7, y - 18),
-      Offset(x + 15, y - 28),
+      Offset(finalX + 7, y - 18),
+      Offset(finalX + 15, y - 28),
       armPaint,
     );
-    
+
     // Left arm
     canvas.drawLine(
-      Offset(x - 7, y - 18),
-      Offset(x - 12, y - 8),
+      Offset(finalX - 7, y - 18),
+      Offset(finalX - 12, y - 8),
       armPaint,
     );
   }
@@ -537,20 +680,30 @@ class ModernBusIllustrationPainter extends CustomPainter {
     double width,
     double height,
     double doorOpen,
+    double wheelRotation,
+    double opacity,
   ) {
+    // Helper to apply opacity to colors
+    Color withOpacity(Color color) => color.withValues(alpha: color.a * opacity);
+    
     // Modern color scheme
-    const primaryColor = Color(0xFFFFB300);  // Amber yellow
-    const secondaryColor = Color(0xFF212121); // Dark gray
-    const accentColor = Color(0xFF4CAF50);   // Green
-    const windowColor = Color(0xFF81D4FA);   // Light blue
+    final primaryColor = withOpacity(isDark ? const Color(0xFFF4D03F) : const Color(0xFFFFB300));
+    final secondaryColor = withOpacity(const Color(0xFF212121));
+    final accentColor = withOpacity(const Color(0xFF4CAF50));
+    final windowColor = withOpacity(isDark ? const Color(0xFF5DADE2) : const Color(0xFF81D4FA));
 
-    // Bus shadow
+    // Calculate wheel positions - wheels touch the road (y + height * 0.42 sits on road)
+    final wheelY = y + height * 0.42;
+    final backWheelX = x + width * 0.25;
+    final frontWheelX = x - width * 0.25;
+
+    // Bus shadow (on the road)
     final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.2)
+      ..color = withOpacity(Colors.black.withValues(alpha: isDark ? 0.4 : 0.2))
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(x, y + height * 0.48),
+        center: Offset(x, wheelY + 5),
         width: width * 0.95,
         height: 12,
       ),
@@ -626,10 +779,10 @@ class ModernBusIllustrationPainter extends CustomPainter {
     final windowWidth = (width - 50) / 3;
     for (int i = 0; i < 3; i++) {
       final windowX = x - width / 2 + 20 + i * (windowWidth + 8);
-      
+
       // Skip where door is (middle position)
       if (i == 1) continue;
-      
+
       final windowPath = Path()
         ..moveTo(windowX, y - height / 2 + 18)
         ..lineTo(windowX + windowWidth - 5, y - height / 2 + 18)
@@ -661,19 +814,19 @@ class ModernBusIllustrationPainter extends CustomPainter {
           y - height / 2 + 18,
         )
         ..close();
-      
+
       canvas.drawPath(windowPath, windowPaint);
-      
+
       // Window frame
       final framePaint = Paint()
         ..color = secondaryColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2;
       canvas.drawPath(windowPath, framePaint);
-      
+
       // Window reflection
       final reflectionPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.4)
+        ..color = withOpacity(Colors.white.withValues(alpha: isDark ? 0.2 : 0.4))
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3;
       canvas.drawLine(
@@ -683,39 +836,76 @@ class ModernBusIllustrationPainter extends CustomPainter {
       );
     }
 
-    // Front windshield
-    final windshieldPath = Path()
-      ..moveTo(x + width / 2 - 12, y - height / 2 + 15)
-      ..lineTo(x + width / 2 - 5, y - height / 2 + 20)
-      ..quadraticBezierTo(
-        x + width / 2 - 2,
-        y - height / 2 + 25,
-        x + width / 2 - 2,
-        y - height / 2 + 35,
-      )
-      ..lineTo(x + width / 2 - 2, y - 8)
-      ..quadraticBezierTo(
-        x + width / 2 - 2,
-        y - 3,
-        x + width / 2 - 8,
-        y - 3,
-      )
-      ..lineTo(x + width / 2 - 15, y - 3)
-      ..quadraticBezierTo(
-        x + width / 2 - 20,
-        y - 3,
-        x + width / 2 - 20,
-        y - 10,
-      )
-      ..lineTo(x + width / 2 - 15, y - height / 2 + 15)
-      ..quadraticBezierTo(
-        x + width / 2 - 15,
-        y - height / 2 + 12,
-        x + width / 2 - 12,
-        y - height / 2 + 15,
-      )
-      ..close();
-    
+    // Front windshield (direction depends on day/night)
+    final windshieldPath = Path();
+    if (!isDark) {
+      // Day: facing right
+      windshieldPath
+        ..moveTo(x + width / 2 - 12, y - height / 2 + 15)
+        ..lineTo(x + width / 2 - 5, y - height / 2 + 20)
+        ..quadraticBezierTo(
+          x + width / 2 - 2,
+          y - height / 2 + 25,
+          x + width / 2 - 2,
+          y - height / 2 + 35,
+        )
+        ..lineTo(x + width / 2 - 2, y - 8)
+        ..quadraticBezierTo(
+          x + width / 2 - 2,
+          y - 3,
+          x + width / 2 - 8,
+          y - 3,
+        )
+        ..lineTo(x + width / 2 - 15, y - 3)
+        ..quadraticBezierTo(
+          x + width / 2 - 20,
+          y - 3,
+          x + width / 2 - 20,
+          y - 10,
+        )
+        ..lineTo(x + width / 2 - 15, y - height / 2 + 15)
+        ..quadraticBezierTo(
+          x + width / 2 - 15,
+          y - height / 2 + 12,
+          x + width / 2 - 12,
+          y - height / 2 + 15,
+        )
+        ..close();
+    } else {
+      // Night: facing left
+      windshieldPath
+        ..moveTo(x - width / 2 + 12, y - height / 2 + 15)
+        ..lineTo(x - width / 2 + 5, y - height / 2 + 20)
+        ..quadraticBezierTo(
+          x - width / 2 + 2,
+          y - height / 2 + 25,
+          x - width / 2 + 2,
+          y - height / 2 + 35,
+        )
+        ..lineTo(x - width / 2 + 2, y - 8)
+        ..quadraticBezierTo(
+          x - width / 2 + 2,
+          y - 3,
+          x - width / 2 + 8,
+          y - 3,
+        )
+        ..lineTo(x - width / 2 + 15, y - 3)
+        ..quadraticBezierTo(
+          x - width / 2 + 20,
+          y - 3,
+          x - width / 2 + 20,
+          y - 10,
+        )
+        ..lineTo(x - width / 2 + 15, y - height / 2 + 15)
+        ..quadraticBezierTo(
+          x - width / 2 + 15,
+          y - height / 2 + 12,
+          x - width / 2 + 12,
+          y - height / 2 + 15,
+        )
+        ..close();
+    }
+
     canvas.drawPath(windshieldPath, windowPaint);
     canvas.drawPath(
       windshieldPath,
@@ -729,7 +919,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
     final doorX = x + width * 0.05;
     final doorWidth = 26.0;
     final doorHeight = height * 0.65;
-    final doorOffset = doorOpen * (doorWidth * 0.6); // Slide open
+    final doorOffset = doorOpen * (doorWidth * 0.6);
 
     // Door frame
     final doorFrameRect = RRect.fromRectAndRadius(
@@ -756,7 +946,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
     );
     canvas.drawRRect(
       doorRect,
-      Paint()..color = const Color(0xFF424242),
+      Paint()..color = withOpacity(const Color(0xFF424242)),
     );
 
     // Door window
@@ -770,49 +960,94 @@ class ModernBusIllustrationPainter extends CustomPainter {
     );
     canvas.drawRRect(doorWindowRect, windowPaint);
 
-    // Modern wheels (larger, stylized)
-    _drawModernWheel(canvas, x + width * 0.25, y + height * 0.42, 16);
-    _drawModernWheel(canvas, x - width * 0.25, y + height * 0.42, 16);
+    // Draw wheels with rotation - touching the road
+    _drawSpinningWheel(canvas, backWheelX, wheelY, 16, wheelRotation, opacity);
+    _drawSpinningWheel(canvas, frontWheelX, wheelY, 16, wheelRotation, opacity);
 
-    // LED Headlights
-    final headlightPaint = Paint()
-      ..color = const Color(0xFFFFF59D)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(x + width / 2 - 8, y + 5, 6, 10),
-        const Radius.circular(3),
-      ),
-      headlightPaint,
-    );
-    
-    // Headlight beam
-    final beamPaint = Paint()
-      ..shader = LinearGradient(
+    // LED Headlights - direction based on day/night
+    if (!isDark) {
+      // Day: headlights on right (facing right)
+      final headlightPaint = Paint()
+        ..color = withOpacity(const Color(0xFFFFF59D))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x + width / 2 - 8, y + 5, 6, 10),
+          const Radius.circular(3),
+        ),
+        headlightPaint,
+      );
+
+      // Headlight beam
+      final beamGradient = LinearGradient(
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
         colors: [
-          const Color(0xFFFFF59D).withValues(alpha: 0.3),
-          const Color(0xFFFFF59D).withValues(alpha: 0),
+          withOpacity(const Color(0xFFFFF59D).withValues(alpha: isDark ? 0.5 : 0.3)),
+          withOpacity(const Color(0xFFFFF59D).withValues(alpha: 0)),
         ],
-      ).createShader(Rect.fromLTWH(x + width / 2, y, 60, 20));
-    
-    final beamPath = Path()
-      ..moveTo(x + width / 2 - 2, y + 5)
-      ..lineTo(x + width / 2 + 50, y - 5)
-      ..lineTo(x + width / 2 + 50, y + 25)
-      ..lineTo(x + width / 2 - 2, y + 15)
-      ..close();
-    canvas.drawPath(beamPath, beamPaint);
+      );
+      final beamPaint = Paint()
+        ..shader = beamGradient.createShader(Rect.fromLTWH(x + width / 2, y, 60, 20));
 
-    // LED Taillights
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(x - width / 2 + 2, y + 5, 6, 10),
-        const Radius.circular(3),
-      ),
-      Paint()..color = const Color(0xFFFF5252),
-    );
+      final beamPath = Path()
+        ..moveTo(x + width / 2 - 2, y + 5)
+        ..lineTo(x + width / 2 + 50, y - 5)
+        ..lineTo(x + width / 2 + 50, y + 25)
+        ..lineTo(x + width / 2 - 2, y + 15)
+        ..close();
+      canvas.drawPath(beamPath, beamPaint);
+
+      // Taillights on left
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x - width / 2 + 2, y + 5, 6, 10),
+          const Radius.circular(3),
+        ),
+        Paint()..color = withOpacity(const Color(0xFFFF5252)),
+      );
+    } else {
+      // Night: headlights on left (facing left)
+      final headlightPaint = Paint()
+        ..color = withOpacity(const Color(0xFFFFF59D))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x - width / 2 + 2, y + 5, 6, 10),
+          const Radius.circular(3),
+        ),
+        headlightPaint,
+      );
+
+      // Headlight beam (pointing left)
+      final beamGradient = LinearGradient(
+        begin: Alignment.centerRight,
+        end: Alignment.centerLeft,
+        colors: [
+          withOpacity(const Color(0xFFFFF59D).withValues(alpha: 0.6)),
+          withOpacity(const Color(0xFFFFF59D).withValues(alpha: 0)),
+        ],
+      );
+      final beamPaint = Paint()
+        ..shader = beamGradient.createShader(Rect.fromLTWH(x - width / 2 - 50, y, 60, 20));
+
+      final beamPath = Path()
+        ..moveTo(x - width / 2 + 2, y + 5)
+        ..lineTo(x - width / 2 - 50, y - 5)
+        ..lineTo(x - width / 2 - 50, y + 25)
+        ..lineTo(x - width / 2 + 2, y + 15)
+        ..close();
+      canvas.drawPath(beamPath, beamPaint);
+
+      // Taillights on right
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x + width / 2 - 8, y + 5, 6, 10),
+          const Radius.circular(3),
+        ),
+        Paint()..color = withOpacity(const Color(0xFFFF5252)),
+      );
+    }
 
     // "SCHOOL BUS" sign on top
     final signRect = RRect.fromRectAndRadius(
@@ -824,7 +1059,7 @@ class ModernBusIllustrationPainter extends CustomPainter {
       const Radius.circular(4),
     );
     canvas.drawRRect(signRect, Paint()..color = secondaryColor);
-    
+
     // Sign border
     canvas.drawRRect(
       signRect,
@@ -835,59 +1070,64 @@ class ModernBusIllustrationPainter extends CustomPainter {
     );
 
     // Side mirror
+    final mirrorX = isDark ? x - width / 2 + 3 : x + width / 2 - 3;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(x + width / 2 - 3, y - 15, 8, 12),
+        Rect.fromLTWH(mirrorX - 4, y - 15, 8, 12),
         const Radius.circular(2),
       ),
       Paint()..color = secondaryColor,
     );
   }
 
-  void _drawModernWheel(Canvas canvas, double x, double y, double radius) {
+  void _drawSpinningWheel(Canvas canvas, double x, double y, double radius,
+      double rotation, double opacity) {
+    // Helper for opacity
+    Color withOpacity(Color color) => color.withValues(alpha: color.a * opacity);
+    
     // Tire (black rubber)
     canvas.drawCircle(
       Offset(x, y),
       radius,
-      Paint()..color = const Color(0xFF212121),
+      Paint()..color = withOpacity(const Color(0xFF212121)),
     );
-    
+
     // Tire sidewall
     canvas.drawCircle(
       Offset(x, y),
       radius * 0.85,
-      Paint()..color = const Color(0xFF424242),
+      Paint()..color = withOpacity(const Color(0xFF424242)),
     );
-    
+
     // Rim (silver)
     canvas.drawCircle(
       Offset(x, y),
       radius * 0.6,
-      Paint()..color = const Color(0xFFBDBDBD),
+      Paint()..color = withOpacity(const Color(0xFFBDBDBD)),
     );
-    
+
     // Inner rim
     canvas.drawCircle(
       Offset(x, y),
       radius * 0.45,
-      Paint()..color = const Color(0xFFE0E0E0),
+      Paint()..color = withOpacity(const Color(0xFFE0E0E0)),
     );
-    
+
     // Hubcap center
     canvas.drawCircle(
       Offset(x, y),
       radius * 0.2,
-      Paint()..color = const Color(0xFF757575),
+      Paint()..color = withOpacity(const Color(0xFF757575)),
     );
-    
-    // Spokes (5-spoke modern design)
+
+    // Spokes (5-spoke modern design) - ROTATED
     final spokePaint = Paint()
-      ..color = const Color(0xFF9E9E9E)
+      ..color = withOpacity(const Color(0xFF9E9E9E))
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
-    
+
     for (int i = 0; i < 5; i++) {
-      final angle = i * 2 * pi / 5 - pi / 2;
+      final angle = rotation + i * 2 * pi / 5 - pi / 2;
       canvas.drawLine(
         Offset(x, y),
         Offset(
@@ -905,6 +1145,8 @@ class ModernBusIllustrationPainter extends CustomPainter {
         oldDelegate.busBounce != busBounce ||
         oldDelegate.childOpacity != childOpacity ||
         oldDelegate.childPosition != childPosition ||
-        oldDelegate.doorOpen != doorOpen;
+        oldDelegate.doorOpen != doorOpen ||
+        oldDelegate.wheelRotation != wheelRotation ||
+        oldDelegate.isDark != isDark;
   }
 }

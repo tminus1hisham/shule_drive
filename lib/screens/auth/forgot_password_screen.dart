@@ -96,14 +96,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : const Color(0xFF1A1A1A)),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -138,8 +139,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Widget _buildHeader() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -148,16 +150,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
               letterSpacing: -0.5,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Enter your phone number and we\'ll send you an OTP to reset your password.',
             style: TextStyle(
               fontSize: 16,
-              color: Color(0xFF666666),
+              color: isDark ? Colors.white70 : const Color(0xFF666666),
             ),
           ),
         ],
@@ -166,15 +168,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Widget _buildForm(AuthProvider authProvider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -246,15 +249,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Widget _buildPhoneField() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Phone Number',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
           ),
         ),
         const SizedBox(height: 8),
@@ -263,10 +267,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           decoration: InputDecoration(
             hintText: '712 345 678',
             hintStyle: TextStyle(
-              color: Colors.grey.shade400,
+              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
             ),
             filled: true,
-            fillColor: const Color(0xFFF5F5F5),
+            fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -279,17 +283,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           initialCountryCode: 'KE',
           disableLengthCheck: true,
           flagsButtonPadding: const EdgeInsets.only(left: 12),
-          dropdownIcon: const Icon(
+          dropdownIcon: Icon(
             Icons.arrow_drop_down,
-            color: Color(0xFF666666),
+            color: isDark ? Colors.white70 : const Color(0xFF666666),
           ),
-          dropdownTextStyle: const TextStyle(
+          dropdownTextStyle: TextStyle(
             fontSize: 16,
-            color: Color(0xFF1A1A1A),
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
           ),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
-            color: Color(0xFF1A1A1A),
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
           ),
           onChanged: (phone) {
             _completePhoneNumber = phone.completeNumber;
