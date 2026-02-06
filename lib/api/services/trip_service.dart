@@ -2,13 +2,15 @@ import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_constants.dart';
 import '../api_exceptions.dart';
+import '../endpoints.dart';
+import '../../models/master_trip.dart';
 import '../../utils/buffer_manager.dart';
 
 /// Trip Service - Handles trip-related API calls with fallback buffers
 class TripService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
-  
+
   /// Get all trips with buffer fallback
   /// GET /trips
   Future<List<Trip>> getTrips({int page = 1, int limit = 20}) async {
@@ -16,12 +18,9 @@ class TripService {
       apiCall: () async {
         final response = await _apiClient.get(
           ApiConstants.trips,
-          queryParams: {
-            'page': page.toString(),
-            'limit': limit.toString(),
-          },
+          queryParams: {'page': page.toString(), 'limit': limit.toString()},
         );
-        
+
         // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
         List<dynamic> tripsData;
         if (response is List) {
@@ -31,7 +30,7 @@ class TripService {
         } else {
           tripsData = [];
         }
-        
+
         final trips = tripsData.map((trip) => Trip.fromJson(trip)).toList();
         return trips;
       },
@@ -40,7 +39,7 @@ class TripService {
       cacheDuration: const Duration(minutes: 15),
     );
   }
-  
+
   /// Get trip details with buffer fallback
   /// GET /trips/{id}
   Future<Trip?> getTripDetails(String tripId) async {
@@ -54,34 +53,42 @@ class TripService {
       cacheDuration: const Duration(minutes: 10),
     );
   }
-  
+
   /// Get active trip with buffer fallback
-  /// GET /trips/active
-  Future<Trip?> getActiveTrip() async {
+  /// GET /api/trips/get/student/active/trip?guardianPhone={phone}
+  Future<Trip?> getActiveTrip({String? guardianPhone}) async {
     try {
-      final response = await _apiClient.get(ApiConstants.activeTrip);
-      
+      final queryParams = <String, String>{};
+      if (guardianPhone != null && guardianPhone.isNotEmpty) {
+        queryParams['guardianPhone'] = guardianPhone;
+      }
+
+      final response = await _apiClient.get(
+        ApiConstants.activeTrip,
+        queryParams: queryParams.isNotEmpty ? queryParams : null,
+      );
+
       if (response['data'] == null) {
         // Try to get from buffer
         return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
       }
-      
+
       final trip = Trip.fromJson(response['data']);
-      
+
       // Save to buffer
       await _buffer.saveBuffer(
         key: BufferKeys.activeTrip,
         data: trip,
         expiration: const Duration(minutes: 5),
       );
-      
+
       return trip;
     } catch (e) {
       // Return from buffer on error
       return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     }
   }
-  
+
   /// Start a new trip (no buffer - always requires fresh API call)
   /// POST /trips/start
   Future<Trip> startTrip({
@@ -98,19 +105,19 @@ class TripService {
           if (studentIds != null) 'student_ids': studentIds,
         },
       );
-      
+
       final trip = Trip.fromJson(response['data']);
-      
+
       // Update active trip buffer
       await _buffer.saveBuffer(
         key: BufferKeys.activeTrip,
         data: trip,
         expiration: const Duration(minutes: 5),
       );
-      
+
       // Clear trips list cache to force refresh
       await _buffer.clearCategory('trips');
-      
+
       return trip;
     } on ApiException {
       rethrow;
@@ -118,22 +125,22 @@ class TripService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// End a trip (no buffer - always requires fresh API call)
   /// POST /trips/{id}/end
   Future<Trip> endTrip(String tripId) async {
     try {
       final endpoint = ApiConstants.endTrip.replaceAll('{id}', tripId);
       final response = await _apiClient.post(endpoint);
-      
+
       final trip = Trip.fromJson(response['data']);
-      
+
       // Clear active trip buffer
       await _buffer.clearBuffer(BufferKeys.activeTrip);
-      
+
       // Clear trips list cache
       await _buffer.clearCategory('trips');
-      
+
       return trip;
     } on ApiException {
       rethrow;
@@ -141,7 +148,7 @@ class TripService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Update student pickup status
   /// PATCH /trips/{tripId}/students/{studentId}/status
   Future<void> updateStudentStatus({
@@ -154,15 +161,11 @@ class TripService {
       final endpoint = '/trips/$tripId/students/$studentId/status';
       await _apiClient.patch(
         endpoint,
-        body: {
-          'status': status,
-          if (notes != null) 'notes': notes,
-        },
+        body: {'status': status, if (notes != null) 'notes': notes},
       );
-      
+
       // Clear trip details buffer to force refresh
       await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));
-      
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -183,6 +186,102 @@ class TripService {
   Future<void> clearTripBuffers() async {
     await _buffer.clearCategory('trips');
   }
+
+  // ============================================================================
+  // MASTER TRIPS ENDPOINTS
+  // ============================================================================
+
+  /// Get all master trips
+  /// GET /api/trips/get/all/master/trips
+  Future<List<MasterTrip>> getAllMasterTrips() async {
+    return _buffer.withBuffer<List<MasterTrip>>(
+      apiCall: () async {
+        final response = await _apiClient.get(Endpoints.getAllMasterTrips);
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> tripsData;
+        if (response is List) {
+          tripsData = response;
+        } else if (response is Map && response['data'] != null) {
+          tripsData = response['data'] as List;
+        } else {
+          tripsData = [];
+        }
+
+        final trips = tripsData
+            .map((trip) => MasterTrip.fromJson(trip))
+            .toList();
+        return trips;
+      },
+      bufferKey: 'master_trips_all',
+      fallbackData: [],
+      cacheDuration: const Duration(minutes: 10),
+    );
+  }
+
+  /// Get students in a master trip
+  /// GET /api/trips/get/master/trip/students?masterTripId={id}
+  Future<List<TripStudent>> getMasterTripStudents(int masterTripId) async {
+    return _buffer.withBuffer<List<TripStudent>>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.getMasterTripStudents,
+          queryParams: {'masterTripId': masterTripId.toString()},
+        );
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> studentsData;
+        if (response is List) {
+          studentsData = response;
+        } else if (response is Map && response['data'] != null) {
+          studentsData = response['data'] as List;
+        } else {
+          studentsData = [];
+        }
+
+        final students = studentsData
+            .map((student) => TripStudent.fromJson(student))
+            .toList();
+        return students;
+      },
+      bufferKey: 'master_trip_students_$masterTripId',
+      fallbackData: [],
+      cacheDuration: const Duration(minutes: 5),
+    );
+  }
+
+  /// Get guardians of students in a master trip (for drivers)
+  /// GET /api/trips/get/students/guardians/in/mastertrips?masterTripId={id}
+  Future<List<TripGuardian>> getStudentsGuardiansInMasterTrips(
+    int masterTripId,
+  ) async {
+    return _buffer.withBuffer<List<TripGuardian>>(
+      apiCall: () async {
+        final response = await _apiClient.get(
+          Endpoints.getStudentsGuardiansInMasterTrips,
+          queryParams: {'masterTripId': masterTripId.toString()},
+        );
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> guardiansData;
+        if (response is List) {
+          guardiansData = response;
+        } else if (response is Map && response['data'] != null) {
+          guardiansData = response['data'] as List;
+        } else {
+          guardiansData = [];
+        }
+
+        final guardians = guardiansData
+            .map((guardian) => TripGuardian.fromJson(guardian))
+            .toList();
+        return guardians;
+      },
+      bufferKey: 'master_trip_guardians_$masterTripId',
+      fallbackData: [],
+      cacheDuration: const Duration(minutes: 5),
+    );
+  }
 }
 
 /// Trip Model
@@ -200,7 +299,7 @@ class Trip {
   final double? distance;
   final double? fare;
   final String? notes;
-  
+
   Trip({
     required this.id,
     required this.routeName,
@@ -216,29 +315,33 @@ class Trip {
     this.fare,
     this.notes,
   });
-  
+
   factory Trip.fromJson(Map<String, dynamic> json) {
     return Trip(
       id: json['id'] ?? '',
       routeName: json['route_name'] ?? json['routeName'] ?? '',
       routeId: json['route_id'] ?? json['routeId'] ?? '',
-      startTime: _parseDateTime(json['start_time'] ?? json['startTime']) ?? DateTime.now(),
+      startTime:
+          _parseDateTime(json['start_time'] ?? json['startTime']) ??
+          DateTime.now(),
       endTime: _parseDateTime(json['end_time'] ?? json['endTime']),
       status: json['status'] ?? 'active',
       vehicleId: json['vehicle_id'] ?? json['vehicleId'] ?? '',
       vehicleNumber: json['vehicle_number'] ?? json['vehicleNumber'],
-      students: (json['students'] as List?)
-          ?.map((s) => StudentPickup.fromJson(s))
-          .toList() ?? [],
-      stops: (json['stops'] as List?)
-          ?.map((s) => TripStop.fromJson(s))
-          .toList() ?? [],
+      students:
+          (json['students'] as List?)
+              ?.map((s) => StudentPickup.fromJson(s))
+              .toList() ??
+          [],
+      stops:
+          (json['stops'] as List?)?.map((s) => TripStop.fromJson(s)).toList() ??
+          [],
       distance: (json['distance'] as num?)?.toDouble(),
       fare: (json['fare'] as num?)?.toDouble(),
       notes: json['notes'],
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -256,14 +359,14 @@ class Trip {
       'notes': notes,
     };
   }
-  
+
   bool get isActive => status == 'active';
   bool get isCompleted => status == 'completed';
-  
+
   int get pickedCount => students.where((s) => s.status == 'picked').length;
   int get absentCount => students.where((s) => s.status == 'absent').length;
   int get pendingCount => students.where((s) => s.status == 'pending').length;
-  
+
   static DateTime? _parseDateTime(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
@@ -286,7 +389,7 @@ class StudentPickup {
   final DateTime? dropoffTime;
   final String? notes;
   final String? parentPhone;
-  
+
   StudentPickup({
     required this.id,
     required this.name,
@@ -297,20 +400,24 @@ class StudentPickup {
     this.notes,
     this.parentPhone,
   });
-  
+
   factory StudentPickup.fromJson(Map<String, dynamic> json) {
     return StudentPickup(
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       photo: json['photo'],
       status: json['status'] ?? 'pending',
-      pickupTime: Trip._parseDateTime(json['pickup_time'] ?? json['pickupTime']),
-      dropoffTime: Trip._parseDateTime(json['dropoff_time'] ?? json['dropoffTime']),
+      pickupTime: Trip._parseDateTime(
+        json['pickup_time'] ?? json['pickupTime'],
+      ),
+      dropoffTime: Trip._parseDateTime(
+        json['dropoff_time'] ?? json['dropoffTime'],
+      ),
       notes: json['notes'],
       parentPhone: json['parent_phone'] ?? json['parentPhone'],
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -336,7 +443,7 @@ class TripStop {
   final DateTime? estimatedTime;
   final DateTime? actualTime;
   final String? type; // 'pickup', 'dropoff'
-  
+
   TripStop({
     required this.id,
     required this.name,
@@ -348,7 +455,7 @@ class TripStop {
     this.actualTime,
     this.type,
   });
-  
+
   factory TripStop.fromJson(Map<String, dynamic> json) {
     return TripStop(
       id: json['id']?.toString() ?? '',
@@ -357,12 +464,16 @@ class TripStop {
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       order: json['order'] ?? 0,
-      estimatedTime: Trip._parseDateTime(json['estimated_time'] ?? json['estimatedTime']),
-      actualTime: Trip._parseDateTime(json['actual_time'] ?? json['actualTime']),
+      estimatedTime: Trip._parseDateTime(
+        json['estimated_time'] ?? json['estimatedTime'],
+      ),
+      actualTime: Trip._parseDateTime(
+        json['actual_time'] ?? json['actualTime'],
+      ),
       type: json['type'],
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

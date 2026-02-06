@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -282,11 +283,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: 3,
                     ),
                   ),
-                  child: CircleAvatar(
-                    radius: 45,
-                    backgroundImage: NetworkImage(userData['avatar']),
-                    backgroundColor: Colors.white,
-                  ),
+                  child: _buildAvatar(userData['avatar']),
                 ),
                 // Edit icon overlay
                 Positioned(
@@ -624,6 +621,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           elevation: 0,
         ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(dynamic avatarUrl) {
+    // Check if it's a valid network URL
+    if (avatarUrl != null &&
+        avatarUrl is String &&
+        avatarUrl.isNotEmpty &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
+      return CircleAvatar(
+        radius: 45,
+        backgroundImage: NetworkImage(avatarUrl),
+        backgroundColor: Colors.white,
+        onBackgroundImageError: (e, s) {
+          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
+        },
+      );
+    }
+
+    // Fallback to default avatar
+    return const CircleAvatar(
+      radius: 45,
+      backgroundColor: Colors.white,
+      child: Icon(
+        Icons.person,
+        size: 45,
+        color: Color(0xFF6B9B5B),
       ),
     );
   }

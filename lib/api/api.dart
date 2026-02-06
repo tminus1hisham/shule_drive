@@ -20,3 +20,6 @@ export 'services/route_service.dart';
 export 'services/student_service.dart';
 export 'services/trip_service.dart';
 export 'services/user_service.dart';
+
+// Models
+export '../models/master_trip.dart';

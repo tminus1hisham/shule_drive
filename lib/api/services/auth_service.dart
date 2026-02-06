@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
@@ -336,8 +337,49 @@ class AuthService {
     required String imagePath,
   }) async {
     try {
-      // Create multipart file from path
-      final file = await http.MultipartFile.fromPath('profileImage', imagePath);
+      if (kDebugMode) {
+        print('📤 Uploading profile picture:');
+        print('  User ID: $userId');
+        print('  Image Path: $imagePath');
+        print('  Endpoint: ${Endpoints.updateProfilePicture}');
+      }
+
+      // Detect content type from file extension
+      final extension = imagePath.split('.').last.toLowerCase();
+      MediaType contentType;
+      switch (extension) {
+        case 'png':
+          contentType = MediaType('image', 'png');
+          break;
+        case 'gif':
+          contentType = MediaType('image', 'gif');
+          break;
+        case 'webp':
+          contentType = MediaType('image', 'webp');
+          break;
+        case 'jpg':
+        case 'jpeg':
+        default:
+          contentType = MediaType('image', 'jpeg');
+          break;
+      }
+
+      if (kDebugMode) {
+        print('  File extension: $extension');
+        print('  Content-Type: $contentType');
+      }
+
+      // Create multipart file from path with content type
+      // Try 'file' as field name (common convention)
+      final file = await http.MultipartFile.fromPath(
+        'file',
+        imagePath,
+        contentType: contentType,
+      );
+
+      if (kDebugMode) {
+        print('  File created: ${file.filename}, length: ${file.length}');
+      }
 
       // Use multipart upload
       final response = await _apiClient.postMultipart(
@@ -346,19 +388,59 @@ class AuthService {
         files: [file],
       );
 
-      // Handle both wrapped ({"data": {"imageUrl": ...}}) and unwrapped responses
+      if (kDebugMode) {
+        print('📥 Upload response: $response');
+      }
+
+      // Handle various response formats
       final data = response['data'] ?? response;
-      final imageUrl =
-          data['imageUrl'] ?? data['profileImage'] ?? data['photo'] ?? '';
+
+      // Try multiple possible field names for the image URL
+      final possibleFields = [
+        'imageUrl',
+        'profileImage',
+        'photo',
+        'image_url',
+        'url',
+        'avatar',
+        'avatar_url',
+        'image',
+        'picture',
+        'profile_picture',
+      ];
+
+      String? imageUrl;
+      for (final field in possibleFields) {
+        final value = data[field];
+        if (value != null && value.toString().isNotEmpty) {
+          imageUrl = value.toString();
+          if (kDebugMode) {
+            print('🖼️ Found image URL in field "$field": $imageUrl');
+          }
+          break;
+        }
+      }
+
+      imageUrl ??= '';
+
+      if (kDebugMode) {
+        print('🖼️ Extracted image URL: $imageUrl');
+      }
 
       if (imageUrl.isEmpty) {
-        throw ApiException(message: 'Failed to get image URL from response');
+        throw ApiException(
+          message:
+              'Failed to get image URL from response. Response: ${response.toString()}',
+        );
       }
 
       return imageUrl.toString();
     } on ApiException {
       rethrow;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ Upload error: $e');
+      }
       throw ApiException(message: e.toString());
     }
   }

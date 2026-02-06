@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/auth/splash.dart';
+import 'screens/onboarding/onboarding_screen.dart';
 import 'api/api_client.dart';
 import 'providers/app_provider.dart';
 import 'providers/auth_provider.dart';
@@ -50,15 +52,24 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // APP ENTRY POINT
 // ============================================================================
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize critical services before app starts
-  await _initCriticalServices();
-
-  // Start non-critical services in background
-  _initNonCriticalServices();
-
+void main() {
+  // Ensure Flutter binding is initialized
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  
+  // Render a frame immediately with the splash background color
+  // This prevents the blank screen between native splash and Flutter UI
+  binding.renderView.automaticSystemUiAdjustment = false;
+  
+  // Schedule the actual initialization after the first frame is rendered
+  binding.addPostFrameCallback((_) async {
+    // Initialize critical services after first frame is shown
+    await _initCriticalServices();
+    
+    // Start non-critical services in background
+    _initNonCriticalServices();
+  });
+  
+  // Run the app immediately - the splash screen background will be shown
   runApp(const ShuleDriveApp());
 }
 
@@ -287,61 +298,119 @@ class SplashWithTransition extends StatefulWidget {
   State<SplashWithTransition> createState() => _SplashWithTransitionState();
 }
 
-class _SplashWithTransitionState extends State<SplashWithTransition> {
+class _SplashWithTransitionState extends State<SplashWithTransition>
+    with TickerProviderStateMixin {
+  // Splash enters from right to center
+  late AnimationController _splashEnterController;
+  late Animation<Offset> _splashEnterAnimation;
+  
+  // Splash exits to bottom, Login enters from top
+  late AnimationController _transitionController;
+  late Animation<Offset> _splashExitAnimation;
+  late Animation<Offset> _loginEnterAnimation;
+  
   bool _showSplash = true;
+  bool _showLogin = false;
 
   @override
   void initState() {
     super.initState();
-    // Delay to show splash, then transition
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeAndTransition();
-    });
+    
+    // Splash enter animation (right to center) - faster
+    _splashEnterController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    
+    _splashEnterAnimation = Tween<Offset>(
+      begin: const Offset(1.0, 0), // Start from right
+      end: Offset.zero,             // End at center
+    ).animate(CurvedAnimation(
+      parent: _splashEnterController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    // Transition animation (splash down, login from top) - faster
+    _transitionController = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+    
+    // Splash slides down
+    _splashExitAnimation = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0, 1.0),
+    ).animate(CurvedAnimation(
+      parent: _transitionController,
+      curve: Curves.easeInOutCubic,
+    ));
+    
+    // Login slides from top
+    _loginEnterAnimation = Tween<Offset>(
+      begin: const Offset(0, -1.0), // Start from top
+      end: Offset.zero,              // End at center
+    ).animate(CurvedAnimation(
+      parent: _transitionController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    _runSequence();
   }
 
-  Future<void> _initializeAndTransition() async {
-    // Initialize auth
+  @override
+  void dispose() {
+    _splashEnterController.dispose();
+    _transitionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runSequence() async {
+    // Phase 1: Animate splash in from right
+    await _splashEnterController.forward();
+    
+    // Phase 2: Initialize auth while splash is showing
     final authProvider = context.read<AuthProvider>();
     await authProvider.initialize();
-
-    // Minimum splash display time (1 second for good UX)
-    await Future.delayed(const Duration(seconds: 1));
-
+    
+    // Minimum time splash stays visible after entering (reduced)
+    await Future.delayed(const Duration(milliseconds: 200));
+    
     if (mounted) {
-      setState(() => _showSplash = false);
+      setState(() {
+        _showLogin = true; // Build login (hidden at first)
+      });
+      
+      // Small delay to ensure login is built
+      await Future.delayed(const Duration(milliseconds: 30));
+      
+      if (mounted) {
+        // Phase 3: Transition - splash slides down, login slides from top
+        await _transitionController.forward();
+        setState(() => _showSplash = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 2500),
-      reverseDuration: const Duration(milliseconds: 2500),
-      switchInCurve: Curves.easeInOutCubic,
-      switchOutCurve: Curves.easeInOutCubic,
-      transitionBuilder: (child, animation) {
-        // Determine if this is the splash or the main content
-        final isSplash = child is Splash;
-
-        if (isSplash) {
-          // Splash slides out to bottom
-          final slideOut = Tween<Offset>(
-            begin: Offset.zero,
-            end: const Offset(0.0, 1.0),
-          ).animate(animation);
-          return SlideTransition(position: slideOut, child: child);
-        } else {
-          // Main content slides in from top
-          final slideIn = Tween<Offset>(
-            begin: const Offset(0.0, -1.0),
-            end: Offset.zero,
-          ).animate(animation);
-          return SlideTransition(position: slideIn, child: child);
-        }
-      },
-      child: _showSplash
-          ? const Splash(key: ValueKey('splash'))
-          : const AuthWrapper(key: ValueKey('main')),
+    return Stack(
+      children: [
+        // Splash layer - slides in from right, then out to bottom
+        if (_showSplash)
+          SlideTransition(
+            position: _splashEnterAnimation,
+            child: SlideTransition(
+              position: _splashExitAnimation,
+              child: const Splash(),
+            ),
+          ),
+        // Login layer - slides in from top
+        if (_showLogin)
+          SlideTransition(
+            position: _loginEnterAnimation,
+            child: const AuthWrapper(),
+          ),
+      ],
     );
   }
 }
@@ -536,6 +605,7 @@ Route _buildPageRoute(RouteSettings settings) {
   );
 }
 
+/// AuthWrapper that handles authentication, onboarding flow
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -545,18 +615,30 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   bool _initialized = false;
+  bool? _hasSeenOnboarding;
 
   @override
   void initState() {
     super.initState();
+    _checkOnboardingStatus();
+    
     // Services init happens in background
     final authProvider = context.read<AuthProvider>();
     if (authProvider.isAuthenticated && !kIsWeb) {
       _initializeServices(authProvider);
     }
+  }
 
+  /// Check if user has completed onboarding
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeen = prefs.getBool('has_seen_onboarding') ?? false;
+    
     if (mounted) {
-      setState(() => _initialized = true);
+      setState(() {
+        _hasSeenOnboarding = hasSeen;
+        _initialized = true;
+      });
     }
   }
 
@@ -605,18 +687,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
-        if (authProvider.isLoading && !_initialized) {
+        // Don't show anything until we've checked onboarding status
+        // This prevents flashing the wrong screen
+        if (_hasSeenOnboarding == null) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
-            ),
+            backgroundColor: Color(0xFFF5F5F0),
+            body: SizedBox.shrink(),
           );
         }
-
+        
+        // User is authenticated -> Dashboard
         if (authProvider.isAuthenticated) {
           return const DashboardScreen();
         }
 
+        // User not authenticated but hasn't seen onboarding -> Show Onboarding
+        if (!_hasSeenOnboarding!) {
+          return const OnboardingScreen();
+        }
+
+        // User not authenticated and has seen onboarding -> Login
         return const LoginScreen();
       },
     );

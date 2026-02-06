@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
@@ -270,20 +271,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundImage: student.photo != null
-                ? NetworkImage(student.photo!)
-                : null,
-            backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
-            child: student.photo == null
-                ? const Icon(
-                    Icons.person,
-                    color: Color(0xFF6B9B5B),
-                    size: 28,
-                  )
-                : null,
-          ),
+          _buildAvatar(student.photo),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -329,6 +317,33 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(String? photoUrl) {
+    // Check if it's a valid network URL
+    if (photoUrl != null &&
+        photoUrl.isNotEmpty &&
+        (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
+      return CircleAvatar(
+        radius: 28,
+        backgroundImage: NetworkImage(photoUrl),
+        backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+        onBackgroundImageError: (e, s) {
+          if (kDebugMode) print('⚠️ Failed to load photo: $e');
+        },
+      );
+    }
+
+    // Fallback to default avatar
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+      child: const Icon(
+        Icons.person,
+        color: Color(0xFF6B9B5B),
+        size: 28,
       ),
     );
   }

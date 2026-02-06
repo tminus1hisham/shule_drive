@@ -12,10 +12,20 @@ enum UserRole {
   unknown;
 
   static UserRole fromString(String role) {
-    switch (role.toLowerCase()) {
+    final normalized = role.toLowerCase().trim();
+
+    if (kDebugMode) {
+      print('🔍 UserRole.fromString: "$role" -> normalized: "$normalized"');
+    }
+
+    switch (normalized) {
       case 'driver':
+      case 'd':
         return UserRole.driver;
       case 'guardian':
+      case 'parent':
+      case 'g':
+      case 'guard':
         return UserRole.guardian;
       default:
         return UserRole.unknown;
@@ -46,6 +56,9 @@ class AuthProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  
+  // Tracks if initialize() has been called (prevents redundant calls)
+  bool _initialized = false;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
@@ -84,27 +97,39 @@ class AuthProvider extends ChangeNotifier {
 
   /// Initialize auth state (call on app startup) - Optimized for speed
   Future<void> initialize() async {
+    // Skip if already initialized (prevents redundant calls from splash + AuthWrapper)
+    if (_initialized) return;
+    
     _setLoading(true);
     try {
       // Fast check - just verify token exists locally (no API call)
       final isLoggedIn = await _authService.isLoggedIn();
       if (!isLoggedIn) {
         _isAuthenticated = false;
+        _initialized = true;
         return;
       }
 
       // Load cached user data immediately (fast)
       final cachedUser = await _tokenStorage.getUserData();
       if (cachedUser != null) {
+        final role = cachedUser['role'] ?? 'unknown';
+
+        if (kDebugMode) {
+          print('👤 AuthProvider.initialize - cached user:');
+          print('  role from storage: "$role"');
+          print('  parsed role: ${UserRole.fromString(role)}');
+        }
+
         _currentUser = api.User(
           id: cachedUser['userId'] ?? '',
           name: cachedUser['name'] ?? '',
           phone: cachedUser['phone'] ?? '',
-          role: cachedUser['role'] ?? 'unknown',
+          role: role,
           email: cachedUser['email'],
           avatar: cachedUser['avatar'],
         );
-        _userRole = UserRole.fromString(cachedUser['role'] ?? 'unknown');
+        _userRole = UserRole.fromString(role);
         _isAuthenticated = true;
         notifyListeners(); // Show UI immediately with cached data
       }
@@ -112,8 +137,10 @@ class AuthProvider extends ChangeNotifier {
       // Validate token and fetch fresh user data in background (non-blocking)
       // This updates the UI with fresh data when ready
       _refreshUserDataInBackground();
+      _initialized = true;
     } catch (e) {
       _setError('Failed to initialize auth: $e');
+      _initialized = true;
     } finally {
       _setLoading(false);
       notifyListeners();
@@ -270,6 +297,7 @@ class AuthProvider extends ChangeNotifier {
     _userRole = UserRole.unknown;
     _isAuthenticated = false;
     _errorMessage = null;
+    _initialized = false; // Allow re-initialization after logout
 
     _setLoading(false);
     notifyListeners();
@@ -455,7 +483,16 @@ class AuthProvider extends ChangeNotifier {
 
   /// Update user profile picture via auth endpoint
   Future<String?> updateProfilePicture(String imagePath) async {
-    if (_currentUser == null) return null;
+    if (_currentUser == null) {
+      if (kDebugMode) print('❌ Cannot upload: No current user');
+      return null;
+    }
+
+    if (kDebugMode) {
+      print('📸 Starting profile picture upload...');
+      print('  User: ${_currentUser!.name} (${_currentUser!.id})');
+      print('  Image path: $imagePath');
+    }
 
     _setLoading(true);
     _clearError();
@@ -465,6 +502,10 @@ class AuthProvider extends ChangeNotifier {
         userId: _currentUser!.id,
         imagePath: imagePath,
       );
+
+      if (kDebugMode) {
+        print('✅ Upload successful, new URL: $imageUrl');
+      }
 
       // Update current user with new image
       _currentUser = api.User(
@@ -488,12 +529,22 @@ class AuthProvider extends ChangeNotifier {
         avatar: imageUrl,
       );
 
+      if (kDebugMode) {
+        print('💾 User data updated with new avatar');
+      }
+
       notifyListeners();
       return imageUrl;
     } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ API error during upload: ${e.message}');
+      }
       _setError(e.message);
       return null;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ Unexpected error during upload: $e');
+      }
       _setError('Failed to update profile picture. Please try again.');
       return null;
     } finally {

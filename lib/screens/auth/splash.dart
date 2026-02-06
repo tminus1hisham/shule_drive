@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import 'login_screen.dart';
-import '../main/dashboard_screen.dart';
 
-/// Optimized Splash Screen - Shows immediately while app initializes in background
-/// Uses the original logo image with improved startup performance
+/// Optimized Splash Screen - Renders immediately to prevent blank screen
+/// between native splash and Flutter UI
 class Splash extends StatefulWidget {
   const Splash({super.key});
 
@@ -17,6 +15,7 @@ class Splash extends StatefulWidget {
 
 class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   bool _isCheckingAuth = true;
   String? _errorMessage;
@@ -32,16 +31,27 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
     );
 
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
 
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(2.0, 0.0), end: Offset.zero).animate(
-          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-        );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
 
-    // Start animation immediately
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    // Start animation immediately in next frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _animationController.forward();
       _checkAuthState();
@@ -49,50 +59,17 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _checkAuthState() async {
+    // Splash screen no longer handles navigation.
+    // AuthWrapper in main.dart now handles routing.
     try {
       final authProvider = context.read<AuthProvider>();
       await authProvider.initialize();
-
-      // Minimum display time for splash (1 second for better UX)
-      await Future.delayed(const Duration(seconds: 1));
-
-      if (!mounted) return;
-
-      if (authProvider.isAuthenticated) {
-        _navigateTo(const DashboardScreen());
-      } else {
-        _navigateTo(const LoginScreen());
-      }
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to initialize. Please restart the app.';
         _isCheckingAuth = false;
       });
     }
-  }
-
-  void _navigateTo(Widget screen) {
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionDuration: const Duration(milliseconds: 800),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, -1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-
-          var tween = Tween(
-            begin: begin,
-            end: end,
-          ).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(position: offsetAnimation, child: child);
-        },
-      ),
-    );
   }
 
   @override
@@ -103,32 +80,33 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
-      body: AnimatedBuilder(
-        animation: _slideAnimation,
-        builder: (context, child) {
-          return Center(
+    // No Scaffold here - parent SplashWithTransition provides it
+    // This ensures immediate rendering without layout delay
+    return Container(
+      color: const Color(0xFFF5F5F0), // Match native splash background
+      child: Center(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Transform.translate(
-                  offset:
-                      _slideAnimation.value * MediaQuery.of(context).size.width,
-                  child: Hero(
-                    tag: 'app_logo',
-                    child: Image.asset(
-                      'images/logo.png',
-                      width: 200,
-                      height: 200,
-                    ),
+                // Logo
+                Hero(
+                  tag: 'app_logo',
+                  child: Image.asset(
+                    'images/logo.png',
+                    width: 180,
+                    height: 180,
                   ),
                 ),
-                if (_isCheckingAuth) ...[
-                  const SizedBox(height: 40),
+                const SizedBox(height: 48),
+                // Loading indicator or status
+                if (_errorMessage == null)
                   const SizedBox(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
                       valueColor: AlwaysStoppedAnimation<Color>(
@@ -136,9 +114,7 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                       ),
                     ),
                   ),
-                ],
                 if (_errorMessage != null) ...[
-                  const SizedBox(height: 40),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
@@ -152,7 +128,6 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                     onPressed: () {
                       setState(() {
                         _errorMessage = null;
-                        _isCheckingAuth = true;
                       });
                       _checkAuthState();
                     },
@@ -161,8 +136,8 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                 ],
               ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

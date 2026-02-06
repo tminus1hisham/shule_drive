@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
@@ -86,20 +87,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                   // Avatar
                   Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundImage: child.photo != null 
-                            ? NetworkImage(child.photo!)
-                            : null,
-                        backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
-                        child: child.photo == null
-                            ? const Icon(
-                                Icons.person,
-                                color: Color(0xFF6B9B5B),
-                                size: 40,
-                              )
-                            : null,
-                      ),
+                      _buildAvatar(child.photo),
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -266,6 +254,33 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAvatar(String? photoUrl) {
+    // Check if it's a valid network URL
+    if (photoUrl != null &&
+        photoUrl.isNotEmpty &&
+        (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
+      return CircleAvatar(
+        radius: 50,
+        backgroundImage: NetworkImage(photoUrl),
+        backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+        onBackgroundImageError: (e, s) {
+          if (kDebugMode) print('⚠️ Failed to load photo: $e');
+        },
+      );
+    }
+
+    // Fallback to default avatar
+    return CircleAvatar(
+      radius: 50,
+      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+      child: const Icon(
+        Icons.person,
+        color: Color(0xFF6B9B5B),
+        size: 40,
+      ),
     );
   }
 }

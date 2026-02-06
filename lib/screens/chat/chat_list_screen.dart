@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_conversation.dart';
@@ -598,12 +599,18 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   Widget _buildAvatar(ChatConversation conversation, bool isDarkMode) {
-    if (conversation.otherUserAvatar != null &&
-        conversation.otherUserAvatar!.isNotEmpty) {
+    final avatarUrl = conversation.otherUserAvatar;
+    // Check if it's a valid network URL
+    if (avatarUrl != null &&
+        avatarUrl.isNotEmpty &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
       return CircleAvatar(
         radius: 28,
-        backgroundImage: NetworkImage(conversation.otherUserAvatar!),
+        backgroundImage: NetworkImage(avatarUrl),
         backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade200,
+        onBackgroundImageError: (e, s) {
+          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
+        },
       );
     }
 

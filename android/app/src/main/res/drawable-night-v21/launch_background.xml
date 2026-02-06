@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native splash screen for dark mode - shown immediately when app starts -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Dark background color -->
+    <item android:drawable="@color/splash_background" />
+
+    <!-- App logo centered -->
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center">
+        <bitmap android:src="@mipmap/ic_launcher" />
+    </item>
+</layer-list>

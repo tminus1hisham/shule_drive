@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart';
@@ -89,12 +90,43 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _loadData() async {
     final tripProvider = context.read<TripProvider>();
-    await tripProvider.fetchActiveTrip();
+    final authProvider = context.read<AuthProvider>();
+
+    // API requires guardianPhone parameter - pass if user has a phone
+    // (works for both guardians and drivers who have phone numbers)
+    final hasPhone =
+        authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+    final guardianPhone = hasPhone ? authProvider.userPhone : null;
+
+    if (kDebugMode) {
+      print('📱 Dashboard _loadData:');
+      print('  isGuardian: ${authProvider.isGuardian}');
+      print('  hasPhone: $hasPhone');
+      print('  userPhone: ${authProvider.userPhone}');
+      print('  guardianPhone param: $guardianPhone');
+    }
+
+    await tripProvider.fetchActiveTrip(guardianPhone: guardianPhone);
   }
 
   Future<void> _refresh() async {
     final tripProvider = context.read<TripProvider>();
-    await tripProvider.fetchActiveTrip();
+    final authProvider = context.read<AuthProvider>();
+
+    // API requires guardianPhone parameter - pass if user has a phone
+    final hasPhone =
+        authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+    final guardianPhone = hasPhone ? authProvider.userPhone : null;
+
+    if (kDebugMode) {
+      print('📱 Dashboard _refresh:');
+      print('  isGuardian: ${authProvider.isGuardian}');
+      print('  hasPhone: $hasPhone');
+      print('  userPhone: ${authProvider.userPhone}');
+      print('  guardianPhone param: $guardianPhone');
+    }
+
+    await tripProvider.fetchActiveTrip(guardianPhone: guardianPhone);
   }
 
   @override

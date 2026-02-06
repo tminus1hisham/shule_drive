@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/student.dart';
@@ -85,11 +86,7 @@ class StudentCard extends StatelessWidget {
                           width: 2,
                         ),
                       ),
-                      child: CircleAvatar(
-                        radius: 28,
-                        backgroundImage: NetworkImage(student.avatar),
-                        backgroundColor: Colors.grey[200],
-                      ),
+                      child: _buildAvatar(student.avatar),
                     ),
                     Positioned(
                       right: 0,
@@ -281,6 +278,36 @@ class StudentCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(String? avatarUrl) {
+    // Check if it's a valid network URL
+    if (avatarUrl != null &&
+        avatarUrl.isNotEmpty &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
+      return CircleAvatar(
+        radius: 28,
+        backgroundImage: NetworkImage(avatarUrl),
+        backgroundColor: Colors.grey[200],
+        onBackgroundImageError: (e, s) {
+          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
+        },
+      );
+    }
+
+    // Fallback to default avatar with initials
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+      child: Text(
+        student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF6B9B5B),
         ),
       ),
     );

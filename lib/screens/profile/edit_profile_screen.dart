@@ -43,6 +43,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      if (kDebugMode) {
+        print('📷 Picking image from: $source');
+      }
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         maxWidth: 800,
@@ -50,35 +54,59 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         imageQuality: 85,
       );
 
+      if (kDebugMode) {
+        print('📷 Picked file: ${pickedFile?.path}');
+      }
+
       if (pickedFile != null) {
         setState(() {
           _selectedImage = File(pickedFile.path);
         });
         // Automatically upload after selection
         await _uploadProfilePicture();
+      } else {
+        if (kDebugMode) print('❌ No file picked');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('❌ Error picking image: $e');
+        print(stackTrace);
+      }
       _showError('Failed to pick image: $e');
     }
   }
 
   Future<void> _uploadProfilePicture() async {
-    if (_selectedImage == null) return;
+    if (_selectedImage == null) {
+      if (kDebugMode) print('❌ No image selected');
+      return;
+    }
+
+    if (kDebugMode) {
+      print('📤 Starting upload from screen...');
+      print('  Image path: ${_selectedImage!.path}');
+    }
 
     final authProvider = context.read<AuthProvider>();
 
     // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
-      ),
-    );
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        ),
+      );
+    }
 
     final imageUrl = await authProvider.updateProfilePicture(
       _selectedImage!.path,
     );
+
+    if (kDebugMode) {
+      print('📤 Upload result: $imageUrl');
+    }
 
     if (!mounted) return;
     Navigator.pop(context); // Close loading
@@ -391,8 +419,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   /// Build avatar widget with proper image handling
   Widget _buildAvatar(String? avatarUrl) {
-    final provider = context.read<AppProvider>();
-
     // If we have a selected image file, show it
     if (_selectedImage != null) {
       return CircleAvatar(
