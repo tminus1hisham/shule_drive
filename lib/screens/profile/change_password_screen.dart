@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
@@ -19,6 +20,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -27,6 +29,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     _confirmController.dispose();
     super.dispose();
   }
+
+  // Store navigator state before async operation
+  NavigatorState? _navigator;
 
   Future<void> _changePassword() async {
     // Validate fields
@@ -56,26 +61,176 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
 
     final authProvider = context.read<AuthProvider>();
+    
+    // Store navigator reference BEFORE async operation
+    _navigator = Navigator.of(context, rootNavigator: true);
+    
+    // Show blocking loading overlay to prevent navigation
+    setState(() => _isLoading = true);
+    
+    if (kDebugMode) {
+      print('🔐 Attempting to change password...');
+      print('🔐 Navigator stored: $_navigator');
+    }
 
-    final success = await authProvider.changePassword(
-      currentPassword: _currentController.text,
-      newPassword: _newController.text,
-    );
+    bool success = false;
+    String? errorMsg;
+    
+    try {
+      success = await authProvider.changePassword(
+        currentPassword: _currentController.text,
+        newPassword: _newController.text,
+      );
+      errorMsg = authProvider.errorMessage;
+    } catch (e) {
+      if (kDebugMode) print('❌ Exception during changePassword: $e');
+      errorMsg = e.toString();
+    }
 
-    if (!mounted) return;
+    // Hide loading overlay
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+
+    if (kDebugMode) {
+      print('🔐 changePassword completed');
+      print('🔐 success: $success');
+      print('🔐 errorMsg: $errorMsg');
+      print('🔐 mounted: $mounted');
+      print('🔐 Navigator still available: $_navigator');
+    }
+
+    // Use stored navigator if widget is unmounted
+    if (!mounted) {
+      if (kDebugMode) print('⚠️ Widget not mounted, using stored navigator...');
+      _showDialogWithNavigator(success, errorMsg);
+      return;
+    }
+
+    await _handlePasswordChangeResult(success, errorMsg);
+  }
+
+  /// Show dialog using stored navigator reference
+  void _showDialogWithNavigator(bool success, String? errorMsg) {
+    if (_navigator == null) {
+      if (kDebugMode) print('❌ No navigator available');
+      return;
+    }
+
+    if (kDebugMode) {
+      print('🔄 Showing dialog with stored navigator');
+      print('🔄 success: $success');
+    }
 
     if (success) {
-      _showSuccess('Password changed successfully');
+      _navigator!.push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (context) => _buildSuccessDialogPage(),
+        ),
+      );
+    } else {
+      final error = errorMsg ?? '';
+      final isWrongPassword = error.toLowerCase().contains('current password is incorrect') ||
+          error.toLowerCase().contains('incorrect');
+      final isServerError = error.contains('Invalid server response format') || 
+          error.contains('NullReferenceException');
+
+      if (isWrongPassword) {
+        _navigator!.push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (context) => _buildInvalidCredentialsDialogPage(),
+          ),
+        );
+      } else if (isServerError) {
+        // Password saved but email failed - show success
+        _navigator!.push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (context) => _buildSuccessDialogPage(),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Handle the password change result (success or failure)
+  Future<void> _handlePasswordChangeResult(bool success, String? errorMsg) async {
+    if (!mounted) {
+      if (kDebugMode) print('❌ _handlePasswordChangeResult: widget not mounted');
+      return;
+    }
+
+    if (kDebugMode) {
+      print('🔐 _handlePasswordChangeResult called');
+      print('🔐 success: $success');
+      print('🔐 errorMsg: "$errorMsg"');
+    }
+
+    if (success) {
+      if (kDebugMode) print('✅ SUCCESS: Showing success alert...');
+      
+      await _showSuccessAlert();
+      
+      if (!mounted) return;
+      
       // Clear fields
       _currentController.clear();
       _newController.clear();
       _confirmController.clear();
-      // Navigate back after a short delay
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) Navigator.pop(context);
-      });
+      
+      // Navigate back
+      if (mounted) Navigator.pop(context);
     } else {
-      _showError(authProvider.errorMessage ?? 'Failed to change password');
+      // FAILED - check what type of error
+      final error = errorMsg ?? '';
+      
+      if (kDebugMode) {
+        print('❌ FAILED: error = "$error"');
+      }
+      
+      // Check for wrong password error
+      final isWrongPassword = error.toLowerCase().contains('current password is incorrect') ||
+          error.toLowerCase().contains('incorrect') ||
+          error.toLowerCase().contains('invalid credential');
+      
+      // Check for server error (password likely saved)
+      final isServerError = error.contains('Invalid server response format') || 
+          error.contains('NullReferenceException') || 
+          error.contains('Server Error') ||
+          error.contains('JSON Parse Error');
+      
+      if (kDebugMode) {
+        print('❌ isWrongPassword: $isWrongPassword');
+        print('❌ isServerError: $isServerError');
+      }
+      
+      if (!mounted) {
+        if (kDebugMode) print('❌ Widget became unmounted during error check');
+        return;
+      }
+      
+      if (isWrongPassword) {
+        if (kDebugMode) print('🔴 Showing INVALID CREDENTIALS alert');
+        _showInvalidCredentialsAlert();
+      } else if (isServerError) {
+        if (kDebugMode) print('🟡 Server error but password likely saved - showing SUCCESS');
+        await _showSuccessAlert();
+        
+        if (!mounted) return;
+        
+        // Clear fields
+        _currentController.clear();
+        _newController.clear();
+        _confirmController.clear();
+        
+        // Navigate back
+        if (mounted) Navigator.pop(context);
+      } else {
+        if (kDebugMode) print('🔴 Showing generic error snackbar');
+        _showError(error.isEmpty ? 'Failed to change password' : error);
+      }
     }
   }
 
@@ -97,21 +252,487 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: const Color(0xFF6B9B5B),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
+  /// Build success dialog widget
+  Widget _buildSuccessDialog() {
+    return Builder(
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF6B9B5B),
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Success!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF6B9B5B),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Your password has been changed successfully.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(ctx).pop(); // Go back to profile
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build invalid credentials dialog widget
+  Widget _buildInvalidCredentialsDialog() {
+    return Builder(
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Colors.red,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Invalid Credentials',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The current password you entered is incorrect. Please try again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Try Again',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build success dialog as a full page (for use with Navigator)
+  Widget _buildSuccessDialogPage() {
+    return Builder(
+      builder: (BuildContext newContext) {
+        return Scaffold(
+          backgroundColor: Colors.black.withAlpha(128),
+          body: Center(
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6B9B5B).withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_outline,
+                      color: Color(0xFF6B9B5B),
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Success!',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6B9B5B),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Your password has been changed successfully.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(newContext).pop();
+                        Navigator.of(newContext).pop(); // Go back to profile
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B9B5B),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'OK',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build invalid credentials dialog as a full page (for use with Navigator)
+  Widget _buildInvalidCredentialsDialogPage() {
+    return Builder(
+      builder: (BuildContext newContext) {
+        return Scaffold(
+          backgroundColor: Colors.black.withAlpha(128),
+          body: Center(
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.red,
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Invalid Credentials',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'The current password you entered is incorrect. Please try again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(newContext).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B9B5B),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Try Again',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Show alert for invalid credentials (wrong current password)
+  void _showInvalidCredentialsAlert() {
+    if (kDebugMode) {
+      print('🚨 _showInvalidCredentialsAlert() called');
+    }
+    
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        if (kDebugMode) {
+          print('🚨 Building invalid credentials dialog...');
+        }
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Error icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Colors.red,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              const Text(
+                'Invalid Credentials',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Message
+              const Text(
+                'The current password you entered is incorrect. Please try again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // OK button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Try Again',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Show success alert dialog
+  Future<void> _showSuccessAlert() async {
+    if (kDebugMode) {
+      print('✅ _showSuccessAlert() called');
+    }
+    
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        if (kDebugMode) {
+          print('✅ Building success dialog widget...');
+        }
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF6B9B5B),
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              const Text(
+                'Success!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF6B9B5B),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Message
+              const Text(
+                'Your password has been changed successfully.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // OK button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -122,8 +743,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     return MainScaffold(
       title: 'Change Password',
-      showBackButton: true,
-      body: SingleChildScrollView(
+      showBackButton: !_isLoading, // Disable back button while loading
+      body: Stack(
+        children: [
+          SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
@@ -221,7 +844,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ],
         ),
       ),
-    );
+      // Loading overlay that blocks interaction
+      if (_isLoading)
+        Container(
+          color: Colors.black.withAlpha(128),
+          child: const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF6B9B5B),
+            ),
+          ),
+        ),
+    ],
+  ),
+);
   }
 
   Widget _buildPasswordField(

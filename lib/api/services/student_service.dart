@@ -4,6 +4,7 @@ import '../api_exceptions.dart';
 import '../endpoints.dart';
 import '../../utils/buffer_manager.dart';
 import '../../services/token_storage.dart';
+import '../../models/guardian.dart';
 
 /// Student Service - Handles student/children-related API calls with fallback buffers
 class StudentService {
@@ -279,6 +280,73 @@ class StudentService {
   /// Clear all student-related buffers
   Future<void> clearStudentBuffers() async {
     await _buffer.clearCategory('students');
+  }
+
+  /// Get extended guardians for the current user
+  /// GET /api/guardians/get/extended/guardians
+  Future<List<Guardian>> getExtendedGuardians() async {
+    return _buffer.withBuffer<List<Guardian>>(
+      apiCall: () async {
+        final response = await _apiClient.get(Endpoints.getExtendedGuardians);
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> guardiansData;
+        if (response is List) {
+          guardiansData = response;
+        } else if (response is Map && response['data'] != null) {
+          guardiansData = response['data'] as List;
+        } else {
+          guardiansData = [];
+        }
+
+        final guardians = guardiansData
+            .map((guardian) => Guardian.fromJson(guardian))
+            .toList();
+        return guardians;
+      },
+      bufferKey: 'extended_guardians',
+      fallbackData: <Guardian>[],
+      cacheDuration: const Duration(minutes: 15),
+    );
+  }
+
+  /// Get all guardians for a specific student by student ID
+  /// This combines the primary guardian from student data with extended guardians
+  Future<List<Guardian>> getStudentGuardians(String studentId) async {
+    try {
+      // First get the student details to get the primary guardian
+      final student = await getStudentById(studentId);
+      
+      // Get extended guardians
+      final extendedGuardians = await getExtendedGuardians();
+      
+      // Create a list to hold all guardians
+      final List<Guardian> allGuardians = [];
+      
+      // Add primary guardian if available
+      if (student != null && 
+          (student.guardianName != null || student.guardianPhone != null)) {
+        allGuardians.add(
+          Guardian.fromStudentGuardian(
+            guardianId: student.guardianId,
+            guardianName: student.guardianName,
+            guardianPhone: student.guardianPhone,
+            isPrimary: true,
+          ),
+        );
+      }
+      
+      // Add extended guardians (filter by student ID if API supports it)
+      // Note: The API might return all extended guardians for the current user,
+      // so we might need to filter based on student relationship
+      allGuardians.addAll(extendedGuardians);
+      
+      return allGuardians;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: 'Failed to fetch student guardians: $e');
+    }
   }
 }
 

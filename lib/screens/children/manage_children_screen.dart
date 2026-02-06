@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -27,6 +29,29 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
     });
   }
 
+  void _handleNavigation(int index) {
+    if (index == _currentIndex) return; // Already on this tab
+    
+    switch (index) {
+      case 0:
+        // Home/Landing
+        Navigator.pushReplacementNamed(context, '/landing');
+        break;
+      case 1:
+        // Chat
+        Navigator.pushNamed(context, '/chat');
+        break;
+      case 2:
+        // Notifications
+        Navigator.pushNamed(context, '/notifications');
+        break;
+      case 3:
+        // Settings/Profile
+        Navigator.pushNamed(context, '/profile');
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -39,12 +64,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
       showBackButton: true,
       showBottomNav: true,
       bottomNavIndex: _currentIndex,
-      onBottomNavTap: (index) {
-        setState(() => _currentIndex = index);
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
-        }
-      },
+      onBottomNavTap: _handleNavigation,
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddChildDialog(context),
         backgroundColor: const Color(0xFF6B9B5B),
@@ -441,17 +461,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // TODO: Implement phone call functionality
-                  // url_launcher can be used: launchUrl(Uri.parse('tel:${child.guardianPhone}'))
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Calling ${child.guardianPhone}...'),
-                      backgroundColor: const Color(0xFF6B9B5B),
-                    ),
-                  );
-                },
+                onPressed: () => _callGuardian(child.guardianPhone!),
                 icon: const Icon(Icons.call),
                 label: const Text('Call Guardian'),
                 style: ElevatedButton.styleFrom(
@@ -472,6 +482,70 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
         ),
       ),
     );
+  }
+
+  /// Call guardian using device's phone app
+  Future<void> _callGuardian(String phone) async {
+    if (kDebugMode) {
+      print('📞 Attempting to call guardian: $phone');
+    }
+
+    // Clean up the phone number (remove spaces, dashes, parentheses, etc.)
+    final cleanPhone = phone.replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
+    
+    // Ensure phone starts with + for international format, or add country code if needed
+    final formattedPhone = cleanPhone.startsWith('+') 
+        ? cleanPhone 
+        : (cleanPhone.startsWith('0') 
+            ? '+254${cleanPhone.substring(1)}'  // Convert 0... to +254... for Kenya
+            : (cleanPhone.startsWith('254') 
+                ? '+$cleanPhone' 
+                : '+254$cleanPhone'));
+    
+    // Create tel: URI
+    final uri = Uri(scheme: 'tel', path: formattedPhone);
+    
+    if (kDebugMode) {
+      print('📞 Formatted phone: $formattedPhone');
+      print('📞 Launch URI: $uri');
+    }
+    
+    try {
+      // Try to launch directly without canLaunchUrl check
+      // On Android 11+, canLaunchUrl may return false even when dialer is available
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      
+      if (!launched && mounted) {
+        // If external application mode fails, try platform default
+        final fallbackLaunched = await launchUrl(uri);
+        
+        if (!fallbackLaunched && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not open phone dialer. Please check your phone app.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error launching phone dialer: $e');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening dialer: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showAddChildDialog(BuildContext context) {
