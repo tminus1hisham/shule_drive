@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../mqtt_service.dart';
+import '../../mqtt_client.dart';
 
 /// MQTT Notification Backend
 /// 

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_message.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -26,7 +27,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  ChatProvider? _chatProvider;
   bool _isInitializing = true;
   String? _initError;
   bool _showScrollToBottom = false;
@@ -34,8 +34,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeChat();
     _scrollController.addListener(_onScroll);
+    // Defer initialization until after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeChat());
   }
 
   void _onScroll() {
@@ -51,12 +52,32 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeChat() async {
-    try {
-      final receiverId = widget.receiverId ?? 'user2';
-      final currentUserId = 'user1';
+    if (widget.receiverId == null) {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _initError = 'Invalid user selected';
+        });
+      }
+      return;
+    }
 
-      _chatProvider = ChatProvider();
-      await _chatProvider!.initialize(currentUserId, receiverId);
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final currentUserId = authProvider.userId;
+      
+      if (currentUserId == null) {
+        if (mounted) {
+          setState(() {
+            _isInitializing = false;
+            _initError = 'Not authenticated';
+          });
+        }
+        return;
+      }
+
+      final chatProvider = context.read<ChatProvider>();
+      await chatProvider.initialize(currentUserId, widget.receiverId!);
 
       if (mounted) {
         setState(() => _isInitializing = false);
@@ -86,13 +107,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (_chatProvider == null) return;
+    final chatProvider = context.read<ChatProvider>();
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
 
     _messageController.clear();
     HapticFeedback.lightImpact();
-    await _chatProvider!.sendMessage(content);
+    await chatProvider.sendMessage(content);
     _scrollToBottom();
   }
 
@@ -100,7 +121,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _chatProvider?.dispose();
     super.dispose();
   }
 
@@ -118,47 +138,45 @@ class _ChatScreenState extends State<ChatScreen> {
       return _buildErrorScreen(isDarkMode, receiverName);
     }
 
-    return ChangeNotifierProvider<ChatProvider>.value(
-      value: _chatProvider!,
-      child: MainScaffold(
-        title: receiverName,
-        showBackButton: true,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: Image.asset(
-                isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: isDarkMode ? const Color(0xFF121212) : const Color(0xFFE8E8E8),
-                ),
+    return MainScaffold(
+      title: receiverName,
+      showBackButton: true,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                color: isDarkMode ? const Color(0xFF121212) : const Color(0xFFE8E8E8),
               ),
             ),
-            Column(
-              children: [
-                _buildErrorBanner(),
-                Expanded(
-                  child: _buildMessagesList(isDarkMode),
-                ),
-                _buildMessageInput(isDarkMode),
-              ],
-            ),
-            if (_showScrollToBottom)
-              Positioned(
-                right: 16,
-                bottom: 100,
-                child: _buildScrollToBottomButton(isDarkMode),
+          ),
+          Column(
+            children: [
+              _buildErrorBanner(),
+              Expanded(
+                child: _buildMessagesList(isDarkMode),
               ),
-          ],
-        ),
+              _buildMessageInput(isDarkMode),
+            ],
+          ),
+          if (_showScrollToBottom)
+            Positioned(
+              right: 16,
+              bottom: 100,
+              child: _buildScrollToBottomButton(isDarkMode),
+            ),
+        ],
       ),
     );
   }
 
   Widget _buildMessagesList(bool isDarkMode) {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, child) {
+    return Consumer2<ChatProvider, AuthProvider>(
+      builder: (context, chatProvider, authProvider, child) {
         final messages = chatProvider.messages;
+        final currentUserId = authProvider.userId ?? '';
 
         if (messages.isEmpty) {
           return _buildEmptyState(isDarkMode);
@@ -176,7 +194,7 @@ class _ChatScreenState extends State<ChatScreen> {
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final message = messages[index];
-            final isMe = message.senderId == 'user1';
+            final isMe = message.senderId == currentUserId;
             final showDate = index == 0 || !_isSameDay(messages[index - 1].timestamp, message.timestamp);
 
             return Column(

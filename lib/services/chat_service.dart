@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
-import 'mqtt_service.dart';
+import '../mqtt_client.dart';
 import 'secure_token_storage.dart';
 
 /// Chat Service - Real-time messaging using MQTT

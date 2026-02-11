@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../api/api.dart' as api;
-import '../services/mqtt_service.dart';
+import '../mqtt_client.dart';
 import '../utils/notification_helper.dart';
 
 /// Trip States

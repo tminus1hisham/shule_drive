@@ -6,10 +6,12 @@ import '../api/endpoints.dart';
 import '../models/chat_conversation.dart';
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
+import '../services/secure_token_storage.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
   final ApiClient _apiClient = ApiClient();
+  final SecureTokenStorage _tokenStorage = SecureTokenStorage();
 
   // Messages for current chat
   final List<ChatMessage> _messages = [];
@@ -52,7 +54,7 @@ class ChatProvider extends ChangeNotifier {
 
   /// Fetch all conversations for the current user
   // Set to false when ready to use real API
-  static const bool _useMockData = true;
+  static const bool _useMockData = false;
 
   Future<List<ChatConversation>> getConversations({bool forceRefresh = false}) async {
     if (!forceRefresh && _conversations.isNotEmpty) {
@@ -69,8 +71,21 @@ class ChatProvider extends ChangeNotifier {
       _conversations = _getMockConversations();
     } else {
       try {
-        // Try to fetch from API
-        final response = await _apiClient.get(Endpoints.getChats);
+        // Get current user ID
+        final currentUserId = await _tokenStorage.getUserId();
+        if (currentUserId == null) {
+          _conversationsError = 'Not authenticated';
+          _isLoadingConversations = false;
+          notifyListeners();
+          return _conversations;
+        }
+
+        // Try to fetch from API with senderId
+        final url = Endpoints.buildUrl(
+          Endpoints.getChats,
+          queryParams: {'senderId': currentUserId},
+        );
+        final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
         
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -125,8 +140,21 @@ class ChatProvider extends ChangeNotifier {
       _availableUsers = _getMockUsers();
     } else {
       try {
-        // Try to fetch from API
-        final response = await _apiClient.get(Endpoints.getChatContacts);
+        // Get current user ID
+        final currentUserId = await _tokenStorage.getUserId();
+        if (currentUserId == null) {
+          _usersError = 'Not authenticated';
+          _isLoadingUsers = false;
+          notifyListeners();
+          return _availableUsers;
+        }
+
+        // Try to fetch from API with senderId
+        final url = Endpoints.buildUrl(
+          Endpoints.getChatContacts,
+          queryParams: {'senderId': currentUserId},
+        );
+        final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
         
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
