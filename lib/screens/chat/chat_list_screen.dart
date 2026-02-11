@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_conversation.dart';
+import '../../mqtt_client.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
@@ -38,10 +39,25 @@ class _ChatListScreenState extends State<ChatListScreen>
     
     _loadConversations();
     
+    // Auto-connect to MQTT when chat page opens
+    _connectMqtt();
+    
     // Auto-refresh every 30 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _loadConversations(silent: true);
     });
+  }
+
+  Future<void> _connectMqtt() async {
+    try {
+      final mqtt = MqttService();
+      if (!mqtt.isConnected) {
+        await mqtt.connect();
+      }
+    } catch (e) {
+      // Silently log error - don't show to user
+      print('⚠️ MQTT auto-connect failed: $e');
+    }
   }
 
   @override

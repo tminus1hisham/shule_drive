@@ -51,13 +51,22 @@ class MqttService {
 
   /// Initialize and connect to MQTT broker
   Future<void> connect() async {
-    if (_isConnected) return;
+    if (_isConnected) {
+      print('ℹ️ MQTT already connected');
+      return;
+    }
+
+    print('🔄 Connecting to MQTT broker...');
 
     try {
       final userId = await _tokenStorage.getUserId();
       final token = await _tokenStorage.getAccessToken();
 
+      print('   ├─ User ID: ${userId ?? "NOT FOUND"}');
+      print('   ├─ Token: ${token != null ? "${token.substring(0, min(20, token.length))}..." : "NOT FOUND"}');
+
       if (userId == null || token == null) {
+        print('   └─ ❌ Missing credentials - cannot connect');
         throw UnauthorizedException(message: 'No authentication credentials');
       }
 
@@ -95,9 +104,13 @@ class MqttService {
         'timestamp': DateTime.now().toIso8601String(),
       }), retain: true);
 
+      print('✅ MQTT setup complete - listening for messages');
+
     } on SocketException catch (e) {
+      print('❌ MQTT CONNECTION FAILED: Network error - $e');
       throw NetworkException();
     } catch (e) {
+      print('❌ MQTT CONNECTION FAILED: $e');
       throw ApiException(message: 'MQTT connection failed: $e');
     }
   }
@@ -190,11 +203,15 @@ class MqttService {
     _isConnected = true;
     _reconnectTimer?.cancel();
     _connectionController.add(true);
-    print('Connected to MQTT broker');
+    print('✅ MQTT CONNECTION SUCCESSFUL');
+    print('   ├─ Broker: ${_client.server}');
+    print('   ├─ Client ID: ${_client.clientIdentifier}');
+    print('   ├─ Connected at: ${DateTime.now().toIso8601String()}');
+    print('   └─ Status: Online');
   }
 
   void _onDisconnected() {
-    print('Disconnected from MQTT broker');
+    print('⚠️ MQTT DISCONNECTED from broker');
     _isConnected = false;
     _connectionController.add(false);
     _scheduleReconnect();
