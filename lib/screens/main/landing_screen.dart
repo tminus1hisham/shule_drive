@@ -419,9 +419,9 @@ class _LandingScreenState extends State<LandingScreen> {
         'route': '/routes',
       },
       {
-        'icon': Icons.history,
-        'title': 'History',
-        'subtitle': 'Trip history',
+        'icon': Icons.local_shipping,
+        'title': 'My Trips',
+        'subtitle': 'Track active trips',
         'color': const Color(0xFFFF9800),
         'route': '/trips',
       },

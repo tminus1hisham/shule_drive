@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/trip_provider.dart';
+import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
 class SelectStudentsScreen extends StatefulWidget {
@@ -19,12 +22,29 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   List<api.Student> _filteredStudents = [];
   List<api.Student> _selectedStudents = [];
   bool _isLoading = true;
+  bool _isStartingTrip = false;
+  
+  // Trip configuration from previous screen
+  String? _routeId;
+  String? _vehicleId;
+  String? _attendant;
 
   @override
   void initState() {
     super.initState();
-    // Fetch students when screen loads
+    // Get arguments from previous screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null) {
+        setState(() {
+          _routeId = args['routeId'] as String?;
+          _vehicleId = args['vehicleId'] as String?;
+          _attendant = args['attendant'] as String?;
+        });
+        if (kDebugMode) {
+          print('📋 Trip Config: routeId=$_routeId, vehicleId=$_vehicleId, attendant=$_attendant');
+        }
+      }
       _loadStudents();
     });
     _searchController.addListener(_filterStudents);
@@ -78,6 +98,89 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   bool _isSelected(api.Student student) {
     return _selectedStudents.any((s) => s.id == student.id);
+  }
+
+  Future<void> _startTrip() async {
+    if (_routeId == null || _vehicleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Missing route or vehicle information'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isStartingTrip = true);
+
+    try {
+      final tripProvider = context.read<TripProvider>();
+      final authProvider = context.read<AuthProvider>();
+      
+      // Get selected student IDs
+      final studentIds = _selectedStudents.map((s) => s.id).toList();
+      
+      if (kDebugMode) {
+        print('🚀 Starting trip...');
+        print('   ├─ Route ID: $_routeId');
+        print('   ├─ Vehicle ID: $_vehicleId');
+        print('   ├─ Students: ${studentIds.length}');
+        print('   └─ Driver: ${authProvider.userData?['name'] ?? 'Unknown'}');
+      }
+
+      // Call API to start trip
+      final trip = await tripProvider.startTrip(
+        routeId: _routeId!,
+        vehicleId: _vehicleId!,
+        studentIds: studentIds,
+      );
+
+      if (trip != null && mounted) {
+        // Save trip to local history (for driver)
+        if (authProvider.isDriver) {
+          await TripHistoryService().saveTripToHistory(
+            trip: trip,
+            driverId: authProvider.userData?['id'] ?? '',
+            driverName: authProvider.userData?['name'] ?? '',
+            attendantName: _attendant,
+          );
+          
+          if (kDebugMode) {
+            print('✅ Trip saved to driver history');
+          }
+        }
+
+        // Navigate to active trip screen
+        Navigator.pushReplacementNamed(
+          context,
+          '/active-trip',
+          arguments: {'tripId': trip.id},
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tripProvider.errorMessage ?? 'Failed to start trip'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error starting trip: $e');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting trip: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingTrip = false);
+      }
+    }
   }
 
   @override
@@ -226,8 +329,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _selectedStudents.isNotEmpty
-                      ? () => Navigator.pushNamed(context, '/active-trip')
+                  onPressed: _selectedStudents.isNotEmpty && !_isStartingTrip
+                      ? () => _startTrip()
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppProvider.primaryGreen,
@@ -240,13 +343,22 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                         ? Colors.grey[800]
                         : const Color(0xFFE0E0E0),
                   ),
-                  child: Text(
-                    'Start Trip (${_selectedStudents.length})',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: _isStartingTrip
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          'Start Trip (${_selectedStudents.length})',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ),

@@ -725,7 +725,15 @@ class _StartTripScreenState extends State<StartTripScreen>
             onPressed: _canStartTrip
                 ? () {
                     HapticFeedback.mediumImpact();
-                    Navigator.pushNamed(context, '/select-students');
+                    Navigator.pushNamed(
+                      context,
+                      '/select-students',
+                      arguments: {
+                        'routeId': _selectedRoute,
+                        'vehicleId': _selectedVehicle,
+                        'attendant': _selectedAttendant,
+                      },
+                    );
                   }
                 : null,
             style: ElevatedButton.styleFrom(

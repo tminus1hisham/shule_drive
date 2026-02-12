@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../api/api.dart' as api;
-import '../../api/services/trip_service.dart';
-import '../../providers/app_provider.dart';
-import '../../widgets/main_scaffold.dart';
 
+import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/trip_history_service.dart';
+import '../../widgets/main_scaffold.dart';
+import 'guardian_trips_screen.dart';
+
+/// Trips Screen - Shows trip history for DRIVERS
+/// Shows ACTIVE trips for GUARDIANS (involving their students)
 class TripsScreen extends StatefulWidget {
   const TripsScreen({super.key});
 
@@ -14,8 +18,10 @@ class TripsScreen extends StatefulWidget {
 
 class _TripsScreenState extends State<TripsScreen> {
   int _currentIndex = 3;
-  final TripService _tripService = TripService();
-  List<api.Trip> _trips = [];
+  final TripHistoryService _historyService = TripHistoryService();
+  
+  List<TripHistory> _trips = [];
+  DriverStats _stats = DriverStats.empty();
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -32,25 +38,25 @@ class _TripsScreenState extends State<TripsScreen> {
     });
 
     try {
-      final trips = await _tripService.getTrips();
+      final authProvider = context.read<AuthProvider>();
+      final driverId = authProvider.userData?['id'] ?? '';
+      
+      if (driverId.isEmpty) {
+        setState(() {
+          _errorMessage = 'Driver ID not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Load from local storage
+      final trips = await _historyService.getTripHistory(driverId);
+      final stats = await _historyService.getDriverStats(driverId);
+
       if (mounted) {
         setState(() {
           _trips = trips;
-          _isLoading = false;
-        });
-      }
-    } on api.NotFoundException catch (e) {
-      // Endpoint not found - show empty state instead of error
-      if (mounted) {
-        setState(() {
-          _trips = [];
-          _isLoading = false;
-        });
-      }
-    } on api.ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.message;
+          _stats = stats;
           _isLoading = false;
         });
       }
@@ -82,6 +88,12 @@ class _TripsScreenState extends State<TripsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final authProvider = context.watch<AuthProvider>();
+
+    // For guardians, show the GuardianTripsScreen (active trips view)
+    if (!authProvider.isDriver) {
+      return const GuardianTripsScreen();
+    }
 
     return MainScaffold(
       title: 'Trip History',
@@ -113,92 +125,274 @@ class _TripsScreenState extends State<TripsScreen> {
 
     // Show error
     if (_errorMessage != null && _trips.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: provider.textMutedColor,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading trips',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage!,
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loadTrips,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return _buildErrorState(provider);
     }
 
-    // Show empty state
-    if (_trips.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.history,
-              size: 80,
-              color: provider.textMutedColor.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No trips yet',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start a new trip to see it here',
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-              ),
-            ),
-          ],
+    return CustomScrollView(
+      slivers: [
+        // Stats Card
+        SliverToBoxAdapter(
+          child: _buildStatsCard(provider),
         ),
-      );
-    }
-
-    // Show trips list
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _trips.length,
-      itemBuilder: (context, index) {
-        final trip = _trips[index];
-        return _buildTripCard(context, provider, trip);
-      },
+        
+        // Section Title
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Trips',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: provider.textColor,
+                  ),
+                ),
+                if (_trips.isNotEmpty)
+                  Text(
+                    '${_trips.length} trips',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: provider.textMutedColor,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        
+        // Empty State
+        if (_trips.isEmpty)
+          SliverFillRemaining(
+            child: _buildEmptyState(provider),
+          )
+        else
+          // Trips List
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _buildTripCard(context, provider, _trips[index]),
+                childCount: _trips.length,
+              ),
+            ),
+          ),
+        
+        const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+      ],
     );
   }
 
-  Widget _buildTripCard(BuildContext context, AppProvider provider, api.Trip trip) {
+  Widget _buildStatsCard(AppProvider provider) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6B9B5B).withAlpha(100),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Stats',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(30),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Driver',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _buildStatItem('Trips', _stats.totalTrips.toString(), Icons.route),
+              _buildStatDivider(),
+              _buildStatItem('Students', _stats.totalStudents.toString(), Icons.people),
+              _buildStatDivider(),
+              _buildStatItem(
+                'Picked',
+                '${_stats.completionRate.toStringAsFixed(0)}%',
+                Icons.check_circle,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white70, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withAlpha(180),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatDivider() {
+    return Container(
+      width: 1,
+      height: 50,
+      color: Colors.white.withAlpha(30),
+    );
+  }
+
+  Widget _buildErrorState(AppProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: provider.textMutedColor,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Error loading trips',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: provider.textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _errorMessage!,
+            style: TextStyle(
+              fontSize: 14,
+              color: provider.textMutedColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: _loadTrips,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B9B5B),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(AppProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6B9B5B).withAlpha(20),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.local_shipping_outlined,
+              size: 60,
+              color: provider.textMutedColor,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'No trips yet',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: provider.textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start a new trip to see it here',
+            style: TextStyle(
+              fontSize: 14,
+              color: provider.textMutedColor,
+            ),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: 200,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/start-trip'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6B9B5B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Start New Trip',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTripCard(BuildContext context, AppProvider provider, TripHistory history) {
+    final trip = history.trip;
     final isCompleted = trip.isCompleted;
     final statusText = isCompleted ? 'Completed' : 'Active';
     final statusColor = isCompleted
@@ -206,7 +400,11 @@ class _TripsScreenState extends State<TripsScreen> {
         : const Color(0xFFFF9800);
 
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/trip-details'),
+      onTap: () => Navigator.pushNamed(
+        context,
+        '/trip-details',
+        arguments: {'tripId': trip.id, 'history': history},
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -215,7 +413,7 @@ class _TripsScreenState extends State<TripsScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: provider.isDarkMode ? 0.2 : 0.05),
+              color: Colors.black.withAlpha(provider.isDarkMode ? 51 : 13),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -231,7 +429,7 @@ class _TripsScreenState extends State<TripsScreen> {
                   child: Text(
                     trip.routeName,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: provider.textColor,
                     ),
@@ -243,7 +441,7 @@ class _TripsScreenState extends State<TripsScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: provider.isDarkMode ? 0.2 : 0.1),
+                    color: statusColor.withAlpha(provider.isDarkMode ? 51 : 26),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -300,16 +498,16 @@ class _TripsScreenState extends State<TripsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildStatItem(
+                _buildTripStatItem(
                   provider,
                   Icons.people_outline,
                   '${trip.pickedCount}/${trip.students.length} students',
                 ),
-                if (trip.distance != null)
-                  _buildStatItem(
+                if (history.attendantName != null)
+                  _buildTripStatItem(
                     provider,
-                    Icons.route_outlined,
-                    '${trip.distance!.toStringAsFixed(1)} km',
+                    Icons.person_outline,
+                    'Att: ${history.attendantName}',
                   ),
               ],
             ),
@@ -339,15 +537,13 @@ class _TripsScreenState extends State<TripsScreen> {
     );
   }
 
-  Widget _buildStatItem(AppProvider provider, IconData icon, String text) {
+  Widget _buildTripStatItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
         Icon(
           icon,
           size: 16,
-          color: provider.isDarkMode
-              ? const Color(0xFF8BC48B)
-              : const Color(0xFF6B9B5B),
+          color: const Color(0xFF6B9B5B),
         ),
         const SizedBox(width: 6),
         Text(

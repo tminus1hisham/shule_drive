@@ -45,9 +45,9 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final authProvider = context.watch<AuthProvider>();
     final isDarkMode = provider.isDarkMode;
-    // ignore: unused_local_variable
-    final userData = provider.userData;
+    final isDriver = authProvider.isDriver;
 
     return Drawer(
       backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
@@ -78,10 +78,10 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
 
                       const SizedBox(height: 8),
 
-                      // Trips
+                      // Trips - Different views for drivers vs guardians
                       _buildMenuItem(
                         Icons.directions_bus_outlined,
-                        'Trips',
+                        isDriver ? 'Trip History' : 'My Trips',
                         () => _navigateTo(context, '/trips'),
                         isDarkMode: isDarkMode,
                       ),

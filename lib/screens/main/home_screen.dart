@@ -104,13 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
             
             // Quick Actions
             SliverToBoxAdapter(
-              child: _buildQuickActions(context, isDarkMode),
+              child: _buildQuickActions(context, isDarkMode, authProvider.isDriver),
             ),
             
-            // Recent Activity
-            SliverToBoxAdapter(
-              child: _buildRecentActivity(context, provider, isDarkMode),
-            ),
+            // Recent Activity - Only for drivers
+            if (authProvider.isDriver)
+              SliverToBoxAdapter(
+                child: _buildRecentActivity(context, provider, isDarkMode),
+              ),
             
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
@@ -527,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, bool isDarkMode) {
+  Widget _buildQuickActions(BuildContext context, bool isDarkMode, bool isDriver) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -544,22 +545,32 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.add_circle_outline,
-                  label: 'Start Trip',
-                  color: const Color(0xFF6B9B5B),
-                  onTap: () => Navigator.pushNamed(context, '/start-trip'),
-                  isDarkMode: isDarkMode,
+              if (isDriver)
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.add_circle_outline,
+                    label: 'Start Trip',
+                    color: const Color(0xFF6B9B5B),
+                    onTap: () => Navigator.pushNamed(context, '/start-trip'),
+                    isDarkMode: isDarkMode,
+                  ),
+                )
+              else
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.child_care,
+                    label: 'My Children',
+                    color: const Color(0xFF2196F3),
+                    onTap: () => Navigator.pushNamed(context, '/manage-children'),
+                    isDarkMode: isDarkMode,
+                  ),
                 ),
-              ),
               const SizedBox(width: 12),
               Expanded(
                 child: _buildQuickActionCard(
                   icon: Icons.map,
                   label: 'Live Track',
                   color: const Color(0xFFFF9800),
-                  // Temporarily using OSM directly (free, no API key needed)
                   onTap: () => Navigator.pushNamed(
                     context,
                     '/osm-tracking',
@@ -572,16 +583,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   isDarkMode: isDarkMode,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.history,
-                  label: 'History',
-                  color: const Color(0xFF2196F3),
-                  onTap: () => Navigator.pushNamed(context, '/trips'),
-                  isDarkMode: isDarkMode,
+              if (isDriver) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.history,
+                    label: 'History',
+                    color: const Color(0xFF2196F3),
+                    onTap: () => Navigator.pushNamed(context, '/trips'),
+                    isDarkMode: isDarkMode,
+                  ),
                 ),
-              ),
+              ] else ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.local_shipping,
+                    label: 'My Trips',
+                    color: const Color(0xFF2196F3),
+                    onTap: () => Navigator.pushNamed(context, '/trips'),
+                    isDarkMode: isDarkMode,
+                  ),
+                ),
+              ],
             ],
           ),
         ],

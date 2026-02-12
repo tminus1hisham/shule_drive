@@ -1102,8 +1102,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: _buildQuickActionCard(
-                  icon: Icons.history,
-                  label: 'History',
+                  icon: isDriver ? Icons.history : Icons.local_shipping,
+                  label: isDriver ? 'History' : 'My Trips',
                   color: const Color(0xFF9C27B0),
                   onTap: () => Navigator.pushNamed(context, '/trips'),
                   isDarkMode: isDarkMode,
