@@ -65,27 +65,60 @@ class _StartTripScreenState extends State<StartTripScreen>
     setState(() => _isLoading = true);
 
     final provider = context.read<AppProvider>();
+    final authProvider = context.read<AuthProvider>();
 
     if (kDebugMode) {
-      print('🚀 StartTripScreen: Loading data from API...');
+      print('🚀 StartTripScreen: Loading school-scoped data...');
     }
 
     try {
-      // Fetch all routes and buses from API
-      await Future.wait([
-        provider.fetchRoutes(), // GET /api/routes/get/all
-        provider.fetchBuses(), // GET /api/buses/get/all
-      ]);
+      // Get driver's school ID from their profile
+      var user = authProvider.currentUser;
+      var schoolId = user?.schoolId;
+      
+      // If schoolId is missing, try to refresh user data from API
+      if (schoolId == null || schoolId.isEmpty) {
+        if (kDebugMode) {
+          print('🔄 StartTripScreen: School ID missing, refreshing user data...');
+        }
+        await authProvider.refreshUserData();
+        user = authProvider.currentUser;
+        schoolId = user?.schoolId;
+      }
+      
+      if (kDebugMode) {
+        print('👤 Current user: ${user?.name}, ID: ${user?.id}');
+        print('🏫 School ID from user: $schoolId');
+        print('🏫 School name from user: ${user?.schoolName}');
+      }
+      
+      if (schoolId == null || schoolId.isEmpty) {
+        if (kDebugMode) {
+          print('⚠️ StartTripScreen: No school ID found for driver');
+          print('   Falling back to non-scoped data (showing all schools)');
+        }
+        // Fallback to non-scoped data for backward compatibility
+        await Future.wait([
+          provider.fetchRoutes(),
+          provider.fetchBuses(),
+        ]);
+      } else {
+        if (kDebugMode) {
+          print('🏫 StartTripScreen: Loading data for school $schoolId');
+        }
+        // Fetch school-scoped data (pass school name for route filtering fallback)
+        await provider.fetchAllSchoolData(schoolId, schoolName: user?.schoolName);
+      }
 
       if (kDebugMode) {
         print('✅ StartTripScreen: Data loaded successfully');
         print('📍 Routes: ${provider.routes.length}');
         print('🚌 Buses: ${provider.buses.length}');
         for (final route in provider.routes) {
-          print('  - Route: ${route.name} (ID: ${route.id})');
+          print('  - Route: ${route.name} (ID: ${route.id}, School: ${route.schoolId})');
         }
         for (final bus in provider.buses) {
-          print('  - Bus: ${bus.registrationNumber} (ID: ${bus.id})');
+          print('  - Bus: ${bus.registrationNumber} (ID: ${bus.id}, School: ${bus.schoolId})');
         }
       }
     } catch (e) {

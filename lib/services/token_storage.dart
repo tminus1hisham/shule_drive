@@ -26,6 +26,8 @@ class TokenStorage {
   static const String _userRoleKey = 'user_role';
   static const String _userEmailKey = 'user_email';
   static const String _userAvatarKey = 'user_avatar';
+  static const String _userSchoolIdKey = 'user_school_id';
+  static const String _userSchoolNameKey = 'user_school_name';
 
   /// Initialize storage (call this before using other methods)
   Future<void> init() async {
@@ -81,6 +83,8 @@ class TokenStorage {
     required String role,
     String? email,
     String? avatar,
+    String? schoolId,
+    String? schoolName,
   }) async {
     if (_isWeb) {
       await _prefs?.setString(_userIdKey, userId);
@@ -93,6 +97,12 @@ class TokenStorage {
       if (avatar != null) {
         await _prefs?.setString(_userAvatarKey, avatar);
       }
+      if (schoolId != null) {
+        await _prefs?.setString(_userSchoolIdKey, schoolId);
+      }
+      if (schoolName != null) {
+        await _prefs?.setString(_userSchoolNameKey, schoolName);
+      }
     } else {
       await _secureStorage.saveUserData(
         userId: userId,
@@ -101,6 +111,8 @@ class TokenStorage {
         role: role,
         email: email,
         avatar: avatar,
+        schoolId: schoolId,
+        schoolName: schoolName,
       );
     }
   }
@@ -159,6 +171,24 @@ class TokenStorage {
     }
   }
 
+  /// Get user school ID
+  Future<String?> getUserSchoolId() async {
+    if (_isWeb) {
+      return _prefs?.getString(_userSchoolIdKey);
+    } else {
+      return await _secureStorage.getUserSchoolId();
+    }
+  }
+
+  /// Get user school name
+  Future<String?> getUserSchoolName() async {
+    if (_isWeb) {
+      return _prefs?.getString(_userSchoolNameKey);
+    } else {
+      return await _secureStorage.getUserSchoolName();
+    }
+  }
+
   /// Get all user data as a map (for fast cached access)
   Future<Map<String, String>?> getUserData() async {
     final userId = await getUserId();
@@ -171,6 +201,8 @@ class TokenStorage {
       'role': await getUserRole() ?? 'unknown',
       'email': await getUserEmail() ?? '',
       'avatar': await getUserAvatar() ?? '',
+      'schoolId': await getUserSchoolId() ?? '',
+      'schoolName': await getUserSchoolName() ?? '',
     };
   }
 

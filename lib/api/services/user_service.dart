@@ -214,6 +214,8 @@ class UserProfile {
   final String role;
   final String? licenseNumber;
   final String? vehicleNumber;
+  final String? schoolId;
+  final String? schoolName;
   final Vehicle? vehicle;
   final Stats stats;
   final DateTime createdAt;
@@ -228,6 +230,8 @@ class UserProfile {
     required this.role,
     this.licenseNumber,
     this.vehicleNumber,
+    this.schoolId,
+    this.schoolName,
     this.vehicle,
     required this.stats,
     required this.createdAt,
@@ -244,6 +248,8 @@ class UserProfile {
       role: json['role'] ?? 'unknown',
       licenseNumber: json['license_number'] ?? json['licenseNumber'],
       vehicleNumber: json['vehicle_number'] ?? json['vehicleNumber'],
+      schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'],
+      schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'],
       vehicle: json['vehicle'] != null 
           ? Vehicle.fromJson(json['vehicle']) 
           : null,
@@ -265,6 +271,8 @@ class UserProfile {
       'role': role,
       'license_number': licenseNumber,
       'vehicle_number': vehicleNumber,
+      'school_id': schoolId,
+      'school_name': schoolName,
       'vehicle': vehicle?.toJson(),
       'stats': stats.toJson(),
       'created_at': createdAt.toIso8601String(),

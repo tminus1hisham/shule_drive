@@ -277,6 +277,40 @@ class StudentService {
     );
   }
 
+  /// Get students by school ID
+  /// Filters students by the school ID to ensure school-scoped data
+  Future<List<Student>> getStudentsBySchool(String schoolId) async {
+    return _buffer.withBuffer<List<Student>>(
+      apiCall: () async {
+        // Get all students and filter by school
+        final response = await _apiClient.get(
+          Endpoints.students,
+          queryParams: {'school_id': schoolId},
+        );
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> studentsData;
+        if (response is List) {
+          studentsData = response;
+        } else if (response is Map && response['data'] != null) {
+          studentsData = response['data'] as List;
+        } else {
+          studentsData = [];
+        }
+
+        final students = studentsData
+            .map((student) => Student.fromJson(student))
+            .where((s) => s.schoolId == schoolId)
+            .toList();
+
+        return students;
+      },
+      bufferKey: '${BufferKeys.students()}_school_$schoolId',
+      fallbackData: <Student>[],
+      cacheDuration: const Duration(minutes: 15),
+    );
+  }
+
   /// Clear all student-related buffers
   Future<void> clearStudentBuffers() async {
     await _buffer.clearCategory('students');

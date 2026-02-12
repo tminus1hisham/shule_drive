@@ -29,6 +29,8 @@ class SecureTokenStorage {
   static const String _userRoleKey = 'user_role';
   static const String _userEmailKey = 'user_email';
   static const String _userAvatarKey = 'user_avatar';
+  static const String _userSchoolIdKey = 'user_school_id';
+  static const String _userSchoolNameKey = 'user_school_name';
   static const String _mqttSessionIdKey = 'mqtt_session_id';
 
   /// Save auth tokens securely
@@ -69,6 +71,8 @@ class SecureTokenStorage {
     required String role,
     String? email,
     String? avatar,
+    String? schoolId,
+    String? schoolName,
   }) async {
     await _secureStorage.write(key: _userIdKey, value: userId);
     await _secureStorage.write(key: _userNameKey, value: name);
@@ -79,6 +83,12 @@ class SecureTokenStorage {
     }
     if (avatar != null) {
       await _secureStorage.write(key: _userAvatarKey, value: avatar);
+    }
+    if (schoolId != null) {
+      await _secureStorage.write(key: _userSchoolIdKey, value: schoolId);
+    }
+    if (schoolName != null) {
+      await _secureStorage.write(key: _userSchoolNameKey, value: schoolName);
     }
   }
 
@@ -122,6 +132,16 @@ class SecureTokenStorage {
   /// Get user avatar
   Future<String?> getUserAvatar() async {
     return await _secureStorage.read(key: _userAvatarKey);
+  }
+
+  /// Get user school ID
+  Future<String?> getUserSchoolId() async {
+    return await _secureStorage.read(key: _userSchoolIdKey);
+  }
+
+  /// Get user school name
+  Future<String?> getUserSchoolName() async {
+    return await _secureStorage.read(key: _userSchoolNameKey);
   }
 
   /// Clear all stored data (logout)

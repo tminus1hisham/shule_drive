@@ -169,6 +169,49 @@ class RouteService {
     }
   }
 
+  /// Get routes by school ID or school name
+  /// Filters routes by the school ID or school name to ensure school-scoped data
+  Future<List<BusRoute>> getRoutesBySchool(String schoolId, {String? schoolName}) async {
+    return _buffer.withBuffer<List<BusRoute>>(
+      apiCall: () async {
+        // First try to get all routes and filter by school
+        final response = await _apiClient.get(Endpoints.getAllRoutes);
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> routesData;
+        if (response is List) {
+          routesData = response;
+        } else if (response is Map && response['data'] != null) {
+          routesData = response['data'] as List;
+        } else {
+          routesData = [];
+        }
+
+        // Filter routes by school ID or school name
+        final routes = routesData
+            .map((route) => BusRoute.fromJson(route))
+            .where((route) {
+              // Try to match by school ID first
+              if (route.schoolId != null && route.schoolId!.isNotEmpty) {
+                return route.schoolId == schoolId;
+              }
+              // Fallback to school name matching
+              if (schoolName != null && route.schoolName != null) {
+                return route.schoolName!.toLowerCase().contains(schoolName.toLowerCase()) ||
+                       schoolName.toLowerCase().contains(route.schoolName!.toLowerCase());
+              }
+              return false;
+            })
+            .toList();
+        
+        return routes;
+      },
+      bufferKey: '${BufferKeys.routes}_school_$schoolId',
+      fallbackData: <BusRoute>[],
+      cacheDuration: const Duration(minutes: 15),
+    );
+  }
+
   /// Refresh routes cache in background
   Future<void> refreshRoutesCache() async {
     await _buffer.refreshBuffer<List<BusRoute>>(
@@ -213,8 +256,9 @@ class BusRoute {
       id: json['id']?.toString() ?? '',
       name: json['routeName'] ?? json['name'] ?? '',
       description: json['description'],
-      schoolId: json['school_id'] ?? json['schoolId'],
-      schoolName: json['schoolName'] ?? json['school_name'],
+      // Use adminUserId as schoolId since that's how the API returns it
+      schoolId: json['school_id'] ?? json['schoolId'] ?? json['adminUserId'] ?? json['school']['id']?.toString(),
+      schoolName: json['schoolName'] ?? json['school_name'] ?? json['school']?['name'],
       stops:
           (json['stops'] as List?)
               ?.map((s) => RouteStop.fromJson(s))

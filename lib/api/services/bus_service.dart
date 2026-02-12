@@ -113,6 +113,39 @@ class BusService {
     );
   }
 
+  /// Get buses by school ID
+  /// GET /api/drivers/get/by/school/{schoolId} (returns drivers with their vehicles)
+  Future<List<Bus>> getBusesBySchool(String schoolId) async {
+    return _buffer.withBuffer<List<Bus>>(
+      apiCall: () async {
+        // Use getAllBuses and filter by schoolId client-side
+        // The API doesn't have a direct endpoint for getting buses by school
+        final response = await _apiClient.get(Endpoints.getAllBuses);
+
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> busesData;
+        if (response is List) {
+          busesData = response;
+        } else if (response is Map && response['data'] != null) {
+          busesData = response['data'] as List;
+        } else {
+          busesData = [];
+        }
+
+        // Filter buses by school ID (companyOrgId field)
+        final buses = busesData
+            .map((bus) => Bus.fromJson(bus))
+            .where((bus) => bus.schoolId == schoolId)
+            .toList();
+
+        return buses;
+      },
+      bufferKey: '${BufferKeys.buses}_school_$schoolId',
+      fallbackData: <Bus>[],
+      cacheDuration: const Duration(minutes: 15),
+    );
+  }
+
   /// Clear all bus-related buffers
   Future<void> clearBusBuffers() async {
     await _buffer.clearCategory('buses');

@@ -54,13 +54,39 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     setState(() => _isLoading = true);
     
     final provider = context.read<AppProvider>();
-    await provider.fetchGuardianStudents();
+    final authProvider = context.read<AuthProvider>();
     
-    if (mounted) {
-      setState(() {
-        _filteredStudents = provider.apiStudents;
-        _isLoading = false;
-      });
+    try {
+      // Get school ID from driver's profile
+      final schoolId = authProvider.currentUser?.schoolId;
+      
+      if (schoolId != null && schoolId.isNotEmpty) {
+        if (kDebugMode) {
+          print('🏫 SelectStudentsScreen: Loading students for school $schoolId');
+        }
+        // Fetch students by school (for drivers)
+        await provider.fetchStudentsBySchool(schoolId);
+      } else {
+        if (kDebugMode) {
+          print('⚠️ SelectStudentsScreen: No school ID, falling back to guardian students');
+        }
+        // Fallback for guardians or if school ID is not available
+        await provider.fetchGuardianStudents();
+      }
+      
+      if (mounted) {
+        setState(() {
+          _filteredStudents = provider.apiStudents;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ SelectStudentsScreen: Error loading students: $e');
+      }
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

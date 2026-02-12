@@ -15,6 +15,19 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  // Current school ID for school-scoped data
+  String? _currentSchoolId;
+  String? get currentSchoolId => _currentSchoolId;
+
+  /// Set current school ID (called after login or when driver changes school)
+  void setCurrentSchoolId(String? schoolId) {
+    _currentSchoolId = schoolId;
+    if (kDebugMode) {
+      print('🏫 AppProvider: School ID set to $schoolId');
+    }
+    notifyListeners();
+  }
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
@@ -317,6 +330,163 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _setError(e.message);
     } catch (e) {
       _setError('Failed to fetch buses');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ==========================================================================
+  // SCHOOL-SCOPED DATA FETCHING (for drivers)
+  // ==========================================================================
+
+  /// Fetch routes by school ID
+  Future<void> fetchRoutesBySchool(String schoolId, {String? schoolName}) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (kDebugMode) {
+        print('📍 AppProvider: Fetching routes for school $schoolId (name: $schoolName)...');
+      }
+      _routes = await _routeService.getRoutesBySchool(schoolId, schoolName: schoolName);
+      _currentSchoolId = schoolId;
+      if (kDebugMode) {
+        print('✅ AppProvider: Fetched ${_routes.length} routes for school $schoolId');
+      }
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Routes endpoint not found (404)');
+      }
+      _routes = [];
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
+      _setError(e.message);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching routes - $e');
+      }
+      _setError('Failed to fetch routes');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Fetch buses (vehicles) by school ID
+  Future<void> fetchBusesBySchool(String schoolId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (kDebugMode) {
+        print('🚌 AppProvider: Fetching buses for school $schoolId...');
+      }
+      _buses = await _busService.getBusesBySchool(schoolId);
+      _currentSchoolId = schoolId;
+      if (kDebugMode) {
+        print('✅ AppProvider: Fetched ${_buses.length} buses for school $schoolId');
+      }
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Buses endpoint not found (404)');
+      }
+      _buses = [];
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
+      _setError(e.message);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching buses - $e');
+      }
+      _setError('Failed to fetch buses');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Fetch students by school ID
+  Future<void> fetchStudentsBySchool(String schoolId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (kDebugMode) {
+        print('👨‍🎓 AppProvider: Fetching students for school $schoolId...');
+      }
+      _apiStudents = await _studentService.getStudentsBySchool(schoolId);
+      _currentSchoolId = schoolId;
+      if (kDebugMode) {
+        print('✅ AppProvider: Fetched ${_apiStudents.length} students for school $schoolId');
+      }
+      notifyListeners();
+    } on api.NotFoundException catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Students endpoint not found (404)');
+      }
+      _apiStudents = [];
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
+      _setError(e.message);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching students - $e');
+      }
+      _setError('Failed to fetch students');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Fetch all school-scoped data at once (routes, buses, students)
+  Future<void> fetchAllSchoolData(String schoolId, {String? schoolName}) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (kDebugMode) {
+        print('🏫 AppProvider: Fetching all data for school $schoolId (name: $schoolName)...');
+      }
+      
+      // Fetch all data in parallel
+      final results = await Future.wait([
+        _routeService.getRoutesBySchool(schoolId, schoolName: schoolName),
+        _busService.getBusesBySchool(schoolId),
+        _studentService.getStudentsBySchool(schoolId),
+      ]);
+
+      _routes = results[0] as List<api.BusRoute>;
+      _buses = results[1] as List<api.Bus>;
+      _apiStudents = results[2] as List<api.Student>;
+      _currentSchoolId = schoolId;
+
+      if (kDebugMode) {
+        print('✅ AppProvider: School data loaded:');
+        print('   📍 Routes: ${_routes.length}');
+        print('   🚌 Buses: ${_buses.length}');
+        print('   👨‍🎓 Students: ${_apiStudents.length}');
+      }
+      
+      notifyListeners();
+    } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: API Exception - ${e.message}');
+      }
+      _setError(e.message);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ AppProvider: Error fetching school data - $e');
+      }
+      _setError('Failed to fetch school data');
     } finally {
       _setLoading(false);
     }

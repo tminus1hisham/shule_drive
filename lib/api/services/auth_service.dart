@@ -77,6 +77,8 @@ class AuthService {
             name: verifyResponse.user!.name,
             phone: verifyResponse.user!.phone,
             role: verifyResponse.user!.role,
+            schoolId: verifyResponse.user!.schoolId,
+            schoolName: verifyResponse.user!.schoolName,
           );
         }
       }
@@ -548,8 +550,12 @@ class LoginResponse {
         email: extractedEmail,
         avatar: json['profileImage'] ?? json['avatar'],
         role: extractedRole ?? 'unknown',
+        licenseNumber: json['licenseImage'] ?? json['license_number'],
+        vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
+        schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'] ?? json['schoolID'],
+        schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'] ?? json['school'],
       );
-      debugPrint('Created user with role: ${user.role}');
+      debugPrint('Created user with role: ${user.role}, school: ${user.schoolId}');
     }
 
     return LoginResponse(
@@ -683,6 +689,8 @@ class User {
   final String role;
   final String? licenseNumber;
   final String? vehicleNumber;
+  final String? schoolId;
+  final String? schoolName;
 
   User({
     required this.id,
@@ -693,6 +701,8 @@ class User {
     required this.role,
     this.licenseNumber,
     this.vehicleNumber,
+    this.schoolId,
+    this.schoolName,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -714,6 +724,8 @@ class User {
       role: role,
       licenseNumber: json['licenseImage'] ?? json['license_number'],
       vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
+      schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'] ?? json['schoolID'],
+      schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'] ?? json['school'],
     );
   }
 
@@ -754,6 +766,8 @@ class User {
       'role': role,
       'license_number': licenseNumber,
       'vehicle_number': vehicleNumber,
+      'school_id': schoolId,
+      'school_name': schoolName,
     };
   }
 }
