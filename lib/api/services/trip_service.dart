@@ -443,7 +443,7 @@ class TripService {
           'numberPlate': numberPlate,
           'attendantName': attendantName,
           'driverName': driverName,
-          'createdAt': DateTime.now().toIso8601String(),
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
         },
       );
 
@@ -482,7 +482,7 @@ class TripService {
         if (numberPlate != null) 'numberPlate': numberPlate,
         if (attendantName != null) 'attendantName': attendantName,
         if (driverName != null) 'driverName': driverName,
-        'updatedAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
       };
 
       final response = await _apiClient.post(
@@ -531,7 +531,7 @@ class TripService {
           'route': route,
           'latitude': latitude,
           'longitude': longitude,
-          'createdAt': DateTime.now().toIso8601String(),
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
         },
       );
 

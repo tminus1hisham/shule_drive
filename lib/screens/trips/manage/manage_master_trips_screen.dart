@@ -39,6 +39,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   bool _isCreatingNew = true;
   bool _isLoading = false;
   bool _isLoadingStudents = false;
+  bool _triedLoadingStudents = false;
   String? _errorMessage;
   
   // Data lists for dropdowns
@@ -152,14 +153,48 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   }
 
   Future<void> _loadStudents() async {
+    if (_isLoadingStudents) return;
+    
+    setState(() => _isLoadingStudents = true);
+    
     try {
+      debugPrint('📚 Loading students from primary endpoint...');
       final studentService = student_service.StudentService();
-      final students = await studentService.getAllStudents();
+      // Load more students (100 instead of default 20)
+      final students = await studentService.getAllStudents(limit: 100);
       if (mounted) {
         setState(() => _students = students);
+        debugPrint('✅ Loaded ${students.length} students from primary endpoint');
       }
     } catch (e) {
-      debugPrint('Error loading students: $e');
+      debugPrint('❌ Error loading students from primary endpoint: $e');
+      // Try fallback endpoint
+      await _loadStudentsFromGuardianEndpoint();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingStudents = false);
+      }
+    }
+  }
+  
+  Future<void> _loadStudentsFromGuardianEndpoint() async {
+    try {
+      debugPrint('📚 Trying guardian students endpoint...');
+      final studentService = student_service.StudentService();
+      final students = await studentService.getGuardianStudents();
+      if (mounted) {
+        setState(() {
+          _students = students;
+          _triedLoadingStudents = true;
+        });
+        debugPrint('✅ Loaded ${students.length} students from guardian endpoint');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error loading students from guardian endpoint: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() => _triedLoadingStudents = true);
+      }
     }
   }
 
@@ -1079,7 +1114,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 ],
               ),
               ElevatedButton.icon(
-                onPressed: _showAddStudentDialog,
+                onPressed: () => _showAddStudentDialog(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add'),
                 style: ElevatedButton.styleFrom(
@@ -1234,21 +1269,71 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     );
   }
 
-  void _showAddStudentDialog() {
-    student_service.Student? selectedStudent;
+  Future<void> _showAddStudentDialog() async {
+    // Reload students if empty (with guard to prevent infinite loops)
+    if (_students.isEmpty && !_isLoadingStudents) {
+      debugPrint('📚 Students empty, reloading...');
+      await _loadStudents();
+    }
     
-    // Filter out students already in the trip
-    final tripStudentIds = context.read<TripProvider>().tripStudents
-        .map((s) => s.studentId)
-        .toSet();
-    final availableStudents = _students
-        .where((s) => !tripStudentIds.contains(int.tryParse(s.id)))
-        .toList();
-
-    if (availableStudents.isEmpty) {
-      _showErrorSnackbar('No available students to add');
+    // If still empty after reload, show error
+    if (_students.isEmpty) {
+      _showErrorSnackbar('Unable to load students. Please check your connection or contact support.');
       return;
     }
+    
+    // Filter out students already in the trip
+    final tripProvider = context.read<TripProvider>();
+    final tripStudentIds = tripProvider.tripStudents
+        .map((s) => s.studentId.toString())
+        .toSet();
+    
+    debugPrint('📋 Trip students: ${tripStudentIds.length}');
+    debugPrint('📋 All students loaded: ${_students.length}');
+    debugPrint('📋 Selected route: $_selectedRoute');
+    
+    // First filter by route if a route is selected
+    var routeStudents = _students;
+    if (_selectedRoute != null && _selectedRoute!.isNotEmpty) {
+      routeStudents = _students.where((s) {
+        // Check if student's route matches the selected route
+        final studentRoute = s.route ?? '';
+        final matches = studentRoute.toLowerCase() == _selectedRoute!.toLowerCase() ||
+                        studentRoute.contains(_selectedRoute!) ||
+                        _selectedRoute!.contains(studentRoute);
+        debugPrint('  Student ${s.name} route: $studentRoute, matches: $matches');
+        return matches;
+      }).toList();
+      debugPrint('📋 Students matching route "$_selectedRoute": ${routeStudents.length}');
+    }
+    
+    // Then filter out students already in the trip
+    final availableStudents = routeStudents
+        .where((s) => !tripStudentIds.contains(s.id) && !tripStudentIds.contains(int.tryParse(s.id)?.toString()))
+        .toList();
+    
+    debugPrint('📋 Available students after filter: ${availableStudents.length}');
+
+    if (availableStudents.isEmpty) {
+      if (_students.isEmpty) {
+        _showErrorSnackbar('No students loaded. Please check your connection.');
+      } else if (routeStudents.isEmpty) {
+        _showErrorSnackbar('No students found for route "$_selectedRoute"');
+      } else if (tripStudentIds.isEmpty) {
+        // If no trip students but we have students, show all route students
+        _showAddStudentDialogWithList(routeStudents);
+        return;
+      } else {
+        _showErrorSnackbar('All students are already in this trip');
+      }
+      return;
+    }
+    
+    _showAddStudentDialogWithList(availableStudents);
+  }
+  
+  void _showAddStudentDialogWithList(List<student_service.Student> availableStudents) {
+    student_service.Student? selectedStudent;
 
     showDialog(
       context: context,
