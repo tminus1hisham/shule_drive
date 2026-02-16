@@ -195,6 +195,19 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  /// Update active trip with merged/preserved data
+  void updateActiveTrip(api.Trip trip) {
+    _activeTrip = trip;
+    final index = _trips.indexWhere((t) => t.id == trip.id);
+    if (index != -1) {
+      _trips[index] = trip;
+    }
+    notifyListeners();
+    if (kDebugMode) {
+      print('🔄 Active trip updated with preserved student data');
+    }
+  }
+
   /// End a trip (driver only)
   Future<bool> endTrip(String tripId, {String? driverId, String? driverName}) async {
     _setLoading(true);
@@ -214,6 +227,7 @@ class TripProvider extends ChangeNotifier {
       apiSuccess = true;
 
       // If API returned empty students but we had original data, preserve it
+      // Also ensure status is 'completed' since we just ended the trip
       if ((endedTrip.students.isEmpty) && originalStudents.isNotEmpty) {
         if (kDebugMode) {
           print('🔄 API returned empty students, preserving original student data (${originalStudents.length} students)');
@@ -224,7 +238,7 @@ class TripProvider extends ChangeNotifier {
           routeId: endedTrip.routeId,
           startTime: endedTrip.startTime,
           endTime: endedTrip.endTime ?? DateTime.now(),
-          status: endedTrip.status,
+          status: 'completed', // Force completed status
           vehicleId: endedTrip.vehicleId.isNotEmpty ? endedTrip.vehicleId : originalVehicleId,
           vehicleNumber: endedTrip.vehicleNumber,
           students: originalStudents,
@@ -233,6 +247,26 @@ class TripProvider extends ChangeNotifier {
           fare: endedTrip.fare,
           notes: endedTrip.notes,
         );
+      } else {
+        // Even if API returned data, ensure status is completed
+        // The API might return the old status
+        if (endedTrip.status != 'completed') {
+          endedTrip = api.Trip(
+            id: endedTrip.id,
+            routeName: endedTrip.routeName,
+            routeId: endedTrip.routeId,
+            startTime: endedTrip.startTime,
+            endTime: endedTrip.endTime ?? DateTime.now(),
+            status: 'completed',
+            vehicleId: endedTrip.vehicleId,
+            vehicleNumber: endedTrip.vehicleNumber,
+            students: endedTrip.students,
+            stops: endedTrip.stops,
+            distance: endedTrip.distance,
+            fare: endedTrip.fare,
+            notes: endedTrip.notes,
+          );
+        }
       }
 
       // Update local state - always clear active trip

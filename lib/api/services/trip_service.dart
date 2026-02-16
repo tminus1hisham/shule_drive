@@ -737,9 +737,27 @@ class StudentPickup {
       studentStatus = json['status'];
     }
 
+    // Extract name with defensive handling for corrupted data
+    String studentName = json['fullname'] ?? json['name'] ?? '';
+    // Handle case where API returns 'string' as a placeholder/type indicator
+    if (studentName == 'string' || studentName.isEmpty) {
+      // Try to use studentRegNumber or studentId as fallback, but only if they look valid
+      final studentReg = json['studentRegNumber']?.toString() ?? '';
+      if (studentReg.isNotEmpty && studentReg != 'string' && studentReg != '0') {
+        studentName = studentReg;
+      } else {
+        final studentId = json['studentId']?.toString() ?? '';
+        if (studentId.isNotEmpty && studentId != 'string' && studentId != '0') {
+          studentName = 'Student $studentId';
+        } else {
+          studentName = 'Unknown Student';
+        }
+      }
+    }
+    
     return StudentPickup(
       id: json['id']?.toString() ?? json['studentId']?.toString() ?? '',
-      name: json['fullname'] ?? json['name'] ?? '',
+      name: studentName,
       photo: json['profileImage'] ?? json['photo'],
       status: studentStatus,
       pickupTime: Trip._parseDateTime(

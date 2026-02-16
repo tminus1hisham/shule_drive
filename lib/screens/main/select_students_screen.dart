@@ -441,22 +441,63 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           print('✅ Trip started successfully: ${trip.id}');
         }
         
+        // Merge original master trip students with API response
+        // The API might return incomplete student data, so we preserve the original
+        api.Trip mergedTrip = trip;
+        if (_masterTripStudents.isNotEmpty && 
+            (trip.students.isEmpty || trip.students.any((s) => s.name == 'Unknown Student' || s.name == 'string' || s.name == '0'))) {
+          if (kDebugMode) {
+            print('🔄 Merging original student data with API response');
+            print('   Original students: ${_masterTripStudents.length}');
+          }
+          
+          // Create StudentPickup list from master trip students
+          final originalStudents = _masterTripStudents.map((s) => api.StudentPickup(
+            id: s.studentId.toString(),
+            name: s.fullname.isNotEmpty ? s.fullname : 'Unknown Student',
+            photo: s.profileImage.isNotEmpty ? s.profileImage : null,
+            status: 'pending',
+            parentPhone: s.guardianPhoneNumber.isNotEmpty ? s.guardianPhoneNumber : null,
+          )).toList();
+          
+          mergedTrip = api.Trip(
+            id: trip.id,
+            routeName: trip.routeName,
+            routeId: trip.routeId,
+            startTime: trip.startTime,
+            endTime: trip.endTime,
+            status: trip.status,
+            vehicleId: trip.vehicleId,
+            vehicleNumber: trip.vehicleNumber,
+            students: originalStudents,
+            stops: trip.stops,
+            distance: trip.distance,
+            fare: trip.fare,
+            notes: trip.notes,
+          );
+        }
+        
         // Save trip to local history
         if (authProvider.isDriver) {
           await TripHistoryService().saveTripToHistory(
-            trip: trip,
+            trip: mergedTrip,
             driverId: authProvider.userData['id'] ?? '',
             driverName: authProvider.userData['name'] ?? '',
             attendantName: _attendant,
           );
         }
 
+        // Update the provider with merged trip data
+        if (mergedTrip != trip) {
+          tripProvider.updateActiveTrip(mergedTrip);
+        }
+        
         // Navigate to active trip screen
         if (mounted) {
           Navigator.pushReplacementNamed(
             context,
             '/active-trip',
-            arguments: {'tripId': trip.id},
+            arguments: {'tripId': mergedTrip.id},
           );
         }
       } else {
