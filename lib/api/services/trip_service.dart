@@ -73,6 +73,24 @@ class TripService {
 
       debugPrint('📡 Active trip response: $response');
 
+      // Handle case where response is an empty array (no active trip)
+      if (response is List) {
+        if (response.isEmpty) {
+          debugPrint('⚠️ Empty array response - no active trip');
+          return null;
+        }
+        // If array has data, use first element
+        final trip = Trip.fromJson(response.first as Map<String, dynamic>);
+        debugPrint('✅ Active trip fetched from array: ${trip.id} - ${trip.routeName}');
+        await _buffer.saveBuffer(
+          key: BufferKeys.activeTrip,
+          data: trip,
+          expiration: const Duration(minutes: 5),
+        );
+        return trip;
+      }
+
+      // Handle normal map response
       if (response['data'] == null) {
         debugPrint('⚠️ No active trip data in response');
         // Try to get from buffer
@@ -175,11 +193,12 @@ class TripService {
     }
   }
 
-  /// End a trip (no buffer - always requires fresh API call)
+  /// End a trip (completes the trip)
   /// POST /api/trips/end
   Future<Trip> endTrip(String tripId) async {
     try {
-      // Try the endpoint with trip ID in the body instead of URL
+      // Use end trip endpoint with tripId in body
+      // The API expects the tripId in the request body, not URL path
       debugPrint('📡 Ending trip: POST /api/trips/end with tripId: $tripId');
       
       final response = await _apiClient.post(
@@ -204,6 +223,7 @@ class TripService {
           endTime: DateTime.now(),
           status: 'completed',
           vehicleId: '',
+          // Note: Students will be empty - caller should preserve original student data
           students: [],
           stops: [],
         );
@@ -214,6 +234,14 @@ class TripService {
       if (response['data'] != null) {
         trip = Trip.fromJson(response['data']);
       } else if (response['tripUniqueId'] != null || response['id'] != null) {
+        // Try to parse students from response if available
+        List<StudentPickup> students = [];
+        if (response['students'] != null && response['students'] is List) {
+          students = (response['students'] as List)
+              .map((s) => StudentPickup.fromJson(s))
+              .toList();
+        }
+        
         // Construct trip from response
         trip = Trip(
           id: response['tripUniqueId']?.toString() ?? response['id']?.toString() ?? tripId,
@@ -224,7 +252,7 @@ class TripService {
           status: 'completed',
           vehicleId: response['vehicleId']?.toString() ?? '',
           vehicleNumber: response['vehicleNumber']?.toString(),
-          students: [],
+          students: students, // Use parsed students if available
           stops: [],
         );
       } else {
@@ -680,7 +708,27 @@ class StudentPickup {
     this.parentPhone,
   });
 
-  factory StudentPickup.fromJson(Map<String, dynamic> json) {
+  factory StudentPickup.fromJson(dynamic json) {
+    // Handle corrupted data where json might be a String
+    if (json is String) {
+      debugPrint('⚠️ StudentPickup.fromJson received String instead of Map: $json');
+      return StudentPickup(
+        id: '',
+        name: json,
+        status: 'pending',
+      );
+    }
+    
+    // Ensure json is a Map
+    if (json is! Map<String, dynamic>) {
+      debugPrint('⚠️ StudentPickup.fromJson received unexpected type: ${json.runtimeType}');
+      return StudentPickup(
+        id: '',
+        name: 'Unknown Student',
+        status: 'pending',
+      );
+    }
+    
     // Determine status from various API response formats
     String studentStatus = 'pending';
     if (json['isStudentPicked'] == true || json['isStudentDropped'] == true) {

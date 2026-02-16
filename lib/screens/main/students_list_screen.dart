@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../api/services/trip_service.dart';
 import '../../models/student.dart';
 import '../../providers/app_provider.dart';
+import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/student_card.dart';
 
@@ -18,51 +21,20 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   int _currentIndex = 0;
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false;
-
-  List<Student> students = [
-    Student(
-      id: '1',
-      name: 'Mary Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=5',
-      status: StudentStatus.picked,
-    ),
-    Student(
-      id: '2',
-      name: 'John Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=9',
-      status: StudentStatus.absent,
-    ),
-    Student(
-      id: '3',
-      name: 'Sarah Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=8',
-      status: StudentStatus.picked,
-    ),
-    Student(
-      id: '4',
-      name: 'Peter Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=3',
-      status: StudentStatus.pending,
-    ),
-    Student(
-      id: '5',
-      name: 'Lucy Mwasuga',
-      className: 'Class 4 West',
-      avatar: 'https://i.pravatar.cc/150?img=12',
-      status: StudentStatus.pending,
-    ),
-  ];
+  bool _isLoading = true;
+  List<Student> students = [];
+  Trip? _trip;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() => setState(() {}));
+    
+    // Load students from active trip
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudentsFromTrip();
+    });
   }
 
   @override
@@ -70,6 +42,59 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _loadStudentsFromTrip() {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final tripId = args?['tripId'] as String?;
+    
+    final tripProvider = context.read<TripProvider>();
+    
+    // Try to get trip from provider
+    Trip? trip;
+    if (tripId != null) {
+      try {
+        trip = tripProvider.trips.firstWhere((t) => t.id == tripId);
+      } catch (_) {
+        trip = null;
+      }
+    }
+    trip ??= tripProvider.activeTrip;
+    
+    if (trip != null) {
+      _trip = trip;
+      // Convert StudentPickup to Student
+      students = trip.students.map((s) => Student(
+        id: s.id,
+        name: s.name,
+        className: '', // Not available in StudentPickup
+        avatar: s.photo ?? '',
+        status: _mapStatus(s.status),
+      )).toList();
+      
+      if (kDebugMode) {
+        print('🎓 StudentsListScreen: Loaded ${students.length} students from trip');
+      }
+    } else {
+      if (kDebugMode) {
+        print('⚠️ StudentsListScreen: No active trip found');
+      }
+    }
+    
+    setState(() => _isLoading = false);
+  }
+
+  StudentStatus _mapStatus(String status) {
+    switch (status) {
+      case 'picked':
+        return StudentStatus.picked;
+      case 'absent':
+        return StudentStatus.absent;
+      case 'dropped':
+        return StudentStatus.picked; // Treat dropped as picked for UI
+      default:
+        return StudentStatus.pending;
+    }
   }
 
   void _updateStudentStatus(String id, StudentStatus status) {
@@ -103,9 +128,20 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    
+    if (_isLoading) {
+      return const MainScaffold(
+        title: 'Students',
+        showBackButton: true,
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        ),
+      );
+    }
+    
     final filteredStudents = _getFilteredStudents();
     final pickedCount = students.where((s) => s.status == StudentStatus.picked).length;
-    final progress = pickedCount / students.length;
+    final progress = students.isEmpty ? 0.0 : pickedCount / students.length;
 
     return MainScaffold(
       title: 'Students',
@@ -159,7 +195,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '8:30 AM - South B Route',
+                              _trip?.routeName ?? 'Active Trip',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: provider.textMutedColor,

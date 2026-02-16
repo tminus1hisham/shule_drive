@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
@@ -18,11 +19,21 @@ class TripDetailsScreen extends StatefulWidget {
 class _TripDetailsScreenState extends State<TripDetailsScreen> {
   TripHistory? _tripHistory;
   bool _isLoading = true;
+  bool _didLoadData = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTripDetails();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Load data here instead of initState to access ModalRoute
+    if (!_didLoadData) {
+      _didLoadData = true;
+      _loadTripDetails();
+    }
   }
 
   Future<void> _loadTripDetails() async {
@@ -426,6 +437,16 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Widget _buildStudentsSection(AppProvider provider, Trip trip) {
+    // Debug logging
+    if (kDebugMode) {
+      print('🎓 _buildStudentsSection:');
+      print('   Students count: ${trip.students.length}');
+      if (trip.students.isNotEmpty) {
+        print('   First student type: ${trip.students.first.runtimeType}');
+        print('   First student: ${trip.students.first}');
+      }
+    }
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -464,16 +485,47 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: trip.students.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final student = trip.students[index];
-            return _buildStudentItem(provider, student);
-          },
-        ),
+        if (trip.students.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'No students in this trip',
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: trip.students.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final student = trip.students[index];
+              // Defensive check for student type
+              if (student is! StudentPickup) {
+                if (kDebugMode) {
+                  print('❌ Invalid student type at index $index: ${student.runtimeType}');
+                }
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withAlpha(20),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Error: Invalid student data',
+                    style: TextStyle(color: Colors.red.shade700),
+                  ),
+                );
+              }
+              return _buildStudentItem(provider, student);
+            },
+          ),
       ],
     );
   }
@@ -482,6 +534,14 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     Color statusColor;
     IconData statusIcon;
     String statusText;
+    
+    // Handle corrupted data
+    final studentName = student.name.isNotEmpty && student.name != 'string' 
+        ? student.name 
+        : 'Unknown Student';
+    final parentPhone = student.parentPhone != null && student.parentPhone != 'string'
+        ? student.parentPhone
+        : null;
     
     switch (student.status) {
       case 'picked':
@@ -527,17 +587,17 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  student.name,
+                  studentName,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: provider.textColor,
                   ),
                 ),
-                if (student.parentPhone != null) ...[
+                if (parentPhone != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Parent: ${student.parentPhone}',
+                    'Parent: $parentPhone',
                     style: TextStyle(
                       fontSize: 12,
                       color: provider.textMutedColor,
@@ -577,10 +637,16 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Widget _buildStudentAvatar(StudentPickup student) {
-    if (student.photo != null && student.photo!.isNotEmpty) {
+    final photoUrl = student.photo != null && 
+                     student.photo!.isNotEmpty && 
+                     student.photo != 'string'
+        ? student.photo
+        : null;
+    
+    if (photoUrl != null) {
       return CircleAvatar(
         radius: 24,
-        backgroundImage: NetworkImage(student.photo!),
+        backgroundImage: NetworkImage(photoUrl),
         onBackgroundImageError: (_, __) {},
       );
     }

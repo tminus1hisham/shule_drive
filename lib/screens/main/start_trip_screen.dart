@@ -1277,7 +1277,12 @@ class _StartTripScreenState extends State<StartTripScreen>
             onPressed: () async {
               Navigator.pop(context);
               final tripProvider = context.read<TripProvider>();
-              final success = await tripProvider.endTrip(trip.id);
+              final authProvider = context.read<AuthProvider>();
+              final success = await tripProvider.endTrip(
+                trip.id,
+                driverId: authProvider.userData['id'],
+                driverName: authProvider.userData['name'],
+              );
               if (success && mounted) {
                 _showSuccessSnackbar('Trip ended successfully');
               } else if (mounted) {

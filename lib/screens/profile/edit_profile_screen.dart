@@ -59,11 +59,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       if (pickedFile != null) {
-        setState(() {
-          _selectedImage = File(pickedFile.path);
-        });
+        // Check if file exists
+        final file = File(pickedFile.path);
+        final exists = await file.exists();
+        final size = exists ? await file.length() : 0;
+        
+        if (kDebugMode) {
+          print('📷 File exists: $exists, Size: $size bytes');
+        }
+
+        if (!exists) {
+          if (mounted) _showError('Selected file does not exist');
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            _selectedImage = file;
+          });
+        }
+        
+        // Small delay to ensure setState completes before upload
+        await Future.delayed(const Duration(milliseconds: 100));
+        
         // Automatically upload after selection
-        await _uploadProfilePicture();
+        // Use a separate method to avoid mounted issues
+        if (mounted) {
+          await _uploadProfilePicture();
+        } else {
+          if (kDebugMode) print('⚠️ Widget not mounted after picking image');
+        }
       } else {
         if (kDebugMode) print('❌ No file picked');
       }
@@ -72,7 +97,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         print('❌ Error picking image: $e');
         print(stackTrace);
       }
-      _showError('Failed to pick image: $e');
+      if (mounted) _showError('Failed to pick image: $e');
     }
   }
 
@@ -82,12 +107,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    if (kDebugMode) {
-      print('📤 Starting upload from screen...');
-      print('  Image path: ${_selectedImage!.path}');
+    // Store file path locally in case widget gets unmounted
+    final imagePath = _selectedImage!.path;
+    
+    // Verify file still exists before uploading
+    final exists = await _selectedImage!.exists();
+    if (!exists) {
+      if (kDebugMode) print('❌ Selected file no longer exists');
+      if (mounted) {
+        _showError('Selected file no longer exists. Please try again.');
+        setState(() => _selectedImage = null);
+      }
+      return;
     }
 
-    final authProvider = context.read<AuthProvider>();
+    if (kDebugMode) {
+      print('📤 Starting upload from screen...');
+      print('  Image path: $imagePath');
+      print('  File size: ${await _selectedImage!.length()} bytes');
+    }
+
+    // Store context reference before async operations
+    final currentContext = context;
+    final authProvider = currentContext.read<AuthProvider>();
 
     // Show loading
     if (mounted) {
@@ -100,26 +142,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
     }
 
-    final imageUrl = await authProvider.updateProfilePicture(
-      _selectedImage!.path,
-    );
+    String? imageUrl;
+    String? errorMsg;
+    
+    try {
+      imageUrl = await authProvider.updateProfilePicture(imagePath);
 
-    if (kDebugMode) {
-      print('📤 Upload result: $imageUrl');
+      if (kDebugMode) {
+        print('📤 Upload result: $imageUrl');
+      }
+    } catch (e, stackTrace) {
+      errorMsg = e.toString();
+      if (kDebugMode) {
+        print('❌ Exception during upload: $e');
+        print(stackTrace);
+      }
     }
 
-    if (!mounted) return;
-    Navigator.pop(context); // Close loading
+    // Wait a moment for widget to remount if it was unmounted
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    if (!mounted) {
+      if (kDebugMode) print('⚠️ Widget not mounted after upload attempt');
+      return;
+    }
+    
+    // Close loading dialog
+    Navigator.pop(context);
 
-    if (imageUrl != null) {
+    if (imageUrl != null && imageUrl.isNotEmpty) {
       _showSuccess('Profile picture updated successfully');
       setState(() {
         _selectedImage = null; // Clear selected image
       });
     } else {
-      _showError(
-        authProvider.errorMessage ?? 'Failed to upload profile picture',
-      );
+      errorMsg ??= authProvider.errorMessage ?? 'Failed to upload profile picture';
+      if (kDebugMode) print('❌ Upload failed: $errorMsg');
+      _showError(errorMsg);
     }
   }
 

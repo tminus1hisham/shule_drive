@@ -343,7 +343,8 @@ class AuthService {
         print('📤 Uploading profile picture:');
         print('  User ID: $userId');
         print('  Image Path: $imagePath');
-        print('  Endpoint: ${Endpoints.updateProfilePicture}');
+        print('  Primary endpoint: ${Endpoints.uploadAvatar}');
+        print('  Fallback endpoint: ${Endpoints.updateProfilePicture}');
       }
 
       // Detect content type from file extension
@@ -384,42 +385,79 @@ class AuthService {
       }
 
       // Use multipart upload
-      final response = await _apiClient.postMultipart(
-        Endpoints.updateProfilePicture,
-        fields: {'userId': userId},
-        files: [file],
-      );
+      // Try the user avatar endpoint first (more common for profile updates)
+      dynamic response;
+      try {
+        if (kDebugMode) {
+          print('📤 Trying endpoint: ${Endpoints.uploadAvatar}');
+          print('📤 Field name: file, userId: $userId');
+        }
+        
+        response = await _apiClient.postMultipart(
+          Endpoints.uploadAvatar,
+          fields: {'userId': userId},
+          files: [file],
+        );
+      } on ApiException catch (e) {
+        // If uploadAvatar fails, try updateProfilePicture endpoint
+        if (kDebugMode) {
+          print('⚠️ uploadAvatar failed: ${e.message}');
+          print('📤 Falling back to endpoint: ${Endpoints.updateProfilePicture}');
+        }
+        
+        response = await _apiClient.postMultipart(
+          Endpoints.updateProfilePicture,
+          fields: {'userId': userId},
+          files: [file],
+        );
+      }
 
       if (kDebugMode) {
         print('📥 Upload response: $response');
       }
 
       // Handle various response formats
-      final data = response['data'] ?? response;
-
-      // Try multiple possible field names for the image URL
-      final possibleFields = [
-        'imageUrl',
-        'profileImage',
-        'photo',
-        'image_url',
-        'url',
-        'avatar',
-        'avatar_url',
-        'image',
-        'picture',
-        'profile_picture',
-      ];
-
       String? imageUrl;
-      for (final field in possibleFields) {
-        final value = data[field];
-        if (value != null && value.toString().isNotEmpty) {
-          imageUrl = value.toString();
-          if (kDebugMode) {
-            print('🖼️ Found image URL in field "$field": $imageUrl');
+      
+      // Case 1: Response is a direct string URL
+      if (response is String && response.isNotEmpty) {
+        imageUrl = response;
+        if (kDebugMode) print('🖼️ Response is direct string URL');
+      } 
+      // Case 2: Response is a map with data
+      else if (response is Map) {
+        final data = response['data'] ?? response;
+        
+        if (data is String && data.isNotEmpty) {
+          imageUrl = data;
+          if (kDebugMode) print('🖼️ Response data is string URL');
+        } else if (data is Map) {
+          // Try multiple possible field names for the image URL
+          final possibleFields = [
+            'imageUrl',
+            'profileImage',
+            'photo',
+            'image_url',
+            'url',
+            'avatar',
+            'avatar_url',
+            'image',
+            'picture',
+            'profile_picture',
+            'profileImageUrl',
+            'avatarUrl',
+          ];
+
+          for (final field in possibleFields) {
+            final value = data[field];
+            if (value != null && value.toString().isNotEmpty) {
+              imageUrl = value.toString();
+              if (kDebugMode) {
+                print('🖼️ Found image URL in field "$field": $imageUrl');
+              }
+              break;
+            }
           }
-          break;
         }
       }
 

@@ -43,9 +43,24 @@ class TripHistoryService {
         existingTrips.removeRange(100, existingTrips.length);
       }
       
-      // Save to storage
+      // Convert to JSON
       final tripsJson = existingTrips.map((t) => t.toJson()).toList();
-      await prefs.setString('${_tripsKey}_$driverId', jsonEncode(tripsJson));
+      final jsonString = jsonEncode(tripsJson);
+      
+      if (kDebugMode) {
+        print('💾 Saving trip to history:');
+        print('   Trip ID: ${trip.id}');
+        print('   Students count: ${trip.students.length}');
+        print('   JSON size: ${jsonString.length} bytes');
+        // Verify first student is properly serialized
+        if (trip.students.isNotEmpty) {
+          final firstStudentJson = trip.students.first.toJson();
+          print('   First student JSON: $firstStudentJson');
+        }
+      }
+      
+      // Save to storage
+      await prefs.setString('${_tripsKey}_$driverId', jsonString);
       
       // Update stats
       await _updateStats(prefs, driverId, trip);
@@ -57,9 +72,10 @@ class TripHistoryService {
         print('   ├─ Students: ${trip.students.length}');
         print('   └─ Total trips stored: ${existingTrips.length}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         print('❌ Failed to save trip history: $e');
+        print(stackTrace);
       }
     }
   }
@@ -75,10 +91,29 @@ class TripHistoryService {
       }
       
       final tripsJson = jsonDecode(tripsString) as List;
-      return tripsJson.map((json) => TripHistory.fromJson(json)).toList();
-    } catch (e) {
+      
+      if (kDebugMode) {
+        print('📜 Loading trip history for driver: $driverId');
+        print('   Trips count: ${tripsJson.length}');
+      }
+      
+      final history = <TripHistory>[];
+      for (var i = 0; i < tripsJson.length; i++) {
+        try {
+          final tripHistory = TripHistory.fromJson(tripsJson[i]);
+          history.add(tripHistory);
+        } catch (e) {
+          if (kDebugMode) {
+            print('❌ Failed to parse trip history entry $i: $e');
+          }
+        }
+      }
+      
+      return history;
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         print('❌ Failed to load trip history: $e');
+        print(stackTrace);
       }
       return [];
     }

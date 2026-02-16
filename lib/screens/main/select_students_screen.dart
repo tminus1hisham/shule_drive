@@ -28,6 +28,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   
   // UI State
   bool _isLoading = true;
+  bool _isLoadingStudents = false;
   bool _isCreatingTrip = false;
   bool _isStartingTrip = false;
   bool _showCreateForm = false;
@@ -174,10 +175,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   Future<void> _loadMasterTripStudents() async {
     if (_selectedMasterTrip == null) return;
     
+    setState(() => _isLoadingStudents = true);
+    
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.fetchMasterTripStudents(_selectedMasterTrip!.id);
-      _masterTripStudents = tripProvider.tripStudents;
+      setState(() {
+        _masterTripStudents = tripProvider.tripStudents;
+        _isLoadingStudents = false;
+      });
       
       if (kDebugMode) {
         print('👨‍🎓 Loaded ${_masterTripStudents.length} students in master trip');
@@ -186,7 +192,10 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       if (kDebugMode) {
         print('❌ Error loading master trip students: $e');
       }
-      _masterTripStudents = [];
+      setState(() {
+        _masterTripStudents = [];
+        _isLoadingStudents = false;
+      });
     }
   }
 
@@ -466,6 +475,10 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    
+    // Watch TripProvider to rebuild when students change
+    // ignore: unused_local_variable
+    final tripProvider = context.watch<TripProvider>();
 
     return MainScaffold(
       title: 'Manage Trip Students',
@@ -765,6 +778,40 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Widget _buildMasterTripStudentsList(AppProvider provider) {
+    if (_isLoadingStudents) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: provider.cardColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    const Color(0xFF6B9B5B),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Loading students...',
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     if (_masterTripStudents.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),

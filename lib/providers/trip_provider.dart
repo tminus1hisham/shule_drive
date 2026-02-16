@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart' as api;
 import '../mqtt_client.dart';
+import '../services/trip_history_service.dart';
 import '../utils/notification_helper.dart';
 
 /// Trip States
@@ -194,65 +196,152 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// End a trip (driver only)
-  Future<bool> endTrip(String tripId) async {
+  Future<bool> endTrip(String tripId, {String? driverId, String? driverName}) async {
     _setLoading(true);
     _clearError();
 
+    api.Trip? endedTrip;
+    bool apiSuccess = false;
+    
+    // Save original student data before API call - the API might return empty students
+    final originalStudents = _activeTrip?.students ?? [];
+    final originalRouteName = _activeTrip?.routeName ?? 'Trip';
+    final originalVehicleId = _activeTrip?.vehicleId ?? '';
+    final originalStartTime = _activeTrip?.startTime ?? DateTime.now();
+
     try {
-      final trip = await _tripService.endTrip(tripId);
+      endedTrip = await _tripService.endTrip(tripId);
+      apiSuccess = true;
+
+      // If API returned empty students but we had original data, preserve it
+      if ((endedTrip.students.isEmpty) && originalStudents.isNotEmpty) {
+        if (kDebugMode) {
+          print('🔄 API returned empty students, preserving original student data (${originalStudents.length} students)');
+        }
+        endedTrip = api.Trip(
+          id: endedTrip.id,
+          routeName: endedTrip.routeName.isNotEmpty ? endedTrip.routeName : originalRouteName,
+          routeId: endedTrip.routeId,
+          startTime: endedTrip.startTime,
+          endTime: endedTrip.endTime ?? DateTime.now(),
+          status: endedTrip.status,
+          vehicleId: endedTrip.vehicleId.isNotEmpty ? endedTrip.vehicleId : originalVehicleId,
+          vehicleNumber: endedTrip.vehicleNumber,
+          students: originalStudents,
+          stops: endedTrip.stops,
+          distance: endedTrip.distance,
+          fare: endedTrip.fare,
+          notes: endedTrip.notes,
+        );
+      }
 
       // Update local state - always clear active trip
       _activeTrip = null;
       final index = _trips.indexWhere((t) => t.id == tripId);
       if (index != -1) {
-        _trips[index] = trip;
+        _trips[index] = endedTrip;
       }
-
-      // Publish MQTT event (don't fail if MQTT errors)
-      try {
-        await _mqttService.publishJson('trips/$tripId/events', {
-          'event': 'trip_ended',
-          'tripId': tripId,
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-      } catch (e) {
-        print('⚠️ MQTT publish failed: $e');
-      }
-
-      // Show notification (wrap in try-catch in case of minimal trip object)
-      try {
-        final pickedCount = trip.pickedCount;
-        final totalStudents = trip.students.length;
-        await NotificationHelper.showTripCompleted(
-          tripId: tripId,
-          routeName: trip.routeName,
-          totalStudents: totalStudents,
-          pickedCount: pickedCount,
-          absentCount: trip.absentCount,
-        );
-      } catch (e) {
-        print('⚠️ Notification failed: $e');
-      }
-
-      notifyListeners();
-      return true;
     } on api.ApiException catch (e) {
       // Check if it's just an empty response error - if so, still consider it success
       if (e.message.toLowerCase().contains('empty') || 
           e.message.toLowerCase().contains('null')) {
         print('⚠️ Server returned empty response, but trip was likely ended');
         _activeTrip = null;
-        notifyListeners();
-        return true;
+        apiSuccess = true;
+        // Create a completed trip preserving original student data
+        endedTrip = api.Trip(
+          id: tripId,
+          routeName: originalRouteName,
+          routeId: '',
+          startTime: originalStartTime,
+          endTime: DateTime.now(),
+          status: 'completed',
+          vehicleId: originalVehicleId,
+          students: originalStudents,
+          stops: [],
+        );
+      } else {
+        _setError(e.message);
+        _setLoading(false);
+        return false;
       }
-      _setError(e.message);
-      return false;
     } catch (e) {
       _setError('Failed to end trip');
-      return false;
-    } finally {
       _setLoading(false);
+      return false;
     }
+
+    // Update trip history with completed status (runs for both success and empty response cases)
+    if (driverId != null && endedTrip != null) {
+      try {
+        final historyService = TripHistoryService();
+        final history = await historyService.getTripHistory(driverId);
+        final historyIndex = history.indexWhere((h) => h.trip.id == tripId);
+        
+        if (historyIndex != -1) {
+          // Update the existing history entry with completed trip
+          final updatedHistory = TripHistory(
+            trip: endedTrip,
+            driverId: history[historyIndex].driverId,
+            driverName: history[historyIndex].driverName,
+            attendantName: history[historyIndex].attendantName,
+            loggedAt: history[historyIndex].loggedAt,
+          );
+          
+          history[historyIndex] = updatedHistory;
+          
+          // Save updated history
+          final prefs = await SharedPreferences.getInstance();
+          final tripsJson = history.map((t) => t.toJson()).toList();
+          await prefs.setString('driver_trip_history_$driverId', jsonEncode(tripsJson));
+          
+          if (kDebugMode) {
+            print('✅ Trip history updated with completed status: $tripId');
+          }
+        } else {
+          // If not in history, save it now
+          await historyService.saveTripToHistory(
+            trip: endedTrip,
+            driverId: driverId,
+            driverName: driverName ?? 'Driver',
+          );
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Failed to update trip history: $e');
+        }
+      }
+    }
+
+    // Publish MQTT event (don't fail if MQTT errors)
+    try {
+      await _mqttService.publishJson('trips/$tripId/events', {
+        'event': 'trip_ended',
+        'tripId': tripId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('⚠️ MQTT publish failed: $e');
+    }
+
+    // Show notification (wrap in try-catch in case of minimal trip object)
+    try {
+      final pickedCount = endedTrip?.pickedCount ?? 0;
+      final totalStudents = endedTrip?.students.length ?? 0;
+      await NotificationHelper.showTripCompleted(
+        tripId: tripId,
+        routeName: endedTrip?.routeName ?? 'Trip',
+        totalStudents: totalStudents,
+        pickedCount: pickedCount,
+        absentCount: endedTrip?.absentCount ?? 0,
+      );
+    } catch (e) {
+      print('⚠️ Notification failed: $e');
+    }
+
+    notifyListeners();
+    _setLoading(false);
+    return apiSuccess;
   }
 
   /// Update student pickup status

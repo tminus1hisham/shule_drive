@@ -92,41 +92,46 @@ class _DashboardScreenState extends State<DashboardScreen>
     final tripProvider = context.read<TripProvider>();
     final authProvider = context.read<AuthProvider>();
 
-    // API requires guardianPhone parameter - pass if user has a phone
-    // (works for both guardians and drivers who have phone numbers)
-    final hasPhone =
-        authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
-    final guardianPhone = hasPhone ? authProvider.userPhone : null;
-
     if (kDebugMode) {
       print('📱 Dashboard _loadData:');
       print('  isGuardian: ${authProvider.isGuardian}');
-      print('  hasPhone: $hasPhone');
+      print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
-      print('  guardianPhone param: $guardianPhone');
     }
 
-    await tripProvider.fetchActiveTrip(guardianPhone: guardianPhone);
+    // Only guardians use the active trip API
+    // Drivers manage trips through StartTripScreen, not dashboard
+    if (authProvider.isGuardian) {
+      final hasPhone =
+          authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+      if (hasPhone) {
+        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+      }
+    }
+    // For drivers, we don't fetch active trip on dashboard
+    // They use the StartTripScreen to see/manage their active trip
   }
 
   Future<void> _refresh() async {
     final tripProvider = context.read<TripProvider>();
     final authProvider = context.read<AuthProvider>();
 
-    // API requires guardianPhone parameter - pass if user has a phone
-    final hasPhone =
-        authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
-    final guardianPhone = hasPhone ? authProvider.userPhone : null;
-
     if (kDebugMode) {
       print('📱 Dashboard _refresh:');
       print('  isGuardian: ${authProvider.isGuardian}');
-      print('  hasPhone: $hasPhone');
+      print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
-      print('  guardianPhone param: $guardianPhone');
     }
 
-    await tripProvider.fetchActiveTrip(guardianPhone: guardianPhone);
+    // Only guardians use the active trip API
+    if (authProvider.isGuardian) {
+      final hasPhone =
+          authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+      if (hasPhone) {
+        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+      }
+    }
+    // For drivers, skip active trip fetch
   }
 
   @override

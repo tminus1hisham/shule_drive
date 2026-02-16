@@ -38,6 +38,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   MasterTrip? _editingTrip;
   bool _isCreatingNew = true;
   bool _isLoading = false;
+  bool _isLoadingStudents = false;
   String? _errorMessage;
   
   // Data lists for dropdowns
@@ -179,9 +180,17 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   }
 
   void _startEditingTrip(MasterTrip trip) {
+    final tripProvider = context.read<TripProvider>();
+    
+    // Clear previous students immediately if selecting a different trip
+    if (_editingTrip?.id != trip.id) {
+      tripProvider.clearMasterTripData();
+    }
+    
     setState(() {
       _editingTrip = trip;
       _isCreatingNew = false;
+      _isLoadingStudents = true;
       _tripNameController.text = trip.tripName;
       _tripTimeController.text = trip.tripTime;
       _attendantNameController.text = '';
@@ -191,7 +200,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     });
     
     // Fetch students for this trip
-    context.read<TripProvider>().fetchMasterTripStudents(trip.id);
+    tripProvider.fetchMasterTripStudents(trip.id).then((_) {
+      if (mounted) {
+        setState(() => _isLoadingStudents = false);
+      }
+    });
   }
 
   Future<void> _saveTrip() async {
@@ -1082,7 +1095,39 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           ),
           const SizedBox(height: 16),
           
-          if (tripStudents.isEmpty)
+          if (_isLoadingStudents)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          const Color(0xFF6B9B5B),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Loading students...',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (tripStudents.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(

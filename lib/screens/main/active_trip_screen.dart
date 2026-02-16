@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show sin, cos, sqrt, atan2;
+import 'dart:math' show sin, cos, sqrt, atan2, pi;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
-
+import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../models/map_models.dart';
 import '../../utils/mock_tracking_data.dart';
@@ -31,7 +32,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   // State
   BusLocation? _currentLocation;
   List<RouteStop> _stops = [];
-  List<LatLng> _routePoints = [];
+  List<latlong2.LatLng> _routePoints = [];
   final List<GeofenceAlert> _alerts = [];
   bool _isLoading = true;
   bool _followBus = true;
@@ -95,7 +96,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       // If we have a trip ID, try to get trip details
       if (_tripId != null) {
         // Get from existing trips
-        _activeTrip = tripProvider.getTripById(_tripId!);
+        try {
+          _activeTrip = tripProvider.trips.firstWhere((t) => t.id == _tripId);
+        } catch (_) {
+          _activeTrip = null;
+        }
       }
       
       // Fallback to active trip from provider
@@ -120,10 +125,33 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   Future<void> _initializeTracking() async {
-    // Load mock data for demonstration
-    _stops = _mockGenerator.getMockStops();
+    // Use actual trip stops if available, otherwise fall back to mock data
+    if (_activeTrip != null && _activeTrip!.stops.isNotEmpty) {
+      // Convert trip stops to RouteStop objects
+      _stops = _activeTrip!.stops.map((stop) {
+        return RouteStop(
+          id: stop.id,
+          name: stop.name,
+          position: gmaps.LatLng(stop.latitude ?? 0.0, stop.longitude ?? 0.0),
+          address: stop.address,
+          order: stop.order,
+          type: stop.type == 'dropoff' ? StopType.dropoff : StopType.pickup,
+        );
+      }).toList();
+      
+      if (kDebugMode) {
+        print('🚌 Using actual trip stops: ${_stops.length} stops');
+      }
+    } else {
+      // Fall back to mock data only if no real trip data
+      _stops = _mockGenerator.getMockStops();
+      if (kDebugMode) {
+        print('🚌 Using mock stops (no trip stops available)');
+      }
+    }
+    
     _routePoints = _mockGenerator.getMockRoutePath().polyline
-        .map((p) => LatLng(p.latitude, p.longitude))
+        .map((p) => latlong2.LatLng(p.latitude, p.longitude))
         .toList();
     
     // Start mock tracking (replace with real GPS tracking)
@@ -137,7 +165,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     // Center map on first stop
     if (_stops.isNotEmpty) {
       _mapController.move(
-        LatLng(_stops.first.position.latitude, _stops.first.position.longitude),
+        latlong2.LatLng(_stops.first.position.latitude, _stops.first.position.longitude),
         13,
       );
     }
@@ -180,7 +208,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     
     if (_followBus) {
       _mapController.move(
-        LatLng(location.position.latitude, location.position.longitude),
+        latlong2.LatLng(location.position.latitude, location.position.longitude),
         _mapController.camera.zoom,
       );
     }
@@ -192,8 +220,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void _checkGeofences(BusLocation location) {
     for (final stop in _stops) {
       final distance = _calculateDistance(
-        LatLng(location.position.latitude, location.position.longitude),
-        LatLng(stop.position.latitude, stop.position.longitude),
+        latlong2.LatLng(location.position.latitude, location.position.longitude),
+        latlong2.LatLng(stop.position.latitude, stop.position.longitude),
       );
       
       GeofenceType? alertType;
@@ -248,7 +276,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           if (mounted) {
             setState(() {
               _routePoints = geometry.map((coord) => 
-                LatLng(coord[1] as double, coord[0] as double)
+                latlong2.LatLng(coord[1] as double, coord[0] as double)
               ).toList();
             });
           }
@@ -259,7 +287,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  double _calculateDistance(LatLng p1, LatLng p2) {
+  double _calculateDistance(latlong2.LatLng p1, latlong2.LatLng p2) {
     const double earthRadius = 6371000;
     final lat1Rad = p1.latitude * pi / 180;
     final lat2Rad = p2.latitude * pi / 180;
@@ -311,9 +339,14 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     try {
       final tripProvider = context.read<TripProvider>();
+      final authProvider = context.read<AuthProvider>();
       final tripId = _activeTrip?.id ?? _tripId!;
       
-      final success = await tripProvider.endTrip(tripId);
+      final success = await tripProvider.endTrip(
+        tripId,
+        driverId: authProvider.userData['id'],
+        driverName: authProvider.userData['name'],
+      );
 
       if (success && mounted) {
         _showSuccessSnackbar('Trip completed successfully');
@@ -380,7 +413,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: const LatLng(-1.286389, 36.817223),
+              initialCenter: const latlong2.LatLng(-1.286389, 36.817223),
               initialZoom: 13,
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture) {
@@ -478,7 +511,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   onPressed: () {
                     if (_currentLocation != null) {
                       _mapController.move(
-                        LatLng(
+                        latlong2.LatLng(
                           _currentLocation!.position.latitude,
                           _currentLocation!.position.longitude,
                         ),
@@ -761,7 +794,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   child: _buildActionButton(
                     icon: Icons.people,
                     label: 'Students',
-                    onTap: () => Navigator.pushNamed(context, '/students-list'),
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      '/students-list',
+                      arguments: {'tripId': _tripId ?? _activeTrip?.id},
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -903,7 +940,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     return _stops.map((stop) {
       final isNext = stop.id == _currentLocation?.nextStopId;
       return Marker(
-        point: LatLng(stop.position.latitude, stop.position.longitude),
+        point: latlong2.LatLng(stop.position.latitude, stop.position.longitude),
         width: 40,
         height: 40,
         child: Container(
@@ -935,7 +972,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   Marker _buildBusMarker() {
     return Marker(
-      point: LatLng(
+      point: latlong2.LatLng(
         _currentLocation!.position.latitude,
         _currentLocation!.position.longitude,
       ),
@@ -979,7 +1016,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               title: const Text('View Students'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.pushNamed(context, '/students-list');
+                Navigator.pushNamed(
+                  context,
+                  '/students-list',
+                  arguments: {'tripId': _tripId ?? _activeTrip?.id},
+                );
               },
             ),
             ListTile(
