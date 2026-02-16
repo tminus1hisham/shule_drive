@@ -486,6 +486,17 @@ enum GeofenceType {
         return '✅';
     }
   }
+
+  String get displayName {
+    switch (this) {
+      case GeofenceType.approaching:
+        return 'Approaching';
+      case GeofenceType.arriving:
+        return 'Arriving';
+      case GeofenceType.arrived:
+        return 'Arrived';
+    }
+  }
 }
 
 /// Map View State

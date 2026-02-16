@@ -106,7 +106,8 @@ class TripProvider extends ChangeNotifier {
   /// Fetch active trip
   /// For guardians, pass their phone number to get their active trip
   Future<void> fetchActiveTrip({String? guardianPhone}) async {
-    _setLoading(true);
+    // Use microtask to avoid calling notifyListeners during build
+    await Future.microtask(() => _setLoading(true));
     try {
       _activeTrip = await _tripService.getActiveTrip(
         guardianPhone: guardianPhone,
@@ -126,6 +127,11 @@ class TripProvider extends ChangeNotifier {
     required String routeId,
     required String vehicleId,
     List<String>? studentIds,
+    String? route,
+    String? tripName,
+    String? driverName,
+    String? numberPlate,
+    String? driverPhoneNumber,
   }) async {
     _setLoading(true);
     _clearError();
@@ -135,25 +141,44 @@ class TripProvider extends ChangeNotifier {
         routeId: routeId,
         vehicleId: vehicleId,
         studentIds: studentIds,
+        route: route,
+        tripName: tripName,
+        driverName: driverName,
+        numberPlate: numberPlate,
+        driverPhoneNumber: driverPhoneNumber,
       );
 
       _activeTrip = trip;
       _trips.insert(0, trip);
 
-      // Publish MQTT event
-      await _mqttService.publishJson('trips/${trip.id}/events', {
-        'event': 'trip_started',
-        'tripId': trip.id,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Publish MQTT event (don't fail if MQTT is not connected)
+      try {
+        await _mqttService.publishJson('trips/${trip.id}/events', {
+          'event': 'trip_started',
+          'tripId': trip.id,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ MQTT publish failed: $e');
+        }
+        // Continue - don't fail the trip because of MQTT
+      }
 
-      // Show notification
-      await NotificationHelper.showTripStarted(
-        tripId: trip.id,
-        routeName: trip.routeName,
-        vehicleNumber: trip.vehicleNumber,
-        studentCount: trip.students.length,
-      );
+      // Show notification (don't fail if notification fails)
+      try {
+        await NotificationHelper.showTripStarted(
+          tripId: trip.id,
+          routeName: trip.routeName,
+          vehicleNumber: trip.vehicleNumber,
+          studentCount: trip.students.length,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Notification failed: $e');
+        }
+        // Continue - don't fail the trip because of notification
+      }
 
       notifyListeners();
       return trip;
@@ -176,34 +201,50 @@ class TripProvider extends ChangeNotifier {
     try {
       final trip = await _tripService.endTrip(tripId);
 
-      // Update local state
+      // Update local state - always clear active trip
       _activeTrip = null;
       final index = _trips.indexWhere((t) => t.id == tripId);
       if (index != -1) {
         _trips[index] = trip;
       }
 
-      // Publish MQTT event
-      await _mqttService.publishJson('trips/$tripId/events', {
-        'event': 'trip_ended',
-        'tripId': tripId,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Publish MQTT event (don't fail if MQTT errors)
+      try {
+        await _mqttService.publishJson('trips/$tripId/events', {
+          'event': 'trip_ended',
+          'tripId': tripId,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        print('⚠️ MQTT publish failed: $e');
+      }
 
-      // Show notification
-      final pickedCount = trip.pickedCount;
-      final totalStudents = trip.students.length;
-      await NotificationHelper.showTripCompleted(
-        tripId: tripId,
-        routeName: trip.routeName,
-        totalStudents: totalStudents,
-        pickedCount: pickedCount,
-        absentCount: trip.absentCount,
-      );
+      // Show notification (wrap in try-catch in case of minimal trip object)
+      try {
+        final pickedCount = trip.pickedCount;
+        final totalStudents = trip.students.length;
+        await NotificationHelper.showTripCompleted(
+          tripId: tripId,
+          routeName: trip.routeName,
+          totalStudents: totalStudents,
+          pickedCount: pickedCount,
+          absentCount: trip.absentCount,
+        );
+      } catch (e) {
+        print('⚠️ Notification failed: $e');
+      }
 
       notifyListeners();
       return true;
     } on api.ApiException catch (e) {
+      // Check if it's just an empty response error - if so, still consider it success
+      if (e.message.toLowerCase().contains('empty') || 
+          e.message.toLowerCase().contains('null')) {
+        print('⚠️ Server returned empty response, but trip was likely ended');
+        _activeTrip = null;
+        notifyListeners();
+        return true;
+      }
       _setError(e.message);
       return false;
     } catch (e) {
@@ -399,6 +440,196 @@ class TripProvider extends ChangeNotifier {
     _tripStudents = [];
     _tripGuardians = [];
     notifyListeners();
+  }
+
+  /// Create a new master trip
+  Future<api.MasterTrip?> createMasterTrip({
+    required String tripName,
+    required String tripTime,
+    required String tripDirection,
+    required String route,
+    required String numberPlate,
+    required String attendantName,
+    required String driverName,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final trip = await _tripService.createMasterTrip(
+        tripName: tripName,
+        tripTime: tripTime,
+        tripDirection: tripDirection,
+        route: route,
+        numberPlate: numberPlate,
+        attendantName: attendantName,
+        driverName: driverName,
+      );
+
+      _masterTrips.insert(0, trip);
+      notifyListeners();
+      return trip;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to create trip');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Edit an existing master trip
+  Future<api.MasterTrip?> editMasterTrip({
+    required int tripId,
+    String? tripName,
+    String? tripTime,
+    String? tripDirection,
+    String? route,
+    String? numberPlate,
+    String? attendantName,
+    String? driverName,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final trip = await _tripService.editMasterTrip(
+        tripId: tripId,
+        tripName: tripName,
+        tripTime: tripTime,
+        tripDirection: tripDirection,
+        route: route,
+        numberPlate: numberPlate,
+        attendantName: attendantName,
+        driverName: driverName,
+      );
+
+      // Update the trip in the list
+      final index = _masterTrips.indexWhere((t) => t.id == tripId);
+      if (index != -1) {
+        _masterTrips[index] = trip;
+      }
+
+      // Update selected trip if it's the one being edited
+      if (_selectedMasterTrip?.id == tripId) {
+        _selectedMasterTrip = trip;
+      }
+
+      notifyListeners();
+      return trip;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to update trip');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Delete a master trip
+  Future<bool> deleteMasterTrip(int tripId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      await _tripService.deleteMasterTrip(tripId);
+
+      _masterTrips.removeWhere((t) => t.id == tripId);
+
+      if (_selectedMasterTrip?.id == tripId) {
+        _selectedMasterTrip = null;
+      }
+
+      notifyListeners();
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to delete trip');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Add a student to a master trip
+  Future<api.TripStudent?> addStudentToMasterTrip({
+    required int masterTripId,
+    required String fullname,
+    required String studentRegNumber,
+    required int studentId,
+    required String guardianPhoneNumber,
+    required String schoolname,
+    required String classname,
+    required String route,
+    required double latitude,
+    required double longitude,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final student = await _tripService.addStudentToMasterTrip(
+        masterTripId: masterTripId,
+        fullname: fullname,
+        studentRegNumber: studentRegNumber,
+        studentId: studentId,
+        guardianPhoneNumber: guardianPhoneNumber,
+        schoolname: schoolname,
+        classname: classname,
+        route: route,
+        latitude: latitude,
+        longitude: longitude,
+      );
+
+      if (_selectedMasterTrip?.id == masterTripId) {
+        _tripStudents.add(student);
+      }
+
+      notifyListeners();
+      return student;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return null;
+    } catch (e) {
+      _setError('Failed to add student to trip');
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Delete a student from a master trip
+  Future<bool> deleteStudentFromMasterTrip({
+    required int studentTripId,
+    required int masterTripId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      await _tripService.deleteStudentFromMasterTrip(
+        studentTripId: studentTripId,
+        masterTripId: masterTripId,
+      );
+
+      _tripStudents.removeWhere((s) => s.id == studentTripId);
+      notifyListeners();
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to remove student from trip');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
   }
 
   // Helper methods

@@ -86,6 +86,14 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                         isDarkMode: isDarkMode,
                       ),
 
+                      // Manage Trips - For admins/drivers to create/edit trips
+                      _buildMenuItem(
+                        Icons.edit_note,
+                        'Manage Trips',
+                        () => _navigateTo(context, '/manage-master-trips'),
+                        isDarkMode: isDarkMode,
+                      ),
+
                       // About Us
                       _buildMenuItem(
                         Icons.description_outlined,

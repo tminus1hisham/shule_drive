@@ -733,86 +733,88 @@ class _DashboardScreenState extends State<DashboardScreen>
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Live tracking mini card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6B9B5B).withAlpha(100),
-                  blurRadius: 20,
+          // Live tracking mini card - now tappable to open unified trip view
+          GestureDetector(
+            onTap: () => Navigator.pushNamed(context, '/start-trip'),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(30),
-                        shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6B9B5B).withAlpha(100),
+                    blurRadius: 20,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(30),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.directions_bus,
+                          color: Colors.white,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.directions_bus,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trip.routeName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              trip.routeName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Bus ${trip.vehicleNumber ?? '...'}',
-                            style: TextStyle(
-                              color: Colors.white.withAlpha(230),
-                              fontSize: 12,
+                            Text(
+                              'Bus ${trip.vehicleNumber ?? '...'}',
+                              style: TextStyle(
+                                color: Colors.white.withAlpha(230),
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(30),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(30),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'LIVE',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
+                            const SizedBox(width: 6),
+                            const Text(
+                              'LIVE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
                             ),
                           ),
                         ],
@@ -842,32 +844,52 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pushNamed(
-                      context,
-                      '/osm-tracking',
-                      arguments: {
-                        'tripId': trip.id,
-                        'busId': trip.vehicleId,
-                        'routeId': trip.routeId,
-                      },
-                    ),
-                    icon: const Icon(Icons.map),
-                    label: const Text('Track Live Location'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF6B9B5B),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          '/osm-tracking',
+                          arguments: {
+                            'tripId': trip.id,
+                            'busId': trip.vehicleId,
+                            'routeId': trip.routeId,
+                          },
+                        ),
+                        icon: const Icon(Icons.map),
+                        label: const Text('Track'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF6B9B5B),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _openTripChat(context, trip),
+                        icon: const Icon(Icons.chat),
+                        label: const Text('Chat'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withAlpha(30),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+          ),
           ),
 
           const SizedBox(height: 20),
@@ -1195,5 +1217,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     final tripProvider = context.read<TripProvider>();
     // TODO: Implement actual end trip API call
     await tripProvider.fetchActiveTrip(); // Refresh to update status
+  }
+
+  void _openTripChat(BuildContext context, Trip trip) {
+    Navigator.pushNamed(
+      context,
+      '/chat-detail',
+      arguments: {
+        'tripId': trip.id,
+        'receiverId': trip.vehicleId, // Use vehicleId as receiver identifier
+        'receiverName': 'Driver - ${trip.routeName}',
+        'isTripChat': true,
+      },
+    );
   }
 }

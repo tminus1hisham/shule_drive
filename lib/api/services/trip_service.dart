@@ -63,17 +63,28 @@ class TripService {
         queryParams['guardianPhone'] = guardianPhone;
       }
 
+      debugPrint('📡 Fetching active trip from: ${ApiConstants.activeTrip}');
+      debugPrint('📡 Query params: $queryParams');
+
       final response = await _apiClient.get(
         ApiConstants.activeTrip,
         queryParams: queryParams.isNotEmpty ? queryParams : null,
       );
 
+      debugPrint('📡 Active trip response: $response');
+
       if (response['data'] == null) {
+        debugPrint('⚠️ No active trip data in response');
         // Try to get from buffer
-        return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
+        final bufferedTrip = await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
+        if (bufferedTrip != null) {
+          debugPrint('✅ Returning buffered active trip: ${bufferedTrip.id}');
+        }
+        return bufferedTrip;
       }
 
       final trip = Trip.fromJson(response['data']);
+      debugPrint('✅ Active trip fetched: ${trip.id} - ${trip.routeName}');
 
       // Save to buffer
       await _buffer.saveBuffer(
@@ -83,7 +94,12 @@ class TripService {
       );
 
       return trip;
+    } on ApiException catch (e) {
+      debugPrint('❌ ApiException fetching active trip: ${e.message} (status: ${e.statusCode})');
+      // Return from buffer on API error
+      return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     } catch (e) {
+      debugPrint('❌ Error fetching active trip: $e');
       // Return from buffer on error
       return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     }
@@ -95,6 +111,11 @@ class TripService {
     required String routeId,
     required String vehicleId,
     List<String>? studentIds,
+    String? route,
+    String? tripName,
+    String? driverName,
+    String? numberPlate,
+    String? driverPhoneNumber,
   }) async {
     try {
       final response = await _apiClient.post(
@@ -103,10 +124,38 @@ class TripService {
           'route_id': routeId,
           'vehicle_id': vehicleId,
           if (studentIds != null) 'student_ids': studentIds,
+          if (route != null) 'Route': route,
+          if (tripName != null) 'TripName': tripName,
+          if (driverName != null) 'DriverName': driverName,
+          if (numberPlate != null) 'NumberPlate': numberPlate,
+          if (driverPhoneNumber != null) 'DriverPhoneNumber': driverPhoneNumber,
         },
       );
 
-      final trip = Trip.fromJson(response['data']);
+      // Handle different API response formats
+      Trip trip;
+      if (response['data'] != null) {
+        // Standard wrapped response
+        trip = Trip.fromJson(response['data']);
+      } else if (response['tripUniqueId'] != null) {
+        // API returns tripUniqueId format - construct Trip from response
+        trip = Trip(
+          id: response['tripUniqueId']?.toString() ?? '',
+          routeName: tripName ?? route ?? 'Trip',
+          routeId: routeId,
+          startTime: DateTime.now(),
+          status: 'active',
+          vehicleId: vehicleId,
+          vehicleNumber: numberPlate,
+          students: (response['students'] as List? ?? [])
+              .map((s) => StudentPickup.fromJson(s))
+              .toList(),
+          stops: [],
+        );
+      } else {
+        // Try to parse response directly
+        trip = Trip.fromJson(response);
+      }
 
       // Update active trip buffer
       await _buffer.saveBuffer(
@@ -127,24 +176,85 @@ class TripService {
   }
 
   /// End a trip (no buffer - always requires fresh API call)
-  /// POST /trips/{id}/end
+  /// POST /api/trips/end
   Future<Trip> endTrip(String tripId) async {
     try {
-      final endpoint = ApiConstants.endTrip.replaceAll('{id}', tripId);
-      final response = await _apiClient.post(endpoint);
+      // Try the endpoint with trip ID in the body instead of URL
+      debugPrint('📡 Ending trip: POST /api/trips/end with tripId: $tripId');
+      
+      final response = await _apiClient.post(
+        '/api/trips/end',
+        body: {'tripId': tripId},
+      );
 
-      final trip = Trip.fromJson(response['data']);
+      debugPrint('📡 End trip response: $response (type: ${response.runtimeType})');
 
-      // Clear active trip buffer
+      // Always clear buffers first - trip is ended on server side
       await _buffer.clearBuffer(BufferKeys.activeTrip);
-
-      // Clear trips list cache
       await _buffer.clearCategory('trips');
 
+      // Handle null or empty response (server returned 200 with empty body)
+      if (response == null || (response is Map && response.isEmpty)) {
+        debugPrint('⚠️ Server returned empty/null response, creating minimal trip object');
+        return Trip(
+          id: tripId,
+          routeName: 'Trip',
+          routeId: '',
+          startTime: DateTime.now(),
+          endTime: DateTime.now(),
+          status: 'completed',
+          vehicleId: '',
+          students: [],
+          stops: [],
+        );
+      }
+
+      // Handle different response formats
+      Trip trip;
+      if (response['data'] != null) {
+        trip = Trip.fromJson(response['data']);
+      } else if (response['tripUniqueId'] != null || response['id'] != null) {
+        // Construct trip from response
+        trip = Trip(
+          id: response['tripUniqueId']?.toString() ?? response['id']?.toString() ?? tripId,
+          routeName: response['routeName'] ?? response['route'] ?? 'Trip',
+          routeId: response['routeId']?.toString() ?? '',
+          startTime: Trip._parseDateTime(response['startTime']) ?? DateTime.now(),
+          endTime: Trip._parseDateTime(response['endTime']) ?? DateTime.now(),
+          status: 'completed',
+          vehicleId: response['vehicleId']?.toString() ?? '',
+          vehicleNumber: response['vehicleNumber']?.toString(),
+          students: [],
+          stops: [],
+        );
+      } else {
+        // Return a minimal trip object for any other response format
+        debugPrint('⚠️ Unexpected response format, creating minimal trip object');
+        trip = Trip(
+          id: tripId,
+          routeName: 'Trip',
+          routeId: '',
+          startTime: DateTime.now(),
+          endTime: DateTime.now(),
+          status: 'completed',
+          vehicleId: '',
+          students: [],
+          stops: [],
+        );
+      }
+
       return trip;
-    } on ApiException {
+    } on ApiException catch (e) {
+      debugPrint('❌ ApiException in endTrip: ${e.message} (status: ${e.statusCode})');
+      // Even on error, clear the active trip buffer to prevent stale data
+      await _buffer.clearBuffer(BufferKeys.activeTrip);
+      await _buffer.clearCategory('trips');
       rethrow;
     } catch (e) {
+      debugPrint('❌ Error in endTrip: $e');
+      // Even on error, clear the active trip buffer to prevent stale data
+      await _buffer.clearBuffer(BufferKeys.activeTrip);
+      await _buffer.clearCategory('trips');
       throw ApiException(message: e.toString());
     }
   }
@@ -282,6 +392,175 @@ class TripService {
       cacheDuration: const Duration(minutes: 5),
     );
   }
+
+  /// Create a new master trip
+  /// POST /api/trips/master/create
+  Future<MasterTrip> createMasterTrip({
+    required String tripName,
+    required String tripTime,
+    required String tripDirection,
+    required String route,
+    required String numberPlate,
+    required String attendantName,
+    required String driverName,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        Endpoints.createMasterTrip,
+        body: {
+          'tripName': tripName,
+          'tripTime': tripTime,
+          'tripDirection': tripDirection,
+          'route': route,
+          'numberPlate': numberPlate,
+          'attendantName': attendantName,
+          'driverName': driverName,
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      final trip = MasterTrip.fromJson(response['data'] ?? response);
+
+      // Clear master trips cache to force refresh
+      await _buffer.clearCategory('master_trips');
+
+      return trip;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Edit an existing master trip
+  /// POST /api/trips/edit/master/trip
+  Future<MasterTrip> editMasterTrip({
+    required int tripId,
+    String? tripName,
+    String? tripTime,
+    String? tripDirection,
+    String? route,
+    String? numberPlate,
+    String? attendantName,
+    String? driverName,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'id': tripId,
+        if (tripName != null) 'tripName': tripName,
+        if (tripTime != null) 'tripTime': tripTime,
+        if (tripDirection != null) 'tripDirection': tripDirection,
+        if (route != null) 'route': route,
+        if (numberPlate != null) 'numberPlate': numberPlate,
+        if (attendantName != null) 'attendantName': attendantName,
+        if (driverName != null) 'driverName': driverName,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+
+      final response = await _apiClient.post(
+        Endpoints.editMasterTrip,
+        body: body,
+      );
+
+      final trip = MasterTrip.fromJson(response['data'] ?? response);
+
+      // Clear master trips cache to force refresh
+      await _buffer.clearCategory('master_trips');
+
+      return trip;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Add a student to a master trip
+  /// POST /api/trips/add/student/to/master
+  Future<TripStudent> addStudentToMasterTrip({
+    required int masterTripId,
+    required String fullname,
+    required String studentRegNumber,
+    required int studentId,
+    required String guardianPhoneNumber,
+    required String schoolname,
+    required String classname,
+    required String route,
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        Endpoints.addStudentToMasterTrip,
+        body: {
+          'masterTripId': masterTripId,
+          'fullname': fullname,
+          'studentRegNumber': studentRegNumber,
+          'studentId': studentId,
+          'guardianPhoneNumber': guardianPhoneNumber,
+          'schoolname': schoolname,
+          'classname': classname,
+          'route': route,
+          'latitude': latitude,
+          'longitude': longitude,
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      final student = TripStudent.fromJson(response['data'] ?? response);
+
+      // Clear students cache for this trip
+      await _buffer.clearBuffer('master_trip_students_$masterTripId');
+
+      return student;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Delete a master trip
+  /// POST /api/trips/delete/master/trip
+  Future<void> deleteMasterTrip(int tripId) async {
+    try {
+      await _apiClient.post(
+        Endpoints.deleteMasterTrip,
+        body: {'id': tripId},
+      );
+
+      // Clear master trips cache
+      await _buffer.clearCategory('master_trips');
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Delete a student from a master trip
+  /// POST /api/trips/delete/student/from/master/trip
+  Future<void> deleteStudentFromMasterTrip({
+    required int studentTripId,
+    required int masterTripId,
+  }) async {
+    try {
+      await _apiClient.post(
+        Endpoints.deleteStudentFromMasterTrip,
+        body: {
+          'id': studentTripId,
+          'masterTripId': masterTripId,
+        },
+      );
+
+      // Clear students cache for this trip
+      await _buffer.clearBuffer('master_trip_students_$masterTripId');
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
 }
 
 /// Trip Model
@@ -402,19 +681,27 @@ class StudentPickup {
   });
 
   factory StudentPickup.fromJson(Map<String, dynamic> json) {
+    // Determine status from various API response formats
+    String studentStatus = 'pending';
+    if (json['isStudentPicked'] == true || json['isStudentDropped'] == true) {
+      studentStatus = json['isStudentDropped'] == true ? 'dropped' : 'picked';
+    } else if (json['status'] != null) {
+      studentStatus = json['status'];
+    }
+
     return StudentPickup(
-      id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      photo: json['photo'],
-      status: json['status'] ?? 'pending',
+      id: json['id']?.toString() ?? json['studentId']?.toString() ?? '',
+      name: json['fullname'] ?? json['name'] ?? '',
+      photo: json['profileImage'] ?? json['photo'],
+      status: studentStatus,
       pickupTime: Trip._parseDateTime(
-        json['pickup_time'] ?? json['pickupTime'],
+        json['pickedTime'] ?? json['pickup_time'] ?? json['pickupTime'],
       ),
       dropoffTime: Trip._parseDateTime(
-        json['dropoff_time'] ?? json['dropoffTime'],
+        json['dropTime'] ?? json['dropoff_time'] ?? json['dropoffTime'],
       ),
       notes: json['notes'],
-      parentPhone: json['parent_phone'] ?? json['parentPhone'],
+      parentPhone: json['guardianPhoneNumber'] ?? json['parent_phone'] ?? json['parentPhone'],
     );
   }
 

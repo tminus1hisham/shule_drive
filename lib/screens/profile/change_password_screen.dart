@@ -96,7 +96,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
     final authProvider = context.read<AuthProvider>();
 
-    // Store navigator reference BEFORE async operation
+    // Store context and navigator reference BEFORE async operation
+    final currentContext = context;
     _navigator = Navigator.of(context, rootNavigator: true);
 
     // Show blocking loading overlay to prevent navigation
@@ -121,7 +122,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       errorMsg = e.toString();
     }
 
-    // Hide loading overlay
+    // Hide loading overlay - don't use setState if we might show dialog immediately
+    // to avoid "setState called during build" errors
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -133,8 +135,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       print('🔐 mounted: $mounted');
     }
 
-    // Use stored navigator if widget is unmounted
-    if (!mounted) {
+    // Wait for next frame to ensure setState is complete before showing dialog
+    await Future.delayed(Duration.zero);
+
+    // Check if we can use the current context or need stored navigator
+    if (!mounted || !currentContext.mounted) {
       if (kDebugMode) {
         print('⚠️ Widget not mounted, using stored navigator...');
       }
@@ -155,6 +160,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     if (kDebugMode) {
       print('🔄 Showing dialog with stored navigator');
       print('🔄 success: $success');
+      print('🔄 errorMsg: $errorMsg');
     }
 
     if (success) {
@@ -166,10 +172,24 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       );
     } else {
       final error = errorMsg ?? '';
-      final isWrongPassword = error.toLowerCase().contains('current password is incorrect') ||
-          error.toLowerCase().contains('incorrect');
+      final errorLower = error.toLowerCase();
+      final isWrongPassword = errorLower.contains('current password is incorrect') ||
+          errorLower.contains('incorrect') ||
+          errorLower.contains('invalid credential');
+      // Check for server error (password likely saved despite error)
       final isServerError = error.contains('Invalid server response format') ||
-          error.contains('NullReferenceException');
+          error.contains('NullReferenceException') ||
+          error.contains('Server Error') ||
+          error.contains('JSON Parse Error') ||
+          errorLower.contains('500') ||
+          errorLower.contains('internal server error') ||
+          errorLower.contains('statuscode: 500') ||
+          errorLower.contains('http error 500');
+
+      if (kDebugMode) {
+        print('🔄 isWrongPassword: $isWrongPassword');
+        print('🔄 isServerError: $isServerError');
+      }
 
       if (isWrongPassword) {
         _navigator!.push(
@@ -180,12 +200,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         );
       } else if (isServerError) {
         // Password saved but email failed - show success
+        if (kDebugMode) print('🔄 Server error detected - showing SUCCESS dialog');
         _navigator!.push(
           MaterialPageRoute(
             fullscreenDialog: true,
             builder: (context) => _buildSuccessDialogPage(),
           ),
         );
+      } else {
+        // Unknown error - can't show snackbar without context, log for debugging
+        if (kDebugMode) print('🔄 Unknown error - cannot show dialog (no context): $error');
       }
     }
   }
@@ -225,15 +249,24 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
           error.toLowerCase().contains('invalid credential');
 
       // Check for server error (password likely saved)
+      // When password change succeeds but server returns 500 (e.g., email notification failed)
+      final errorLower = error.toLowerCase();
       final isServerError = error.contains('Invalid server response format') ||
           error.contains('NullReferenceException') ||
           error.contains('Server Error') ||
-          error.contains('JSON Parse Error');
+          error.contains('JSON Parse Error') ||
+          errorLower.contains('500') ||
+          errorLower.contains('internal server error') ||
+          errorLower.contains('statuscode: 500') ||
+          errorLower.contains('http error 500');
 
       if (kDebugMode) {
         print('❌ isWrongPassword: $isWrongPassword');
         print('❌ isServerError: $isServerError');
       }
+
+      // Wait for next frame to avoid setState during build issues
+      await Future.delayed(Duration.zero);
 
       if (!mounted) {
         if (kDebugMode) print('❌ Widget became unmounted during error check');
@@ -684,10 +717,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       print('🚨 _showInvalidCredentialsAlert() called');
     }
 
+    if (!mounted) {
+      if (kDebugMode) print('❌ Cannot show dialog: widget not mounted');
+      return;
+    }
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         if (kDebugMode) {
           print('🚨 Building invalid credentials dialog...');
         }
@@ -702,10 +740,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       print('✅ _showSuccessAlert() called');
     }
 
+    if (!mounted) {
+      if (kDebugMode) print('❌ Cannot show dialog: widget not mounted');
+      return;
+    }
+
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         if (kDebugMode) {
           print('✅ Building success dialog widget...');
         }
@@ -721,7 +764,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
     return MainScaffold(
       title: 'Change Password',
-      showBackButton: !_isLoading,
+      showBackButton: !_isLoading && !authProvider.isLoading,
       body: Stack(
         children: [
           // Background gradient
@@ -928,8 +971,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
               ),
             ),
           ),
-          // Loading overlay
-          if (_isLoading)
+          // Loading overlay - show when either local or provider loading is active
+          if (_isLoading || authProvider.isLoading)
             Container(
               color: Colors.black.withAlpha(128),
               child: const Center(

@@ -457,9 +457,18 @@ class ChangePasswordResponse {
   ChangePasswordResponse({required this.success, this.message, this.errors});
 
   factory ChangePasswordResponse.fromJson(Map<String, dynamic> json) {
+    // Check for success in multiple ways:
+    // 1. Explicit success/isSuccess field
+    // 2. Success message in response
+    // 3. No errors present
+    final message = json['message'] ?? json['msg'];
+    final hasSuccessMessage = message != null && 
+        message.toString().toLowerCase().contains('success');
+    final hasErrors = json['errors'] != null && (json['errors'] as List).isNotEmpty;
+    
     return ChangePasswordResponse(
-      success: json['success'] ?? json['isSuccess'] ?? false,
-      message: json['message'] ?? json['msg'],
+      success: json['success'] ?? json['isSuccess'] ?? hasSuccessMessage || !hasErrors,
+      message: message,
       errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
     );
   }

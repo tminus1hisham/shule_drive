@@ -6,18 +6,23 @@ import '../../models/chat_message.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ChatScreen extends StatefulWidget {
   final String? receiverId;
   final String? receiverName;
   final String? receiverAvatar;
+  final String? tripId;
+  final bool isTripChat;
 
   const ChatScreen({
     super.key,
     this.receiverId,
     this.receiverName,
     this.receiverAvatar,
+    this.tripId,
+    this.isTripChat = false,
   });
 
   @override
@@ -30,6 +35,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isInitializing = true;
   String? _initError;
   bool _showScrollToBottom = false;
+  bool _isTripActive = false;
+  bool _isLoadingTripStatus = true;
 
   @override
   void initState() {
@@ -37,6 +44,43 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.addListener(_onScroll);
     // Defer initialization until after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeChat());
+    // Check trip status if this is a trip-based chat
+    if (widget.isTripChat && widget.tripId != null) {
+      _checkTripStatus();
+    } else {
+      setState(() => _isLoadingTripStatus = false);
+    }
+  }
+
+  Future<void> _checkTripStatus() async {
+    try {
+      final tripProvider = context.read<TripProvider>();
+      // Get fresh trip data
+      await tripProvider.fetchActiveTrip();
+      
+      // Check if the trip is still active
+      final activeTrip = tripProvider.activeTrip;
+      if (activeTrip != null && activeTrip.id == widget.tripId) {
+        setState(() => _isTripActive = true);
+      } else {
+        // Check if trip exists but is completed
+        final allTrips = tripProvider.trips;
+        try {
+          final trip = allTrips.firstWhere(
+            (t) => t.id == widget.tripId,
+          );
+          setState(() => _isTripActive = trip.status == 'active');
+        } catch (e) {
+          // Trip not found in list
+          setState(() => _isTripActive = false);
+        }
+      }
+    } catch (e) {
+      // If we can't determine trip status, default to read-only
+      setState(() => _isTripActive = false);
+    } finally {
+      setState(() => _isLoadingTripStatus = false);
+    }
   }
 
   void _onScroll() {
@@ -129,6 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final appProvider = Provider.of<AppProvider>(context);
     final isDarkMode = appProvider.isDarkMode;
     final receiverName = widget.receiverName ?? 'Chat';
+    final bool isReadOnly = widget.isTripChat && !_isTripActive && !_isLoadingTripStatus;
 
     if (_isInitializing) {
       return _buildLoadingScreen(isDarkMode);
@@ -155,19 +200,127 @@ class _ChatScreenState extends State<ChatScreen> {
           Column(
             children: [
               _buildErrorBanner(),
+              // Trip status banner
+              if (widget.isTripChat) _buildTripStatusBanner(isDarkMode, isReadOnly),
               Expanded(
                 child: _buildMessagesList(isDarkMode),
               ),
-              _buildMessageInput(isDarkMode),
+              if (isReadOnly)
+                _buildReadOnlyBanner(isDarkMode)
+              else
+                _buildMessageInput(isDarkMode),
             ],
           ),
           if (_showScrollToBottom)
             Positioned(
               right: 16,
-              bottom: 100,
+              bottom: isReadOnly ? 20 : 100,
               child: _buildScrollToBottomButton(isDarkMode),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTripStatusBanner(bool isDarkMode, bool isReadOnly) {
+    if (_isLoadingTripStatus) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
+        child: const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: _isTripActive
+            ? Colors.green.withAlpha(30)
+            : Colors.orange.withAlpha(30),
+        border: Border(
+          bottom: BorderSide(
+            color: _isTripActive
+                ? Colors.green.withAlpha(50)
+                : Colors.orange.withAlpha(50),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _isTripActive ? Icons.circle : Icons.history,
+            size: 12,
+            color: _isTripActive ? Colors.green : Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _isTripActive
+                  ? 'Trip is active - Chat is enabled'
+                  : 'Trip has ended - Chat history is read-only',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDarkMode ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ),
+          if (_isTripActive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'LIVE',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyBanner(bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: 18,
+              color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'This chat is archived and read-only',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

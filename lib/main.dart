@@ -31,6 +31,7 @@ import 'screens/info/about_screen.dart';
 import 'screens/info/contact_screen.dart';
 import 'screens/trips/trips_screen.dart';
 import 'screens/trips/trip_details_screen.dart';
+import 'screens/trips/manage/manage_master_trips_screen.dart';
 import 'screens/routes/routes_list_screen.dart';
 import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
@@ -514,6 +515,10 @@ Route _buildPageRoute(RouteSettings settings) {
       page = const TripDetailsScreen();
       protected = true;
       break;
+    case '/manage-master-trips':
+      page = const ManageMasterTripsScreen();
+      protected = true;
+      break;
     case '/notifications':
       page = const NotificationsScreen();
       protected = true;
@@ -542,6 +547,8 @@ Route _buildPageRoute(RouteSettings settings) {
         receiverId: args?['receiverId'] as String?,
         receiverName: args?['receiverName'] as String?,
         receiverAvatar: args?['receiverAvatar'] as String?,
+        tripId: args?['tripId'] as String?,
+        isTripChat: args?['isTripChat'] as bool? ?? false,
       );
       protected = true;
       break;
