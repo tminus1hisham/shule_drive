@@ -65,14 +65,35 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       _loadData();
     });
     _searchController.addListener(_filterStudents);
+    
+    // Listen to TripProvider changes to sync local state
+    final tripProvider = context.read<TripProvider>();
+    tripProvider.addListener(_onTripProviderChanged);
   }
 
   @override
   void dispose() {
+    // Remove TripProvider listener
+    final tripProvider = context.read<TripProvider>();
+    tripProvider.removeListener(_onTripProviderChanged);
+    
     _searchController.dispose();
     _tripNameController.dispose();
     _tripTimeController.dispose();
     super.dispose();
+  }
+  
+  void _onTripProviderChanged() {
+    final tripProvider = context.read<TripProvider>();
+    // Only update if we're not currently loading and data changed
+    if (!_isLoadingStudents && mounted) {
+      final providerStudents = tripProvider.tripStudents;
+      if (providerStudents != _masterTripStudents) {
+        setState(() {
+          _masterTripStudents = providerStudents;
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
