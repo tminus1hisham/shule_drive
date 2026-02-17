@@ -67,6 +67,12 @@ class BottomNavigation extends StatelessWidget {
     );
   }
 
+  // Navbar sizing constants
+  static const double _iconSizeUnselected = 24;
+  static const double _iconSizeSelected = 26;
+  static const double _fontSizeUnselected = 12;
+  static const double _fontSizeSelected = 13;
+
   Widget _buildNavItem(IconData icon, String label, int index, bool isDarkMode) {
     final isSelected = currentIndex == index;
     
@@ -98,8 +104,8 @@ class BottomNavigation extends StatelessWidget {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   padding: isSelected 
-                      ? const EdgeInsets.all(6)
-                      : const EdgeInsets.all(4),
+                      ? const EdgeInsets.all(8)
+                      : const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: isSelected 
                         ? activeColor.withValues(alpha: isDarkMode ? 0.25 : 0.15)
@@ -109,7 +115,7 @@ class BottomNavigation extends StatelessWidget {
                   child: Icon(
                     icon,
                     color: isSelected ? activeColor : inactiveColor,
-                    size: isSelected ? 22 : 20,
+                    size: isSelected ? _iconSizeSelected : _iconSizeUnselected,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -117,7 +123,7 @@ class BottomNavigation extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: isSelected ? activeColor : inactiveColor,
-                    fontSize: isSelected ? 11 : 10,
+                    fontSize: isSelected ? _fontSizeSelected : _fontSizeUnselected,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
@@ -129,6 +135,10 @@ class BottomNavigation extends StatelessWidget {
     );
   }
 
+  // Center action button sizing
+  static const double _centerButtonSize = 60;
+  static const double _centerButtonIconSize = 34;
+
   Widget _buildCenterActionButton(bool isDarkMode) {
     return Material(
       color: Colors.transparent,
@@ -138,8 +148,8 @@ class BottomNavigation extends StatelessWidget {
         splashColor: Colors.white.withValues(alpha: 0.3),
         highlightColor: Colors.white.withValues(alpha: 0.1),
         child: Container(
-          width: 56,
-          height: 56,
+          width: _centerButtonSize,
+          height: _centerButtonSize,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
@@ -149,7 +159,7 @@ class BottomNavigation extends StatelessWidget {
                 Color(0xFF5A8A4A),
               ],
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
@@ -159,10 +169,10 @@ class BottomNavigation extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(
+          child: Icon(
             Icons.add_rounded,
             color: Colors.white,
-            size: 32,
+            size: _centerButtonIconSize,
           ),
         ),
       ),
