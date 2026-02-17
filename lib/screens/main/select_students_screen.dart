@@ -29,13 +29,13 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   List<api.TripStudent> _masterTripStudents = [];
   
   // UI State
-  bool _isLoading = true;
+  bool _isLoading = false; // Start false to show UI immediately
   bool _isLoadingStudents = false;
   bool _isCreatingTrip = false;
   bool _isStartingTrip = false;
   bool _showCreateForm = false;
   bool _isSearchingByPhone = false;
-  bool _showPhoneSearch = false;
+  bool _showPhoneSearch = true; // Default to phone search while loading
   
   // Trip configuration from previous screen
   String? _routeId;
@@ -54,7 +54,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('🚀 SelectStudentsScreen initState()');
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('🚀 SelectStudentsScreen postFrameCallback');
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         setState(() {
@@ -62,9 +64,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           _vehicleId = args['vehicleId'] as String?;
           _attendant = args['attendant'] as String?;
         });
-        if (kDebugMode) {
-          print('📋 Trip Config: routeId=$_routeId, vehicleId=$_vehicleId, attendant=$_attendant');
-        }
+        debugPrint('📋 Trip Config: routeId=$_routeId, vehicleId=$_vehicleId, attendant=$_attendant');
       }
       _loadData();
     });
@@ -102,7 +102,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    // Don't block UI - start loading in background
+    // setState(() => _isLoading = true);
     
     final provider = context.read<AppProvider>();
     final tripProvider = context.read<TripProvider>();
@@ -126,39 +127,109 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         }
       }
       
-      // Load all students
-      await _loadAllStudents();
-      
-      // Load existing master trips for this route
+      // Load existing master trips first (fast)
       await _loadExistingTrips();
+      
+      // Load all students in background (slow)
+      _loadAllStudents().then((_) {
+        if (kDebugMode) {
+          print('✅ Students loaded in background');
+        }
+        // Switch to name search once students are loaded
+        if (mounted && _allStudents.isNotEmpty) {
+          setState(() {
+            _showPhoneSearch = false;
+          });
+        }
+      }).catchError((e) {
+        if (kDebugMode) {
+          print('❌ Error loading students: $e');
+        }
+      });
       
     } catch (e) {
       if (kDebugMode) {
         print('❌ Error loading data: $e');
       }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
   Future<void> _loadAllStudents() async {
+    debugPrint('🔍 _loadAllStudents() STARTED');
     try {
       final studentService = api.StudentService();
-      _allStudents = await studentService.getAllStudents(limit: 1000);
+      final guardianService = api.GuardianService();
+      final busService = api.BusService();
+      
+      // Get driver's companyOrgId from bus (same approach as debug button)
+      String? companyOrgId;
+      try {
+        debugPrint('🚌 Fetching buses...');
+        final buses = await busService.getBusesByUser();
+        debugPrint('🚌 Got ${buses.length} buses');
+        if (buses.isNotEmpty) {
+          companyOrgId = buses.first.schoolId;
+          debugPrint('🚌 Got companyOrgId from bus: $companyOrgId');
+        } else {
+          debugPrint('⚠️ No buses found!');
+        }
+      } catch (e) {
+        debugPrint('❌ Failed to get bus: $e');
+      }
+      
+      if (companyOrgId == null || companyOrgId.isEmpty) {
+        debugPrint('⚠️ No companyOrgId, falling back to getAllStudents');
+        // Fallback: try getAllStudents (which might fail)
+        _allStudents = await studentService.getAllStudents(limit: 1000);
+        debugPrint('📊 Fallback loaded ${_allStudents.length} students');
+      } else {
+        debugPrint('🔍 Fetching guardians for companyOrgId: $companyOrgId');
+        // Get all guardians with same companyOrgId
+        final guardians = await guardianService.getAllGuardians(companyOrgId: companyOrgId);
+        debugPrint('👥 Found ${guardians.length} guardians');
+        
+        // Collect unique phone numbers
+        final uniquePhones = guardians
+            .map((g) => g.bestPhoneNumber)
+            .where((p) => p != null && p.isNotEmpty)
+            .cast<String>()
+            .toSet();
+        
+        debugPrint('📞 Unique phone numbers: $uniquePhones');
+        
+        if (uniquePhones.isEmpty) {
+          debugPrint('⚠️ No phone numbers found!');
+          _allStudents = [];
+        } else {
+          debugPrint('🚀 Fetching students for ${uniquePhones.length} phones...');
+          // Fetch all students in parallel
+          _allStudents = await studentService.getStudentsByPhonesParallel(
+            uniquePhones.toList(),
+            useCache: true,
+          );
+          debugPrint('✅ Parallel fetch returned ${_allStudents.length} students');
+        }
+      }
+      
       _filteredStudents = _allStudents;
       
-      if (kDebugMode) {
-        print('👨‍🎓 Loaded ${_allStudents.length} students');
+      debugPrint('👨‍🎓 FINAL: Loaded ${_allStudents.length} students total');
+      
+      // Notify UI to update
+      if (mounted) {
+        setState(() {});
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Error loading students: $e');
-      }
+    } catch (e, stackTrace) {
+      debugPrint('❌❌❌ ERROR in _loadAllStudents: $e');
+      debugPrint('Stack trace: $stackTrace');
       _allStudents = [];
       _filteredStudents = [];
+      
+      if (mounted) {
+        setState(() {});
+      }
     }
+    debugPrint('🔍 _loadAllStudents() COMPLETED');
   }
 
   Future<void> _loadExistingTrips() async {
@@ -617,22 +688,16 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF6B9B5B),
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _loadData,
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Route Info Header
-                          _buildRouteHeader(provider),
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Route Info Header
+                    _buildRouteHeader(provider),
                           
                           const SizedBox(height: 20),
                           
@@ -675,7 +740,43 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                           ],
                           
                           // Available Students Section
-                          _buildSectionTitle('Available Students', provider),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildSectionTitle('Available Students', provider),
+                              if (_isLoadingStudents)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: provider.textMutedColor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Loading...',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: provider.textMutedColor,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else
+                                Text(
+                                  '${_filteredStudents.length} students',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: provider.textMutedColor,
+                                  ),
+                                ),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           
                           // Search Bar
@@ -1016,7 +1117,23 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           children: [
             Expanded(
               child: ChoiceChip(
-                label: const Text('Search by Name'),
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Search by Name'),
+                    if (_isLoadingStudents) ...[
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: provider.textMutedColor,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 selected: !_showPhoneSearch,
                 onSelected: (selected) {
                   if (selected) {
@@ -1268,6 +1385,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Widget _buildAvailableStudentsList(AppProvider provider) {
+    debugPrint('🎨 _buildAvailableStudentsList: _isLoading=$_isLoading, _filteredStudents=${_filteredStudents.length}, _showPhoneSearch=$_showPhoneSearch');
+    
     // Show phone search results if available
     if (_showPhoneSearch && _phoneSearchResults.isNotEmpty) {
       return _buildPhoneSearchResultsList(provider);
@@ -1317,15 +1436,60 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     }
 
     // Default: show filtered students list
+    if (_isLoadingStudents) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: AppProvider.primaryGreen,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading students...\nYou can search by phone meanwhile',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     if (_filteredStudents.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Text(
-            'No students found',
-            style: TextStyle(
-              color: provider.textMutedColor,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: 48,
+                color: provider.textMutedColor,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No students found',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try searching by phone number instead',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: provider.textMutedColor,
+                ),
+              ),
+            ],
           ),
         ),
       );

@@ -16,6 +16,7 @@ export 'api_client.dart';
 // Services
 export 'services/auth_service.dart';
 export 'services/bus_service.dart';
+export 'services/guardian_service.dart';
 export 'services/route_service.dart';
 export 'services/student_service.dart';
 export 'services/trip_service.dart';

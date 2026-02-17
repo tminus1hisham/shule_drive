@@ -1077,23 +1077,13 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 16),
           Row(
             children: [
-              if (isDriver && !hasActiveTrip)
+              if (isDriver)
                 Expanded(
                   child: _buildQuickActionCard(
-                    icon: Icons.play_circle_outline,
-                    label: 'Start Trip',
+                    icon: Icons.settings,
+                    label: 'Manage Trips',
                     color: const Color(0xFF6B9B5B),
-                    onTap: () => Navigator.pushNamed(context, '/start-trip'),
-                    isDarkMode: isDarkMode,
-                  ),
-                )
-              else if (isDriver && hasActiveTrip)
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.people_outline,
-                    label: 'Students',
-                    color: const Color(0xFF2196F3),
-                    onTap: () => Navigator.pushNamed(context, '/students-list'),
+                    onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
                     isDarkMode: isDarkMode,
                   ),
                 )

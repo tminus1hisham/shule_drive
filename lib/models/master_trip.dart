@@ -15,6 +15,9 @@ class MasterTrip {
   final bool isTripActive;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? driverName;
+  final String? numberPlate;
+  final String? attendantName;
 
   MasterTrip({
     required this.id,
@@ -29,6 +32,9 @@ class MasterTrip {
     required this.isTripActive,
     required this.createdAt,
     required this.updatedAt,
+    this.driverName,
+    this.numberPlate,
+    this.attendantName,
   });
 
   factory MasterTrip.fromJson(Map<String, dynamic> json) {
@@ -45,6 +51,9 @@ class MasterTrip {
       isTripActive: json['isTripActive'] ?? false,
       createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
       updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
+      driverName: json['driverName'] ?? json['driver_name'],
+      numberPlate: json['numberPlate'] ?? json['number_plate'] ?? json['busNumberPlate'],
+      attendantName: json['attendantName'] ?? json['attendant_name'],
     );
   }
 
@@ -62,6 +71,9 @@ class MasterTrip {
       'isTripActive': isTripActive,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'driverName': driverName,
+      'numberPlate': numberPlate,
+      'attendantName': attendantName,
     };
   }
 

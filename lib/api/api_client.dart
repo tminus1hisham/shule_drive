@@ -296,14 +296,24 @@ class ApiClient {
   /// DELETE request
   Future<dynamic> delete(
     String endpoint, {
+    Map<String, dynamic>? body,
     bool requiresAuth = true,
   }) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
       final headers = await _getHeaders(requiresAuth: requiresAuth);
       
+      // Add content-type header if body is provided
+      if (body != null) {
+        headers['Content-Type'] = 'application/json';
+      }
+      
       final response = await _client
-          .delete(uri, headers: headers)
+          .delete(
+            uri, 
+            headers: headers,
+            body: body != null ? jsonEncode(body) : null,
+          )
           .timeout(
             const Duration(milliseconds: ApiConstants.connectionTimeout),
           );

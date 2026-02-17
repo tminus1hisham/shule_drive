@@ -326,6 +326,77 @@ class StudentService {
     await _buffer.clearCategory('students');
   }
 
+  /// Get students from multiple phone numbers in PARALLEL
+  /// Optimized for speed - uses Future.wait for concurrent requests
+  /// Returns cached data immediately if available, fetches in background
+  Future<List<Student>> getStudentsByPhonesParallel(
+    List<String> phoneNumbers, {
+    bool useCache = true,
+  }) async {
+    if (phoneNumbers.isEmpty) return [];
+    
+    final uniquePhones = phoneNumbers.toSet().toList();
+    debugPrint('🚀 Parallel fetching students for ${uniquePhones.length} phone numbers');
+    
+    // Check cache first if enabled
+    if (useCache) {
+      final cachedStudents = <Student>[];
+      final phonesToFetch = <String>[];
+      
+      for (final phone in uniquePhones) {
+        final bufferKey = '${BufferKeys.students()}_phone_$phone';
+        final cached = await _buffer.getBuffer<List<dynamic>>(key: bufferKey);
+        if (cached != null) {
+          cachedStudents.addAll(cached.map((s) => s as Student));
+          debugPrint('  💾 Cache hit for $phone: ${cached.length} students');
+        } else {
+          phonesToFetch.add(phone);
+        }
+      }
+      
+      // If all cached, return immediately
+      if (phonesToFetch.isEmpty) {
+        debugPrint('✅ All data from cache: ${cachedStudents.length} students');
+        return cachedStudents;
+      }
+      
+      // Fetch missing data in parallel
+      final freshStudents = await _fetchStudentsParallel(phonesToFetch);
+      return [...cachedStudents, ...freshStudents];
+    }
+    
+    // No cache - fetch all in parallel
+    return _fetchStudentsParallel(uniquePhones);
+  }
+  
+  /// Internal method to fetch students in parallel
+  Future<List<Student>> _fetchStudentsParallel(List<String> phoneNumbers) async {
+    final stopwatch = Stopwatch()..start();
+    
+    // Create all futures and run them in parallel
+    final futures = phoneNumbers.map((phone) async {
+      try {
+        return await getStudentsByPhone(phone);
+      } catch (e) {
+        debugPrint('  ❌ Failed for $phone: $e');
+        return <Student>[];
+      }
+    }).toList();
+    
+    // Wait for all to complete
+    final results = await Future.wait(futures);
+    
+    // Combine results
+    final allStudents = <Student>[];
+    for (final studentList in results) {
+      allStudents.addAll(studentList);
+    }
+    
+    stopwatch.stop();
+    debugPrint('⚡ Parallel fetch completed: ${allStudents.length} students in ${stopwatch.elapsedMilliseconds}ms');
+    return allStudents;
+  }
+
   /// Get extended guardians for the current user
   /// GET /api/guardians/get/extended/guardians
   Future<List<Guardian>> getExtendedGuardians() async {

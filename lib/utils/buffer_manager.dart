@@ -307,6 +307,10 @@ class BufferKeys {
   // User
   static String userProfile(String userId) => 'users/profile_$userId';
   static String userChildren(String userId) => 'users/children_$userId';
+  
+  // Guardians
+  static String guardians({String? companyOrgId}) => 
+      companyOrgId != null ? 'guardians/org_$companyOrgId' : 'guardians/all';
 }
 
 /// Extension methods for easy buffer access

@@ -461,7 +461,7 @@ class TripService {
   }
 
   /// Edit an existing master trip
-  /// POST /api/trips/edit/master/trip
+  /// PUT /api/trips/edit/master/trip
   Future<MasterTrip> editMasterTrip({
     required int tripId,
     String? tripName,
@@ -485,7 +485,9 @@ class TripService {
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
       };
 
-      final response = await _apiClient.post(
+      debugPrint('✏️ Editing master trip: $body');
+      
+      final response = await _apiClient.put(
         Endpoints.editMasterTrip,
         body: body,
       );
@@ -573,19 +575,24 @@ class TripService {
     required int masterTripId,
   }) async {
     try {
-      await _apiClient.post(
+      debugPrint('🗑️ Deleting student trip: id=$studentTripId, masterTripId=$masterTripId');
+      
+      final response = await _apiClient.post(
         Endpoints.deleteStudentFromMasterTrip,
         body: {
           'id': studentTripId,
           'masterTripId': masterTripId,
         },
       );
+      
+      debugPrint('✅ Delete response: $response');
 
       // Clear students cache for this trip
       await _buffer.clearBuffer('master_trip_students_$masterTripId');
     } on ApiException {
       rethrow;
     } catch (e) {
+      debugPrint('❌ Delete error: $e');
       throw ApiException(message: e.toString());
     }
   }
