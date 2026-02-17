@@ -18,10 +18,12 @@ class SelectStudentsScreen extends StatefulWidget {
 class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _phoneSearchController = TextEditingController();
   
   // Data
   List<api.Student> _allStudents = [];
   List<api.Student> _filteredStudents = [];
+  List<api.Student> _phoneSearchResults = [];
   List<api.MasterTrip> _existingTrips = [];
   api.MasterTrip? _selectedMasterTrip;
   List<api.TripStudent> _masterTripStudents = [];
@@ -32,6 +34,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   bool _isCreatingTrip = false;
   bool _isStartingTrip = false;
   bool _showCreateForm = false;
+  bool _isSearchingByPhone = false;
+  bool _showPhoneSearch = false;
   
   // Trip configuration from previous screen
   String? _routeId;
@@ -78,6 +82,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     tripProvider.removeListener(_onTripProviderChanged);
     
     _searchController.dispose();
+    _phoneSearchController.dispose();
     _tripNameController.dispose();
     _tripTimeController.dispose();
     super.dispose();
@@ -233,6 +238,70 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         }).toList();
       }
     });
+  }
+
+  /// Search students by phone number using the API endpoint
+  Future<void> _searchStudentsByPhone() async {
+    final phoneNumber = _phoneSearchController.text.trim();
+    
+    if (phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a phone number'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Normalize phone number
+    String normalizedPhone = phoneNumber;
+    if (normalizedPhone.startsWith('+')) {
+      normalizedPhone = normalizedPhone.substring(1);
+    }
+    if (normalizedPhone.startsWith('0') && normalizedPhone.length == 10) {
+      normalizedPhone = '254${normalizedPhone.substring(1)}';
+    }
+
+    setState(() => _isSearchingByPhone = true);
+    
+    try {
+      final studentService = api.StudentService();
+      final students = await studentService.getStudentsByPhone(normalizedPhone);
+      
+      setState(() {
+        _phoneSearchResults = students;
+        _isSearchingByPhone = false;
+      });
+      
+      if (students.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No students found for phone: $normalizedPhone'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        if (kDebugMode) {
+          print('✅ Found ${students.length} students for phone: $normalizedPhone');
+        }
+      }
+    } catch (e) {
+      setState(() => _isSearchingByPhone = false);
+      if (kDebugMode) {
+        print('❌ Error searching students by phone: $e');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error searching: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   bool _isStudentInMasterTrip(String studentId) {
@@ -940,35 +1009,314 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Widget _buildSearchBar(AppProvider provider) {
+    return Column(
+      children: [
+        // Toggle between local search and phone search
+        Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Search by Name'),
+                selected: !_showPhoneSearch,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _showPhoneSearch = false;
+                      _phoneSearchResults = [];
+                    });
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Search by Phone'),
+                selected: _showPhoneSearch,
+                onSelected: (selected) {
+                  if (selected) {
+                    setState(() {
+                      _showPhoneSearch = true;
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        
+        // Show appropriate search field
+        if (_showPhoneSearch)
+          _buildPhoneSearchBar(provider)
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: provider.cardColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: _searchController,
+              style: TextStyle(color: provider.textColor),
+              decoration: InputDecoration(
+                hintText: 'Search students by name or class...',
+                hintStyle: TextStyle(
+                  color: provider.textMutedColor,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: provider.textMutedColor,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPhoneSearchBar(AppProvider provider) {
     return Container(
       decoration: BoxDecoration(
         color: provider.cardColor,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: TextField(
-        controller: _searchController,
-        style: TextStyle(color: provider.textColor),
-        decoration: InputDecoration(
-          hintText: 'Search students to add...',
-          hintStyle: TextStyle(
-            color: provider.textMutedColor,
-            fontSize: 14,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _phoneSearchController,
+              keyboardType: TextInputType.phone,
+              style: TextStyle(color: provider.textColor),
+              decoration: InputDecoration(
+                hintText: 'Enter guardian phone (e.g., 254789133844)',
+                hintStyle: TextStyle(
+                  color: provider.textMutedColor,
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.phone,
+                  color: provider.textMutedColor,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+              ),
+              onSubmitted: (_) => _searchStudentsByPhone(),
+            ),
           ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: provider.textMutedColor,
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
-        ),
+          if (_isSearchingByPhone)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            IconButton(
+              onPressed: _searchStudentsByPhone,
+              icon: const Icon(Icons.search),
+              color: AppProvider.primaryGreen,
+            ),
+        ],
       ),
     );
   }
 
+  Widget _buildPhoneSearchResultsList(AppProvider provider) {
+    // Filter out students already in the master trip
+    final availableStudents = _phoneSearchResults.where(
+      (s) => !_isStudentInMasterTrip(s.id),
+    ).toList();
+
+    if (availableStudents.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.check_circle,
+                size: 48,
+                color: Colors.green,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'All students from this guardian\nare already in the trip',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header showing search results count
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search,
+                size: 16,
+                color: AppProvider.primaryGreen,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Found ${availableStudents.length} student(s) from phone: ${_phoneSearchController.text}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: provider.textMutedColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // List of students
+        ...availableStudents.map((student) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: provider.cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppProvider.primaryGreen.withAlpha(50),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildAvatar(student.photo),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        student.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: provider.textColor,
+                        ),
+                      ),
+                      Text(
+                        '${student.className} • ${student.schoolName ?? 'N/A'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: provider.textMutedColor,
+                        ),
+                      ),
+                      if (student.guardianPhone != null && student.guardianPhone!.isNotEmpty)
+                        Text(
+                          'Guardian: ${student.guardianPhone}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: provider.textMutedColor,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _addStudentToMasterTrip(student),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF9800),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        // Clear results button
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _phoneSearchResults = [];
+                _phoneSearchController.clear();
+              });
+            },
+            icon: const Icon(Icons.clear),
+            label: const Text('Clear Search'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAvailableStudentsList(AppProvider provider) {
+    // Show phone search results if available
+    if (_showPhoneSearch && _phoneSearchResults.isNotEmpty) {
+      return _buildPhoneSearchResultsList(provider);
+    }
+
+    // Show phone search empty state
+    if (_showPhoneSearch && _phoneSearchController.text.isNotEmpty && !_isSearchingByPhone) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No students found for this phone number.\nTry searching with a different number.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: provider.textMutedColor,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Show phone search initial state
+    if (_showPhoneSearch && _phoneSearchController.text.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.phone_android,
+                size: 48,
+                color: provider.textMutedColor,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Enter a guardian phone number\nto search for students',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: provider.textMutedColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Default: show filtered students list
     if (_filteredStudents.isEmpty) {
       return Center(
         child: Padding(

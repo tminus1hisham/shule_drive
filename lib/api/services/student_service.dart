@@ -205,10 +205,20 @@ class StudentService {
       apiCall: () async {
         final response = await _apiClient.get(
           Endpoints.getGuardianStudentsByPhone,
-          queryParams: {'phone': phoneNumber},
+          queryParams: {'phoneNumber': phoneNumber},
         );
 
-        final students = (response['data'] as List? ?? [])
+        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+        List<dynamic> studentsData;
+        if (response is List) {
+          studentsData = response;
+        } else if (response is Map && response['data'] != null) {
+          studentsData = response['data'] as List;
+        } else {
+          studentsData = [];
+        }
+
+        final students = studentsData
             .map((student) => Student.fromJson(student))
             .toList();
 
