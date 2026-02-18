@@ -79,16 +79,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showImagePickerOptions(BuildContext context, AuthProvider authProvider) {
-    final isDarkMode = context.read<AppProvider>().isDarkMode;
+  void _showImagePickerOptions(BuildContext parentContext, AuthProvider authProvider) {
+    final isDarkMode = parentContext.read<AppProvider>().isDarkMode;
 
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
+      builder: (bottomSheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -129,11 +129,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 onTap: () async {
-                  Navigator.pop(context);
-                  // Request camera permission first
-                  final hasPermission = await PermissionHelper.requestCameraPermission(context);
-                  if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(context, authProvider, ImageSource.camera);
+                  // Close bottom sheet first
+                  Navigator.pop(bottomSheetContext);
+                  // Small delay to ensure bottom sheet is fully closed
+                  await Future.delayed(const Duration(milliseconds: 200));
+                  // Check permission and open camera using parent context
+                  if (parentContext.mounted) {
+                    final hasPermission = await PermissionHelper.requestCameraPermission(parentContext);
+                    if (hasPermission && parentContext.mounted) {
+                      await _pickAndUploadImage(parentContext, authProvider, ImageSource.camera);
+                    }
                   }
                 },
               ),
@@ -163,11 +168,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 onTap: () async {
-                  Navigator.pop(context);
-                  // Request photo library permission first
-                  final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(context);
-                  if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(context, authProvider, ImageSource.gallery);
+                  // Close bottom sheet first
+                  Navigator.pop(bottomSheetContext);
+                  // Small delay to ensure bottom sheet is fully closed
+                  await Future.delayed(const Duration(milliseconds: 200));
+                  // Check permission and open gallery using parent context
+                  if (parentContext.mounted) {
+                    final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(parentContext);
+                    if (hasPermission && parentContext.mounted) {
+                      await _pickAndUploadImage(parentContext, authProvider, ImageSource.gallery);
+                    }
                   }
                 },
               ),

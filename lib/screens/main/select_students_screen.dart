@@ -728,6 +728,10 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                             const SizedBox(height: 20),
                           ],
                           
+                          // Space between create button/form and students section
+                          if ((!_showCreateForm) || _selectedMasterTrip != null)
+                            const SizedBox(height: 40),
+                          
                           // Current Trip Students Section
                           if (_selectedMasterTrip != null) ...[
                             _buildSectionTitle(
