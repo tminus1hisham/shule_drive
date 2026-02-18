@@ -1039,6 +1039,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 ),
               ),
             ),
+            
+            // Extra padding after the create button
+            const SizedBox(height: 32),
           ],
         ),
       ),

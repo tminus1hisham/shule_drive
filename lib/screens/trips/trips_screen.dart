@@ -399,6 +399,16 @@ class _TripsScreenState extends State<TripsScreen> {
         ? const Color(0xFF6B9B5B)
         : const Color(0xFFFF9800);
 
+    // Calculate trip duration
+    final duration = trip.endTime != null
+        ? trip.endTime!.difference(trip.startTime)
+        : null;
+    final durationText = duration != null
+        ? duration.inHours > 0
+            ? '${duration.inHours}h ${duration.inMinutes.remainder(60)}m'
+            : '${duration.inMinutes}m'
+        : '--';
+
     return GestureDetector(
       onTap: () => Navigator.pushNamed(
         context,
@@ -472,6 +482,17 @@ class _TripsScreenState extends State<TripsScreen> {
                   provider,
                   Icons.access_time,
                   'Time: ${_formatTime(trip.startTime)}',
+                ),
+              ],
+            ),
+            // Add trip duration info
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildInfoItem(
+                  provider,
+                  Icons.timer_outlined,
+                  'Duration: $durationText',
                 ),
               ],
             ),

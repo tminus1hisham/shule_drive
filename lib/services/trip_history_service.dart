@@ -201,6 +201,68 @@ class TripHistoryService {
       return tripDate.isAfter(start) && tripDate.isBefore(end);
     }).toList();
   }
+
+  /// Get all trips for a guardian (across all drivers)
+  /// This searches through all stored trip history for trips involving the guardian's students
+  Future<List<TripHistory>> getAllTripsForGuardian(String guardianPhone) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Get all keys that match the trip history pattern
+      final allKeys = prefs.getKeys();
+      final tripKeys = allKeys.where((key) => key.startsWith(_tripsKey)).toList();
+      
+      final List<TripHistory> allTrips = [];
+      
+      for (final key in tripKeys) {
+        try {
+          final tripsString = prefs.getString(key);
+          if (tripsString == null || tripsString.isEmpty) continue;
+          
+          final tripsJson = jsonDecode(tripsString) as List;
+          
+          for (var i = 0; i < tripsJson.length; i++) {
+            try {
+              final tripHistory = TripHistory.fromJson(tripsJson[i]);
+              // Check if any student in this trip belongs to the guardian
+              final hasGuardianStudent = tripHistory.trip.students.any((student) {
+                return student.parentPhone == guardianPhone ||
+                    student.parentPhone?.replaceAll(RegExp(r'[^0-9]'), '') ==
+                        guardianPhone.replaceAll(RegExp(r'[^0-9]'), '');
+              });
+              
+              if (hasGuardianStudent) {
+                allTrips.add(tripHistory);
+              }
+            } catch (e) {
+              if (kDebugMode) {
+                print('❌ Failed to parse trip history entry $i: $e');
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('❌ Failed to load trips from key $key: $e');
+          }
+        }
+      }
+      
+      // Sort by date, newest first
+      allTrips.sort((a, b) => b.trip.startTime.compareTo(a.trip.startTime));
+      
+      if (kDebugMode) {
+        print('📜 Found ${allTrips.length} trips for guardian: $guardianPhone');
+      }
+      
+      return allTrips;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('❌ Failed to load guardian trip history: $e');
+        print(stackTrace);
+      }
+      return [];
+    }
+  }
 }
 
 /// Trip History Entry

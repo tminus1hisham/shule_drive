@@ -17,15 +17,41 @@ class ManageChildrenScreen extends StatefulWidget {
   State<ManageChildrenScreen> createState() => _ManageChildrenScreenState();
 }
 
-class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
+class _ManageChildrenScreenState extends State<ManageChildrenScreen>
+    with SingleTickerProviderStateMixin {
   int _currentIndex = 3;
+  
+  // FAB animation controller
+  AnimationController? _fabController;
+  bool _isFabExpanded = false;
 
   @override
   void initState() {
     super.initState();
+    _fabController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
     // Fetch children when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppProvider>().fetchGuardianStudents();
+    });
+  }
+
+  @override
+  void dispose() {
+    _fabController?.dispose();
+    super.dispose();
+  }
+
+  void _toggleFab() {
+    setState(() {
+      _isFabExpanded = !_isFabExpanded;
+      if (_isFabExpanded) {
+        _fabController?.forward();
+      } else {
+        _fabController?.reverse();
+      }
     });
   }
 
@@ -65,11 +91,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
       showBottomNav: true,
       bottomNavIndex: _currentIndex,
       onBottomNavTap: _handleNavigation,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddChildDialog(context),
-        backgroundColor: const Color(0xFF6B9B5B),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _buildSpeedDialFab(provider),
       body: RefreshIndicator(
         onRefresh: () => provider.fetchGuardianStudents(),
         child: _buildBody(context, provider, children, isLoading, errorMessage),
@@ -165,6 +187,84 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
         final child = children[index];
         return _buildChildCard(context, provider, child);
       },
+    );
+  }
+
+  /// Build Speed Dial FAB with expandable options
+  Widget _buildSpeedDialFab(AppProvider provider) {
+    // Ensure controller is initialized
+    if (_fabController == null) {
+      return FloatingActionButton(
+        onPressed: () {},
+        backgroundColor: const Color(0xFF6B9B5B),
+        child: const Icon(Icons.add),
+      );
+    }
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Secondary option: Add Extended Guardian
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          child: _isFabExpanded
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FloatingActionButton.extended(
+                    onPressed: () {
+                      _toggleFab();
+                      _showAddExtendedGuardianDialog(context, provider);
+                    },
+                    backgroundColor: const Color(0xFF6B9B5B).withAlpha(230),
+                    icon: const Icon(Icons.people_outline, size: 20),
+                    label: const Text(
+                      'Add Guardian',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    heroTag: 'addGuardian',
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        // Primary option: Add Child
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          child: _isFabExpanded
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FloatingActionButton.extended(
+                    onPressed: () {
+                      _toggleFab();
+                      _showAddChildDialog(context);
+                    },
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    icon: const Icon(Icons.person_add, size: 20),
+                    label: const Text(
+                      'Add Child',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    heroTag: 'addChild',
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        // Main FAB - toggles the menu
+        FloatingActionButton(
+          onPressed: _toggleFab,
+          backgroundColor: const Color(0xFF6B9B5B),
+          child: AnimatedBuilder(
+            animation: _fabController!,
+            builder: (context, child) {
+              return Transform.rotate(
+                angle: _fabController!.value * 0.785398,
+                child: const Icon(Icons.add, size: 28),
+              );
+            },
+          ),
+          heroTag: 'mainFab',
+        ),
+      ],
     );
   }
 
@@ -348,6 +448,215 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Show dialog to add extended guardian
+  void _showAddExtendedGuardianDialog(
+    BuildContext context,
+    AppProvider provider,
+  ) {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final relationshipController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: provider.backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Title
+                Text(
+                  'Add Extended Guardian',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: provider.textColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Add another guardian who can track and manage all your children',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: provider.textMutedColor,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Name Field
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'Enter guardian name',
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Phone Field
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Phone Number',
+                    hintText: 'e.g., +254 712 345 678',
+                    prefixIcon: const Icon(Icons.phone_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Relationship Field
+                TextField(
+                  controller: relationshipController,
+                  decoration: InputDecoration(
+                    labelText: 'Relationship (Optional)',
+                    hintText: 'e.g., Father, Aunt, Uncle',
+                    prefixIcon: const Icon(Icons.people_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Add Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      if (nameController.text.isNotEmpty &&
+                          phoneController.text.isNotEmpty) {
+                        _addExtendedGuardian(
+                          context: context,
+                          name: nameController.text.trim(),
+                          phone: phoneController.text.trim(),
+                          relationship: relationshipController.text.trim(),
+                        );
+                        Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.person_add),
+                    label: const Text(
+                      'Add Guardian',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6B9B5B),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Cancel Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: provider.textMutedColor,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Add extended guardian (placeholder - connect to API as needed)
+  void _addExtendedGuardian({
+    required BuildContext context,
+    required String name,
+    required String phone,
+    String? relationship,
+  }) {
+    // TODO: Connect to your API to add extended guardian
+    // For now, show a success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Extended guardian "$name" added successfully'),
+        backgroundColor: const Color(0xFF6B9B5B),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }

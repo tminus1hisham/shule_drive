@@ -472,18 +472,20 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   /// Build the list of guardians
   Widget _buildGuardiansList() {
     return Column(
-      children: _guardians.asMap().entries.map((entry) {
-        final index = entry.key;
-        final guardian = entry.value;
-        final isLast = index == _guardians.length - 1;
-        
-        return Column(
-          children: [
-            _buildGuardianItem(guardian),
-            if (!isLast) const Divider(height: 24),
-          ],
-        );
-      }).toList(),
+      children: [
+        ..._guardians.asMap().entries.map((entry) {
+          final index = entry.key;
+          final guardian = entry.value;
+          final isLast = index == _guardians.length - 1;
+          
+          return Column(
+            children: [
+              _buildGuardianItem(guardian),
+              if (!isLast) const Divider(height: 24),
+            ],
+          );
+        }),
+      ],
     );
   }
 

@@ -28,6 +28,22 @@ class _ContactScreenState extends State<ContactScreen> {
     }
   }
 
+  Future<void> _launchMaps(String address) async {
+    // Try to launch using geo URI scheme for better map app support
+    final query = Uri.encodeComponent(address);
+    final geoUri = Uri.parse('geo:0,0?q=$query');
+    
+    if (await canLaunchUrl(geoUri)) {
+      await launchUrl(geoUri);
+    } else {
+      // Fallback to Google Maps web URL
+      final mapsUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+      if (await canLaunchUrl(mapsUri)) {
+        await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -35,7 +51,7 @@ class _ContactScreenState extends State<ContactScreen> {
     return MainScaffold(
       title: 'Contact Us',
       showBackButton: true,
-      showBottomNav: true,
+      showBottomNav: false,
       bottomNavIndex: _currentIndex,
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
@@ -108,7 +124,7 @@ class _ContactScreenState extends State<ContactScreen> {
                     Icons.location_on,
                     'Westlands Heights, Kiambu Road',
                     'Nairobi, Kenya',
-                    () {},
+                    () => _launchMaps('Westlands Heights, Kiambu Road, Nairobi, Kenya'),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(left: 40, top: 8),
