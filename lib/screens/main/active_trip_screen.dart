@@ -447,29 +447,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       return;
     }
 
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
+    // Show beautiful confirmation bottom sheet
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Complete Trip'),
-        content: const Text(
-          'Are you sure you want to complete this trip? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Complete'),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _buildCompleteTripSheet(),
     );
 
     if (confirmed != true || !mounted) return;
@@ -702,6 +685,269 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build the complete trip confirmation bottom sheet
+  Widget _buildCompleteTripSheet() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final pickedCount = _pickedCount;
+    final totalCount = _totalCount;
+    final absentCount = totalCount - pickedCount;
+    final completionRate = totalCount > 0 ? (pickedCount / totalCount * 100).round() : 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(60),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 16, bottom: 8),
+            width: 48,
+            height: 5,
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white24 : Colors.grey[300],
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+
+          // Success Animation Icon
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B9B5B).withAlpha(80),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.check_circle_outline,
+              color: Colors.white,
+              size: 48,
+            ),
+          ),
+
+          // Title
+          Text(
+            'Complete Trip?',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Subtitle
+          Text(
+            _activeTrip?.routeName ?? 'Current Trip',
+            style: TextStyle(
+              fontSize: 16,
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Stats Cards Row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                _buildStatCard(
+                  icon: Icons.check_circle,
+                  value: '$pickedCount',
+                  label: 'Picked',
+                  color: const Color(0xFF6B9B5B),
+                  isDarkMode: isDarkMode,
+                ),
+                const SizedBox(width: 12),
+                _buildStatCard(
+                  icon: Icons.cancel,
+                  value: '$absentCount',
+                  label: 'Absent',
+                  color: Colors.red[400]!,
+                  isDarkMode: isDarkMode,
+                ),
+                const SizedBox(width: 12),
+                _buildStatCard(
+                  icon: Icons.percent,
+                  value: '$completionRate%',
+                  label: 'Complete',
+                  color: const Color(0xFF2196F3),
+                  isDarkMode: isDarkMode,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Warning text
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDarkMode 
+                  ? Colors.amber.withAlpha(30) 
+                  : Colors.amber[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.amber.withAlpha(100),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.amber[700],
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'This action cannot be undone. Make sure all students have been marked correctly.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[800],
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Action Buttons
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDarkMode ? Colors.white : Colors.grey[800],
+                      side: BorderSide(
+                        color: isDarkMode ? Colors.white30 : Colors.grey[300]!,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6B9B5B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Complete Trip',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  /// Build stat card for complete trip sheet
+  Widget _buildStatCard({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+    required bool isDarkMode,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF2A2A2A) : color.withAlpha(20),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDarkMode ? Colors.white60 : color.withAlpha(180),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
