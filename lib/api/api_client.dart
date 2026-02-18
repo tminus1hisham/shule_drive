@@ -90,12 +90,14 @@ class ApiClient {
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
     
+    debugPrint('📥 API Response: status=$statusCode, body=${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}');
+    
     // Handle empty response body
     if (response.body.isEmpty) {
       if (statusCode >= 200 && statusCode < 300) {
         return {}; // Return empty map for successful empty responses
       } else {
-        throw ServerException(message: 'Server returned empty response');
+        throw ServerException(message: 'Server returned empty response (status: $statusCode)');
       }
     }
     

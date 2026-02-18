@@ -194,7 +194,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     AuthProvider authProvider,
     ImageSource source,
   ) async {
+    // Store a reference to the ScaffoldMessenger for later use
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
     try {
+      debugPrint('📸 Starting image picker...');
       final ImagePicker picker = ImagePicker();
       final XFile? pickedFile = await picker.pickImage(
         source: source,
@@ -203,26 +207,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
         imageQuality: 85,
       );
 
-      if (pickedFile == null) return;
+      if (pickedFile == null) {
+        debugPrint('📸 No image selected');
+        return;
+      }
 
-      if (!context.mounted) return;
+      debugPrint('📸 Image picked: ${pickedFile.path}');
 
-      // Show loading indicator
+      if (!context.mounted) {
+        debugPrint('📸 Context not mounted after picking image');
+        return;
+      }
+
+      // Show loading indicator using root navigator to avoid context issues
+      debugPrint('📸 Showing loading dialog...');
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
+        useRootNavigator: true,
+        builder: (dialogContext) => const Center(
           child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
         ),
       );
 
+      debugPrint('📸 Calling updateUserAvatar...');
       final avatarUrl = await authProvider.updateUserAvatar(pickedFile.path);
+      debugPrint('📸 updateUserAvatar returned: $avatarUrl');
 
-      if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      // Close loading dialog using root navigator
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        debugPrint('📸 Loading dialog closed');
+      } else {
+        debugPrint('📸 Context not mounted, skipping dialog close');
+      }
 
       if (avatarUrl != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        debugPrint('📸 Upload successful, showing success message');
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: const Text('Profile photo updated successfully'),
             backgroundColor: const Color(0xFF6B9B5B),
@@ -231,8 +253,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             margin: const EdgeInsets.all(16),
           ),
         );
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      } else {
+        debugPrint('📸 Upload failed (returned null), showing error');
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: const Text('Failed to upload photo. Please try again.'),
             backgroundColor: Colors.red.shade700,
@@ -242,19 +265,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('📸 Error in _pickAndUploadImage: $e');
+      debugPrint('📸 Stack trace: $stackTrace');
+      // Try to close loading dialog if it's still showing
       if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog if open
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {
+          // Dialog might already be closed
+        }
       }
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
   }
 

@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../api_client.dart';
 import '../api_constants.dart';
 import '../api_exceptions.dart';
 import '../../utils/buffer_manager.dart';
+import '../../services/token_storage.dart';
 
 /// User Service - Handles user profile-related API calls with fallback buffers
 class UserService {
@@ -84,26 +87,142 @@ class UserService {
   }
   
   /// Upload profile photo (no buffer - always requires fresh API call)
-  /// POST /user/avatar
+  /// Tries /api/user/avatar first, falls back to /api/auth/update/profile/picture
   Future<String> uploadAvatar(String filePath) async {
+    debugPrint('📤 UserService.uploadAvatar called');
+    debugPrint('   File path: $filePath');
+    
     try {
-      final file = await http.MultipartFile.fromPath('avatar', filePath);
+      // Get current user ID for the request
+      final tokenStorage = TokenStorage();
+      final userData = await tokenStorage.getUserData();
+      final userId = userData?['userId']?.toString() ?? '';
+      debugPrint('   User ID: $userId');
       
-      final response = await _apiClient.postMultipart(
-        '/user/avatar',
-        fields: {},
-        files: [file],
-      );
+      // Detect content type from file extension
+      final extension = filePath.split('.').last.toLowerCase();
+      MediaType contentType;
+      switch (extension) {
+        case 'png':
+          contentType = MediaType('image', 'png');
+          break;
+        case 'gif':
+          contentType = MediaType('image', 'gif');
+          break;
+        case 'webp':
+          contentType = MediaType('image', 'webp');
+          break;
+        case 'jpg':
+        case 'jpeg':
+        default:
+          contentType = MediaType('image', 'jpeg');
+          break;
+      }
+      debugPrint('   File extension: $extension, Content-Type: $contentType');
       
-      final avatarUrl = response['data']['avatar_url']?.toString() ?? '';
+      // Helper to create fresh MultipartFile (can't reuse after failed request)
+      Future<http.MultipartFile> createFile(String fieldName) async {
+        return http.MultipartFile.fromPath(
+          fieldName,
+          filePath,
+          contentType: contentType,
+        );
+      }
+        
+      // Try primary endpoint first
+      dynamic response;
+      try {
+        debugPrint('   Sending POST to /api/user/avatar...');
+        final file = await createFile('file');
+        debugPrint('   Multipart file created: ${file.filename}, size: ${file.length}');
+        response = await _apiClient.postMultipart(
+          '/api/user/avatar',
+          fields: {'userId': userId},
+          files: [file],
+        );
+        debugPrint('   Primary endpoint success');
+      } on ApiException catch (e) {
+        debugPrint('   Caught exception: ${e.runtimeType}, statusCode: ${e.statusCode}, message: ${e.message}');
+        // Check for 404 by status code OR by message content (ServerException has status 500 default)
+        final isNotFound = e.statusCode == 404 || 
+                          (e.message.contains('404') || e.message.contains('not found') || e.message.contains('empty response'));
+        if (isNotFound) {
+          // Fallback to auth endpoint - must recreate file
+          debugPrint('   Primary endpoint not found (404), trying fallback...');
+          final file = await createFile('file');
+          debugPrint('   Multipart file recreated for fallback');
+          response = await _apiClient.postMultipart(
+            '/api/auth/update/profile/picture',
+            fields: {'userId': userId},
+            files: [file],
+          );
+          debugPrint('   Fallback endpoint success');
+        } else {
+          rethrow;
+        }
+      }
+      
+      debugPrint('   Response received: $response');
+        
+      // Handle various response formats
+      String? avatarUrl;
+      
+      // Case 1: Response is a direct string URL
+      if (response is String && response.isNotEmpty) {
+        avatarUrl = response;
+        debugPrint('   Response is direct string URL: $avatarUrl');
+      } 
+      // Case 2: Response is a map with data
+      else if (response is Map) {
+        final data = response['data'] ?? response;
+        debugPrint('   Response data: $data');
+        
+        if (data is String && data.isNotEmpty) {
+          avatarUrl = data;
+          debugPrint('   Response data is string URL: $avatarUrl');
+        } else if (data is Map) {
+          // Try multiple possible field names for the image URL
+          final possibleFields = [
+            'imageUrl',
+            'profileImage',
+            'photo',
+            'image_url',
+            'url',
+            'avatar',
+            'avatar_url',
+            'image',
+            'picture',
+            'profile_picture',
+            'profileImageUrl',
+            'avatarUrl',
+          ];
+
+          for (final field in possibleFields) {
+            final value = data[field];
+            if (value != null && value.toString().isNotEmpty) {
+              avatarUrl = value.toString();
+              debugPrint('   Found avatar URL in field "$field": $avatarUrl');
+              break;
+            }
+          }
+        }
+      }
+      
+      if (avatarUrl == null || avatarUrl.isEmpty) {
+        debugPrint('   ERROR: avatarUrl is null or empty');
+        throw ApiException(message: 'Invalid response: avatar URL not found');
+      }
       
       // Clear profile buffer to force refresh
       await _buffer.clearBuffer('users/profile');
+      debugPrint('   Upload completed successfully');
       
       return avatarUrl;
-    } on ApiException {
+    } on ApiException catch (e) {
+      debugPrint('   ApiException: ${e.message}');
       rethrow;
     } catch (e) {
+      debugPrint('   Unexpected error: $e');
       throw ApiException(message: e.toString());
     }
   }

@@ -596,6 +596,76 @@ class TripService {
       throw ApiException(message: e.toString());
     }
   }
+
+  /// Notify guardians that trip has started
+  /// POST /api/trips/notify/guardians/trip-started
+  Future<bool> notifyGuardiansTripStarted({
+    required String tripId,
+    required List<String> studentIds,
+    String? routeName,
+    String? vehicleNumber,
+  }) async {
+    try {
+      await _apiClient.post(
+        Endpoints.notifyGuardiansTripStarted,
+        body: {
+          'tripId': tripId,
+          'studentIds': studentIds,
+          'routeName': routeName,
+          'vehicleNumber': vehicleNumber,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      if (kDebugMode) {
+        print('✅ Guardians notified for trip start: $tripId');
+      }
+      return true;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error notifying guardians: $e');
+      }
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Notify guardians about approaching ETA (2 minutes before)
+  /// POST /api/trips/notify/guardians/eta
+  Future<bool> notifyGuardiansEta({
+    required String tripId,
+    required String studentId,
+    required String stopId,
+    required String stopName,
+    required int etaMinutes,
+  }) async {
+    try {
+      await _apiClient.post(
+        Endpoints.notifyGuardiansEta,
+        body: {
+          'tripId': tripId,
+          'studentId': studentId,
+          'stopId': stopId,
+          'stopName': stopName,
+          'etaMinutes': etaMinutes,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      if (kDebugMode) {
+        print('✅ ETA notification sent for student $studentId at $stopName');
+      }
+      return true;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error sending ETA notification: $e');
+      }
+      throw ApiException(message: e.toString());
+    }
+  }
 }
 
 /// Trip Model

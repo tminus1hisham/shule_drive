@@ -1,7 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
@@ -347,56 +346,31 @@ class AuthService {
         print('  Fallback endpoint: ${Endpoints.updateProfilePicture}');
       }
 
-      // Detect content type from file extension
-      final extension = imagePath.split('.').last.toLowerCase();
-      MediaType contentType;
-      switch (extension) {
-        case 'png':
-          contentType = MediaType('image', 'png');
-          break;
-        case 'gif':
-          contentType = MediaType('image', 'gif');
-          break;
-        case 'webp':
-          contentType = MediaType('image', 'webp');
-          break;
-        case 'jpg':
-        case 'jpeg':
-        default:
-          contentType = MediaType('image', 'jpeg');
-          break;
-      }
-
+      // Read file as bytes and encode to base64
+      final file = File(imagePath);
+      final bytes = await file.readAsBytes();
+      final base64Image = base64Encode(bytes);
+      
       if (kDebugMode) {
-        print('  File extension: $extension');
-        print('  Content-Type: $contentType');
+        print('  File size: ${bytes.length} bytes');
+        print('  Base64 length: ${base64Image.length}');
       }
 
-      // Create multipart file from path with content type
-      // Try 'file' as field name (common convention)
-      final file = await http.MultipartFile.fromPath(
-        'file',
-        imagePath,
-        contentType: contentType,
-      );
-
-      if (kDebugMode) {
-        print('  File created: ${file.filename}, length: ${file.length}');
-      }
-
-      // Use multipart upload
-      // Try the user avatar endpoint first (more common for profile updates)
+      // Send as JSON payload (not multipart)
+      // Try the user avatar endpoint first
       dynamic response;
       try {
         if (kDebugMode) {
           print('📤 Trying endpoint: ${Endpoints.uploadAvatar}');
-          print('📤 Field name: file, userId: $userId');
+          print('📤 UserId: $userId');
         }
         
-        response = await _apiClient.postMultipart(
+        response = await _apiClient.post(
           Endpoints.uploadAvatar,
-          fields: {'userId': userId},
-          files: [file],
+          body: {
+            'userId': userId,
+            'image': base64Image,
+          },
         );
       } on ApiException catch (e) {
         // If uploadAvatar fails, try updateProfilePicture endpoint
@@ -405,10 +379,11 @@ class AuthService {
           print('📤 Falling back to endpoint: ${Endpoints.updateProfilePicture}');
         }
         
-        response = await _apiClient.postMultipart(
+        response = await _apiClient.post(
           Endpoints.updateProfilePicture,
-          fields: {'userId': userId},
-          files: [file],
+          body: {
+            'image': base64Image,
+          },
         );
       }
 

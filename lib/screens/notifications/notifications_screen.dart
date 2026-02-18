@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/services/user_service.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -59,6 +61,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   late TabController _tabController;
   bool _isLoading = true;
   List<NotificationItem> _notifications = [];
+  final UserService _userService = UserService();
   
   List<NotificationItem> get filteredNotifications {
     if (_tabController.index == 0) return _notifications;
@@ -91,73 +94,72 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       setState(() => _isLoading = true);
     }
     
-    // TODO: Replace with actual API call using buffer manager
-    // For now, load mock data with minimal delay for responsiveness
-    await Future.delayed(hasExistingData ? Duration.zero : const Duration(milliseconds: 300));
-    
-    // Mock data for demonstration
-    final mockNotifications = [
-      NotificationItem(
-        id: '1',
-        title: 'Trip Started',
-        message: 'Your child\'s bus has started the morning route.',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-        type: NotificationType.trip,
-        isRead: false,
-        actionRoute: '/trips',
-      ),
-      NotificationItem(
-        id: '2',
-        title: 'New Message',
-        message: 'Driver John sent you a message about today\'s pickup.',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        type: NotificationType.message,
-        isRead: false,
-        actionRoute: '/chat',
-      ),
-      NotificationItem(
-        id: '3',
-        title: 'Child Picked Up',
-        message: 'Mary has been safely picked up by the bus.',
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-        type: NotificationType.child,
-        isRead: true,
-      ),
-      NotificationItem(
-        id: '4',
-        title: 'Payment Reminder',
-        message: 'Your monthly transportation fee is due in 3 days.',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        type: NotificationType.payment,
-        isRead: true,
-      ),
-      NotificationItem(
-        id: '5',
-        title: 'Route Change',
-        message: 'There is a temporary route change due to road construction.',
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        type: NotificationType.alert,
-        isRead: true,
-      ),
-      NotificationItem(
-        id: '6',
-        title: 'Trip Completed',
-        message: 'The afternoon trip has been completed successfully.',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        type: NotificationType.trip,
-        isRead: true,
-      ),
-    ];
-    
-    if (mounted) {
-      setState(() {
-        _notifications = mockNotifications;
-        _isLoading = false;
-      });
+    try {
+      // Fetch real notifications from API
+      final apiNotifications = await _userService.getNotifications(
+        page: 1,
+        limit: 50,
+      );
+      
+      // Convert API notifications to UI notification items
+      final notifications = apiNotifications.map((n) => NotificationItem(
+        id: n.id,
+        title: n.title,
+        message: n.body,
+        timestamp: n.createdAt,
+        type: _mapNotificationType(n.type),
+        isRead: n.isRead,
+        actionRoute: n.tripId != null ? '/trips' : null,
+        actionData: n.tripId != null ? {'tripId': n.tripId} : null,
+      )).toList();
+      
+      if (mounted) {
+        setState(() {
+          _notifications = notifications;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading notifications: $e');
+      }
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load notifications: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  /// Map API notification type to UI notification type
+  NotificationType _mapNotificationType(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'trip':
+      case 'trip_started':
+      case 'trip_completed':
+        return NotificationType.trip;
+      case 'message':
+      case 'chat':
+        return NotificationType.message;
+      case 'alert':
+      case 'warning':
+        return NotificationType.alert;
+      case 'payment':
+        return NotificationType.payment;
+      case 'child':
+      case 'student':
+        return NotificationType.child;
+      default:
+        return NotificationType.general;
     }
   }
 
   Future<void> _markAsRead(String id) async {
+    // Optimistically update UI
     setState(() {
       final index = _notifications.indexWhere((n) => n.id == id);
       if (index != -1) {
@@ -173,9 +175,19 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         );
       }
     });
+    
+    // Call API to mark as read
+    try {
+      await _userService.markNotificationRead(id);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error marking notification as read: $e');
+      }
+    }
   }
 
   Future<void> _markAllAsRead() async {
+    // Optimistically update UI
     setState(() {
       _notifications = _notifications.map((n) => NotificationItem(
         id: n.id,
@@ -188,6 +200,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         actionData: n.actionData,
       )).toList();
     });
+    
+    // Call API to mark all as read
+    try {
+      await _userService.markAllNotificationsRead();
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error marking all notifications as read: $e');
+      }
+    }
   }
 
   Future<void> _deleteNotification(String id) async {

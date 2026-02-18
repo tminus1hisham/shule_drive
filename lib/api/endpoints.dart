@@ -219,6 +219,8 @@ class Endpoints {
   static const String getUniqueTripsFromTrip = '/api/trips/get/unique/trips/from/trip';
   static const String studentNotPicked = '/api/trips/student/not/picked';
   static const String createTripRating = '/api/trips/create/rating';
+  static const String notifyGuardiansTripStarted = '/api/trips/notify/guardians/trip-started';
+  static const String notifyGuardiansEta = '/api/trips/notify/guardians/eta';
   
   // ==========================================================================
   // UTILITIES / HELPER METHODS

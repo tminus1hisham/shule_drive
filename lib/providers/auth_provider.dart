@@ -689,13 +689,24 @@ class AuthProvider extends ChangeNotifier {
 
   /// Update user avatar/profile photo
   Future<String?> updateUserAvatar(String imagePath) async {
-    if (_currentUser == null) return null;
+    debugPrint('🔄 AuthProvider.updateUserAvatar called');
+    debugPrint('   Image path: $imagePath');
+    
+    if (_currentUser == null) {
+      debugPrint('   ERROR: _currentUser is null');
+      return null;
+    }
 
     _setLoading(true);
     _clearError();
 
     try {
-      final avatarUrl = await _userService.uploadAvatar(imagePath);
+      debugPrint('   Calling _authService.updateProfilePicture...');
+      final avatarUrl = await _authService.updateProfilePicture(
+        userId: _currentUser!.id,
+        imagePath: imagePath,
+      );
+      debugPrint('   Upload successful, avatarUrl: $avatarUrl');
 
       // Update current user with new avatar
       _currentUser = api.User(
@@ -722,11 +733,15 @@ class AuthProvider extends ChangeNotifier {
       );
 
       notifyListeners();
+      debugPrint('   User data updated and listeners notified');
       return avatarUrl;
     } on api.ApiException catch (e) {
+      debugPrint('   ApiException: ${e.message}');
       _setError(e.message);
       return null;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('   Unexpected error: $e');
+      debugPrint('   Stack trace: $stackTrace');
       _setError('Failed to upload avatar. Please try again.');
       return null;
     } finally {

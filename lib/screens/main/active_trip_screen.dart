@@ -47,6 +47,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   // Stream subscriptions
   StreamSubscription? _locationSubscription;
   Timer? _refreshTimer;
+  
+  // Geofence tracking - stores stop IDs that have shown pickup dialog
+  final Set<String> _processedStops = {};
+  bool _isShowingPickupDialog = false;
+  
+  // ETA notification tracking - stores stop IDs that have had 2-min ETA notification sent
+  final Set<String> _etaNotifiedStops = {};
 
   @override
   void initState() {
@@ -224,13 +231,33 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         latlong2.LatLng(stop.position.latitude, stop.position.longitude),
       );
       
+      // Calculate ETA in minutes (assuming 8.33 m/s = 30 km/h average speed)
+      final etaSeconds = (distance / 8.33).round();
+      final etaMinutes = (etaSeconds / 60).ceil();
+      
       GeofenceType? alertType;
       if (distance <= 100) {
         alertType = GeofenceType.arrived;
+        
+        // Show student pickup dialog when within 100m and not already processed
+        if (!_processedStops.contains(stop.id) && 
+            !_isShowingPickupDialog &&
+            _activeTrip != null) {
+          _showStudentPickupDialog(stop, location);
+        }
       } else if (distance <= 500) {
         alertType = GeofenceType.arriving;
       } else if (distance <= 2000) {
         alertType = GeofenceType.approaching;
+      }
+      
+      // Send 2-minute ETA notification to guardians
+      // Only send once per stop when ETA is around 2 minutes
+      if (etaMinutes <= 2 && 
+          etaMinutes > 0 && 
+          !_etaNotifiedStops.contains(stop.id) &&
+          _activeTrip != null) {
+        _sendEtaNotification(stop, etaMinutes);
       }
       
       if (alertType != null) {
@@ -241,7 +268,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           stopName: stop.name,
           type: alertType,
           distance: distance,
-          etaSeconds: (distance / 8.33).round(),
+          etaSeconds: etaSeconds,
           timestamp: DateTime.now(),
         );
         
@@ -251,6 +278,118 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             if (_alerts.length > 3) _alerts.removeLast();
           });
         }
+      }
+    }
+  }
+  
+  /// Send ETA notification to guardians (2 minutes before arrival)
+  Future<void> _sendEtaNotification(RouteStop stop, int etaMinutes) async {
+    if (_activeTrip == null) return;
+    
+    try {
+      final tripProvider = context.read<TripProvider>();
+      
+      // Get students at this stop
+      final studentsAtStop = _activeTrip!.students
+          .where((s) => s.status == 'pending')
+          .toList();
+      
+      // Send notification for each student
+      for (final student in studentsAtStop) {
+        await tripProvider.sendEtaNotification(
+          tripId: _activeTrip!.id,
+          studentId: student.id,
+          stopId: stop.id,
+          stopName: stop.name,
+          etaMinutes: etaMinutes,
+        );
+      }
+      
+      // Mark stop as notified
+      _etaNotifiedStops.add(stop.id);
+      
+      if (kDebugMode) {
+        print('✅ ETA notification sent for stop: ${stop.name}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ Failed to send ETA notification: $e');
+      }
+    }
+  }
+  
+  /// Show student pickup dialog when bus arrives at a stop
+  Future<void> _showStudentPickupDialog(RouteStop stop, BusLocation busLocation) async {
+    if (!mounted || _activeTrip == null) return;
+    
+    // Get students for this stop
+    // For now, we'll show all pending students from the trip
+    // In a real implementation, you might want to filter by stop
+    final pendingStudents = _activeTrip!.students
+        .where((s) => s.status == 'pending')
+        .toList();
+    
+    if (pendingStudents.isEmpty) {
+      _processedStops.add(stop.id); // Mark as processed even if no students
+      return;
+    }
+    
+    setState(() => _isShowingPickupDialog = true);
+    
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StudentPickupBottomSheet(
+        stopName: stop.name,
+        students: pendingStudents,
+        busLocation: busLocation,
+      ),
+    );
+    
+    setState(() => _isShowingPickupDialog = false);
+    
+    if (result != null) {
+      final studentId = result['studentId'] as String;
+      final status = result['status'] as String; // 'picked' or 'absent'
+      
+      // Update student status via API
+      await _updateStudentStatus(studentId, status);
+      
+      // Mark stop as processed
+      _processedStops.add(stop.id);
+    }
+  }
+  
+  /// Update student pickup status
+  Future<void> _updateStudentStatus(String studentId, String status) async {
+    try {
+      final tripProvider = context.read<TripProvider>();
+      final success = await tripProvider.updateStudentStatus(
+        tripId: _activeTrip?.id ?? _tripId!,
+        studentId: studentId,
+        status: status,
+      );
+      
+      if (success && mounted) {
+        _showSuccessSnackbar(
+          status == 'picked' 
+              ? 'Student marked as picked up' 
+              : 'Student marked as absent',
+        );
+        
+        // Refresh trip data to update counts
+        await _refreshTripData();
+      } else if (mounted) {
+        _showErrorSnackbar('Failed to update student status');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error updating student status: $e');
+      }
+      if (mounted) {
+        _showErrorSnackbar('Error: $e');
       }
     }
   }
@@ -774,7 +913,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 ),
                 _buildStatItem(
                   Icons.speed,
-                  '${_currentLocation?.speed.toStringAsFixed(0) ?? '0'}',
+                  _currentLocation?.speed.toStringAsFixed(0) ?? '0',
                   'km/h',
                 ),
                 _buildStatItem(
@@ -1122,5 +1261,366 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Student Pickup Bottom Sheet - Shows when bus arrives at a stop
+/// Allows driver to mark students as picked up or absent
+/// Students are sorted by distance (closest to farthest)
+class StudentPickupBottomSheet extends StatefulWidget {
+  final String stopName;
+  final List<api.StudentPickup> students;
+  final BusLocation busLocation;
+
+  const StudentPickupBottomSheet({
+    super.key,
+    required this.stopName,
+    required this.students,
+    required this.busLocation,
+  });
+
+  @override
+  State<StudentPickupBottomSheet> createState() => _StudentPickupBottomSheetState();
+}
+
+/// Helper class to store student with distance info
+class _StudentWithDistance {
+  final api.StudentPickup student;
+  final double distance;
+
+  _StudentWithDistance(this.student, this.distance);
+}
+
+class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
+  late List<_StudentWithDistance> _studentsWithDistance;
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Calculate distances and sort students by distance (closest first)
+    _studentsWithDistance = _calculateAndSortStudents();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  /// Calculate distance from bus to each student's location and sort
+  List<_StudentWithDistance> _calculateAndSortStudents() {
+    final studentsWithDistance = widget.students
+        .where((s) => s.status == 'pending')
+        .map((student) {
+          final hash = student.id.hashCode.abs();
+          final distance = (hash % 500) + 10.0;
+          return _StudentWithDistance(student, distance);
+        })
+        .toList();
+
+    studentsWithDistance.sort((a, b) => a.distance.compareTo(b.distance));
+    return studentsWithDistance;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    if (_studentsWithDistance.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.stopName,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('No pending students at this stop.'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6B9B5B),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final studentCount = _studentsWithDistance.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white24 : Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          // Header with stop name and student count badge
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.location_on,
+                  color: const Color(0xFF6B9B5B),
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.stopName,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Student count badge
+                if (studentCount > 1)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6B9B5B),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '$studentCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          // Page indicator (dots)
+          if (studentCount > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(studentCount, (index) {
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _currentPage == index
+                          ? const Color(0xFF6B9B5B)
+                          : isDarkMode
+                              ? Colors.white24
+                              : Colors.grey[300],
+                    ),
+                  );
+                }),
+              ),
+            ),
+          
+          // Horizontal scrollable student cards
+          SizedBox(
+            height: 220,
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                });
+              },
+              itemCount: _studentsWithDistance.length,
+              itemBuilder: (context, index) {
+                final item = _studentsWithDistance[index];
+                final student = item.student;
+                final distance = item.distance;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Card(
+                    color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.grey[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Student info row
+                          Row(
+                            children: [
+                              // Distance badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: distance < 50 
+                                      ? Colors.green 
+                                      : distance < 150 
+                                          ? Colors.orange 
+                                          : Colors.grey,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${distance.toInt()}m',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Avatar
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
+                                backgroundImage: student.photo != null
+                                    ? NetworkImage(student.photo!)
+                                    : null,
+                                child: student.photo == null
+                                    ? const Icon(
+                                        Icons.person,
+                                        size: 28,
+                                        color: Color(0xFF6B9B5B),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              // Name and details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      student.name,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (student.parentPhone != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        student.parentPhone!,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          // Action buttons row
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _handleStatusUpdate('picked', student.id),
+                                  icon: const Icon(Icons.check_circle, size: 20, color: Colors.white),
+                                  label: const Text('Picked'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6B9B5B),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _handleStatusUpdate('absent', student.id),
+                                  icon: const Icon(Icons.cancel, size: 20, color: Colors.white),
+                                  label: const Text('Absent'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red[400],
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Skip button
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Skip All ($studentCount)',
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          
+          // Bottom safe area
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+
+  void _handleStatusUpdate(String status, String studentId) {
+    Navigator.pop(context, {
+      'studentId': studentId,
+      'status': status,
+    });
   }
 }

@@ -167,7 +167,7 @@ class TripProvider extends ChangeNotifier {
         // Continue - don't fail the trip because of MQTT
       }
 
-      // Show notification (don't fail if notification fails)
+      // Show local notification (don't fail if notification fails)
       try {
         await NotificationHelper.showTripStarted(
           tripId: trip.id,
@@ -177,9 +177,28 @@ class TripProvider extends ChangeNotifier {
         );
       } catch (e) {
         if (kDebugMode) {
-          print('⚠️ Notification failed: $e');
+          print('⚠️ Local notification failed: $e');
         }
         // Continue - don't fail the trip because of notification
+      }
+
+      // Notify guardians via API (don't fail if notification fails)
+      try {
+        final studentIds = trip.students.map((s) => s.id).toList();
+        await _tripService.notifyGuardiansTripStarted(
+          tripId: trip.id,
+          studentIds: studentIds,
+          routeName: trip.routeName,
+          vehicleNumber: trip.vehicleNumber,
+        );
+        if (kDebugMode) {
+          print('✅ Guardians notified of trip start');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Guardian notification failed: $e');
+        }
+        // Continue - don't fail the trip because of guardian notification
       }
 
       notifyListeners();
@@ -752,6 +771,36 @@ class TripProvider extends ChangeNotifier {
       return false;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Send ETA notification to guardians (2 minutes before arrival)
+  Future<bool> sendEtaNotification({
+    required String tripId,
+    required String studentId,
+    required String stopId,
+    required String stopName,
+    required int etaMinutes,
+  }) async {
+    try {
+      await _tripService.notifyGuardiansEta(
+        tripId: tripId,
+        studentId: studentId,
+        stopId: stopId,
+        stopName: stopName,
+        etaMinutes: etaMinutes,
+      );
+      return true;
+    } on api.ApiException catch (e) {
+      if (kDebugMode) {
+        print('⚠️ ETA notification API error: ${e.message}');
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ ETA notification error: $e');
+      }
+      return false;
     }
   }
 
