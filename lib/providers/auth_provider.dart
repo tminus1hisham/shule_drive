@@ -97,8 +97,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Initialize auth state (call on app startup) - Optimized for speed
   Future<void> initialize() async {
-    // Skip if already initialized (prevents redundant calls from splash + AuthWrapper)
-    if (_initialized) return;
+    // Skip if already initialized AND we have a current user
+    // This prevents redundant calls but allows re-init after logout/login
+    if (_initialized && _currentUser != null) return;
     
     _setLoading(true);
     try {
@@ -311,13 +312,20 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       if (response.success && response.token != null) {
-        // Save auth tokens
+        // IMPORTANT: Clear any old cached data before saving new user
+        await api.ApiClient().clearAuthToken();
+        await _tokenStorage.clearAll();
+        
+        // Clear auth buffers from AuthService
+        await _authService.clearAuthBuffers();
+        
+        // Save new auth tokens
         await api.ApiClient().saveTokens(
           accessToken: response.token!,
           refreshToken: response.refreshToken,
         );
 
-        // Save user data
+        // Save new user data
         if (response.user != null) {
           await _tokenStorage.saveUserData(
             userId: response.user!.id,
@@ -335,7 +343,8 @@ class AuthProvider extends ChangeNotifier {
           }
         }
 
-        // User authenticated successfully
+        // User authenticated successfully - reset initialized to force fresh init
+        _initialized = false; // Allow re-initialization with new user data
         _currentUser = response.user;
         _userRole = UserRole.fromString(response.user?.role ?? 'unknown');
         _isAuthenticated = true;

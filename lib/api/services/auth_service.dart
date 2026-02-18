@@ -127,15 +127,42 @@ class AuthService {
 
   /// Logout
   /// POST /api/auth/logout
+  /// Note: If server returns 404, we still clear local tokens and buffer
   Future<void> logout() async {
     try {
-      await _apiClient.post(Endpoints.logout);
-      await _apiClient.clearAuthToken();
-    } on ApiException {
-      rethrow;
+      // Try to call server logout, but don't fail if endpoint doesn't exist
+      try {
+        await _apiClient.post(Endpoints.logout);
+      } on ApiException catch (e) {
+        // If 404, endpoint doesn't exist - continue with local logout
+        // Log for debugging but don't throw
+        if (e.statusCode != 404) {
+          rethrow;
+        }
+        if (kDebugMode) {
+          print('⚠️ Logout endpoint not found (404), proceeding with local logout');
+        }
+      }
     } catch (e) {
-      throw ApiException(message: e.toString());
+      if (kDebugMode) {
+        print('⚠️ Server logout failed: $e');
+      }
     }
+    
+    // Always clear local data regardless of server response
+    // IMPORTANT: Clear in this order to prevent race conditions
+    
+    // 1. Clear buffer first (prevents getCurrentUser from returning cached data)
+    await _buffer.clearBuffer(BufferKeys.currentUser);
+    if (kDebugMode) {
+      print('🗑️ Cleared user buffer');
+    }
+    
+    // 2. Clear auth tokens
+    await _apiClient.clearAuthToken();
+    
+    // 3. Clear all auth-related buffers
+    await clearAuthBuffers();
   }
 
   /// Check if user is logged in
