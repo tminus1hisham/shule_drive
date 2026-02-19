@@ -1,9 +1,11 @@
 import 'chat_message.dart';
 
 /// Chat Conversation Model - Represents a conversation between users
+/// NOTE: Uses phone numbers as user identifiers
 class ChatConversation {
   final String id;
-  final String otherUserId;
+  /// Other user's phone number (used as chat identifier)
+  final String otherUserPhone;
   final String otherUserName;
   final String? otherUserAvatar;
   final String? otherUserRole;
@@ -14,7 +16,7 @@ class ChatConversation {
 
   ChatConversation({
     required this.id,
-    required this.otherUserId,
+    required this.otherUserPhone,
     required this.otherUserName,
     this.otherUserAvatar,
     this.otherUserRole,
@@ -27,7 +29,7 @@ class ChatConversation {
   factory ChatConversation.fromJson(Map<String, dynamic> json) {
     return ChatConversation(
       id: json['id'] ?? '',
-      otherUserId: json['otherUserId'] ?? json['user_id'] ?? '',
+      otherUserPhone: json['otherUserPhone'] ?? json['otherUserId'] ?? json['user_id'] ?? json['phone'] ?? '',
       otherUserName: json['otherUserName'] ?? json['name'] ?? 'Unknown',
       otherUserAvatar: json['otherUserAvatar'] ?? json['avatar'],
       otherUserRole: json['otherUserRole'] ?? json['role'],
@@ -47,7 +49,7 @@ class ChatConversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'otherUserId': otherUserId,
+      'otherUserPhone': otherUserPhone,
       'otherUserName': otherUserName,
       'otherUserAvatar': otherUserAvatar,
       'otherUserRole': otherUserRole,
@@ -84,33 +86,39 @@ class ChatConversation {
 }
 
 /// Chat User Model - Represents a user available for chatting
+/// NOTE: Uses phone number as the primary identifier for chat
 class ChatUser {
+  /// User ID (from database) - kept for reference but NOT used for chat
   final String id;
+  /// Phone number - USED as the primary chat identifier (senderId/receiverId)
+  final String phone;
   final String name;
   final String? avatar;
   final String? role;
-  final String? phone;
   final bool isOnline;
   final DateTime? lastSeen;
 
   ChatUser({
     required this.id,
+    required this.phone,
     required this.name,
     this.avatar,
     this.role,
-    this.phone,
     this.isOnline = false,
     this.lastSeen,
   });
 
   factory ChatUser.fromJson(Map<String, dynamic> json) {
+    final phoneNumber = json['phoneNumber']?.toString() ?? 
+                       json['phone']?.toString() ?? 
+                       json['mobile']?.toString() ?? '';
     return ChatUser(
-      id: json['id'] ?? json['user_id'] ?? '',
-      name: json['name'] ?? json['full_name'] ?? 'Unknown',
-      avatar: json['avatar'] ?? json['profile_picture'],
+      id: json['userId']?.toString() ?? json['id']?.toString() ?? '',
+      phone: phoneNumber,
+      name: json['fullname'] ?? json['fullName'] ?? json['name'] ?? json['userName'] ?? 'Unknown',
+      avatar: json['avatar'] ?? json['profileImage'] ?? json['profilePicture'],
       role: json['role'] ?? json['user_role'],
-      phone: json['phone'] ?? json['phone_number'],
-      isOnline: json['isOnline'] ?? json['is_online'] ?? false,
+      isOnline: json['isOnline'] ?? json['is_active'] ?? false,
       lastSeen: json['lastSeen'] != null
           ? DateTime.parse(json['lastSeen'])
           : json['last_seen'] != null
@@ -122,6 +130,7 @@ class ChatUser {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'phone': phone,
       'name': name,
       'avatar': avatar,
       'role': role,

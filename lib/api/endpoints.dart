@@ -55,6 +55,7 @@ class Endpoints {
   // CHATS ENDPOINTS
   // ==========================================================================
   static const String getChats = '/api/chats/get';
+  static const String createChat = '/api/chats/create';
   static const String getChatContacts = '/api/chats/get/contacts';
   
   // ==========================================================================

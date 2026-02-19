@@ -111,11 +111,12 @@ class _UserListScreenState extends State<UserListScreen>
   }
 
   void _startChat(ChatUser user) {
+    // Use phone number as the receiver identifier for chat
     Navigator.pushReplacementNamed(
       context,
       '/chat-detail',
       arguments: {
-        'receiverId': user.id,
+        'receiverPhone': user.phone,  // Use phone number instead of user ID
         'receiverName': user.name,
         'receiverAvatar': user.avatar,
       },

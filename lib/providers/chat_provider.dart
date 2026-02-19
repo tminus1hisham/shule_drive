@@ -68,9 +68,9 @@ class ChatProvider extends ChangeNotifier {
     await Future.microtask(() => notifyListeners());
 
     try {
-      // Load conversations from local database (chat messages)
-      final currentUserId = await _tokenStorage.getUserId();
-      if (currentUserId == null) {
+      // Load conversations from API using phone numbers
+      final currentUserPhone = await _tokenStorage.getUserPhone();
+      if (currentUserPhone == null) {
         _conversationsError = 'Not authenticated';
         _isLoadingConversations = false;
         await Future.microtask(() => notifyListeners());
@@ -80,43 +80,57 @@ class ChatProvider extends ChangeNotifier {
       // Get all available users to build conversation list
       final users = await getAvailableUsers();
       
-      // Build conversations from local message history
+      // Build conversations from API and local message history
       final List<ChatConversation> conversations = [];
       
       for (final user in users) {
-        // Get message history for this user
-        final chatTopic = _chatService.getChatTopic(currentUserId, user.id);
-        final messages = await _localDb.getChatMessages(chatTopic, limit: 100);
-        
-        if (messages.isNotEmpty) {
-          final lastMessageData = messages.last; // Most recent message
-          final unreadCount = await _getUnreadCountForUser(currentUserId, user.id);
-          
-          // Create ChatMessage for last message
-          final lastMessage = ChatMessage(
-            id: lastMessageData['id'],
-            senderId: lastMessageData['sender_id'],
-            recipientId: lastMessageData['recipient_id'],
-            content: lastMessageData['content'],
-            timestamp: DateTime.parse(lastMessageData['timestamp']),
-            status: MessageStatus.values.firstWhere(
-              (s) => s.name == lastMessageData['status'],
-              orElse: () => MessageStatus.sent,
-            ),
-            replyToMessageId: lastMessageData['reply_to_message_id'],
+        // Fetch chat history from API for this user
+        try {
+          final apiMessages = await _fetchChatHistoryFromApi(
+            senderPhone: currentUserPhone,
+            receiverPhone: user.phone,
           );
           
-          conversations.add(ChatConversation(
-            id: chatTopic,
-            otherUserId: user.id,
-            otherUserName: user.name,
-            otherUserAvatar: user.avatar,
-            otherUserRole: user.role,
-            lastMessage: lastMessage,
-            unreadCount: unreadCount,
-            lastActivity: lastMessage.timestamp,
-            isOnline: user.isOnline,
-          ));
+          // Also get local messages and convert to ChatMessage
+          final chatTopic = _chatService.getChatTopic(currentUserPhone, user.phone);
+          final localMessagesData = await _localDb.getChatMessages(chatTopic, limit: 100);
+          final localMessages = localMessagesData.map((data) => ChatMessage(
+            id: data['id'],
+            senderId: data['sender_id'],
+            recipientId: data['recipient_id'],
+            content: data['content'],
+            timestamp: DateTime.parse(data['timestamp']),
+            status: MessageStatus.values.firstWhere(
+              (s) => s.name == data['status'],
+              orElse: () => MessageStatus.sent,
+            ),
+            replyToMessageId: data['reply_to_message_id'],
+          )).toList();
+          
+          // Merge and get latest message
+          if (apiMessages.isNotEmpty || localMessages.isNotEmpty) {
+            final allMessages = [...apiMessages, ...localMessages];
+            allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            
+            final lastMessage = allMessages.first;
+            final unreadCount = allMessages.where((m) => 
+              m.senderId == user.phone && m.status != MessageStatus.read
+            ).length;
+            
+            conversations.add(ChatConversation(
+              id: chatTopic,
+              otherUserPhone: user.phone,
+              otherUserName: user.name,
+              otherUserAvatar: user.avatar,
+              otherUserRole: user.role,
+              lastMessage: lastMessage,
+              unreadCount: unreadCount,
+              lastActivity: lastMessage.timestamp,
+              isOnline: user.isOnline,
+            ));
+          }
+        } catch (e) {
+          debugPrint('⚠️ Failed to load chat with ${user.phone}: $e');
         }
       }
       
@@ -129,7 +143,7 @@ class ChatProvider extends ChangeNotifier {
       });
       
       _conversations = conversations;
-      debugPrint('✅ Loaded ${conversations.length} conversations from local DB');
+      debugPrint('✅ Loaded ${conversations.length} conversations');
     } catch (e) {
       _conversationsError = 'Error loading conversations: $e';
       debugPrint('❌ Error loading conversations: $e');
@@ -140,18 +154,41 @@ class ChatProvider extends ChangeNotifier {
     return _conversations;
   }
   
-  /// Get unread message count for a specific user
-  Future<int> _getUnreadCountForUser(String currentUserId, String otherUserId) async {
+  /// Fetch chat history from API using phone numbers
+  Future<List<ChatMessage>> _fetchChatHistoryFromApi({
+    required String senderPhone,
+    required String receiverPhone,
+  }) async {
     try {
-      final chatTopic = _chatService.getChatTopic(currentUserId, otherUserId);
-      final messages = await _localDb.getChatMessages(chatTopic);
+      final url = Endpoints.buildUrl(
+        Endpoints.getChats,
+        queryParams: {
+          'senderId': senderPhone,
+          'receiverId': receiverPhone,
+        },
+      );
       
-      return messages.where((m) {
-        return m['sender_id'] != currentUserId && m['status'] != 'read';
-      }).length;
+      debugPrint('🔷 Fetching chat history: $url');
+      // _apiClient.get returns the decoded body directly (List or Map)
+      final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
+      
+      // Response is already decoded - handle as List
+      final List<dynamic> messagesData = response is List ? response : (response['data'] ?? []);
+      
+      debugPrint('📥 Received ${messagesData.length} messages from API');
+      
+      return messagesData.map((json) => ChatMessage(
+        id: json['id']?.toString() ?? '',
+        senderId: json['senderId']?.toString() ?? '',
+        recipientId: json['receiverId']?.toString() ?? '',
+        content: json['message']?.toString() ?? '',
+        timestamp: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+        status: MessageStatus.sent,
+      )).toList();
     } catch (e) {
-      return 0;
+      debugPrint('⚠️ API fetch failed: $e');
     }
+    return [];
   }
 
   /// Get total unread count across all conversations
@@ -326,11 +363,11 @@ class ChatProvider extends ChangeNotifier {
   // SINGLE CHAT (Existing Functionality)
   // ============================================================================
 
-  /// Initialize and start chat with another user
-  Future<void> initialize(String currentUserId, String otherUserId) async {
+  /// Initialize and start chat with another user (using phone numbers)
+  Future<void> initialize(String currentUserPhone, String otherUserPhone) async {
     _isConnecting = true;
     _error = null;
-    _currentChatUserId = otherUserId;
+    _currentChatUserId = otherUserPhone;  // Store phone number instead of userId
     notifyListeners();
 
     try {
@@ -341,14 +378,14 @@ class ChatProvider extends ChangeNotifier {
       await _chatService.connect();
       _isConnected = true;
 
-      // Start chat and listen for messages
-      debugPrint('💬 Starting chat with: $otherUserId');
-      debugPrint('💬 Current user: $currentUserId');
-      await _chatService.startChat(otherUserId, (message) {
+      // Start chat and listen for messages (using phone numbers)
+      debugPrint('💬 Starting chat with phone: $otherUserPhone');
+      debugPrint('💬 Current user phone: $currentUserPhone');
+      await _chatService.startChat(otherUserPhone, (message) {
         debugPrint('💬 Received message in callback: ${message.id}');
-        debugPrint('   ├─ Sender: ${message.senderId}');
+        debugPrint('   ├─ Sender (phone): ${message.senderId}');
         debugPrint('   ├─ Content: ${message.content}');
-        debugPrint('   └─ Current user: $currentUserId');
+        debugPrint('   └─ Current user (phone): $currentUserPhone');
         if (!_messages.any((m) => m.id == message.id)) {
           debugPrint('💬 Adding new message to list');
           _messages.add(message);
@@ -356,7 +393,7 @@ class ChatProvider extends ChangeNotifier {
           notifyListeners();
           
           // Mark as delivered if message is from other user
-          if (message.senderId == otherUserId) {
+          if (message.senderId == otherUserPhone) {
             _chatService.markAsDelivered(message.id, message.senderId);
           }
         } else {
@@ -364,15 +401,15 @@ class ChatProvider extends ChangeNotifier {
         }
       });
 
-      // Load message history
-      final history = _chatService.getMessageHistory(otherUserId);
+      // Load message history (using phone numbers)
+      final history = _chatService.getMessageHistory(otherUserPhone);
       _messages.clear();
       _messages.addAll(history);
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      // Listen to typing indicators
+      // Listen to typing indicators (using phone numbers)
       _typingSubscription?.cancel();
-      _typingSubscription = _chatService.onTypingIndicator(otherUserId).listen((isTyping) {
+      _typingSubscription = _chatService.onTypingIndicator(otherUserPhone).listen((isTyping) {
         _otherUserTyping = isTyping;
         notifyListeners();
       });
@@ -387,8 +424,8 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Send a text message
-  Future<void> sendMessage(String content) async {
+  /// Send a text message (using phone numbers)
+  Future<void> sendMessage(String content, {String? senderName, String? recipientName}) async {
     if (!_isConnected) {
       _error = 'Not connected to chat server';
       notifyListeners();
@@ -399,8 +436,10 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       await _chatService.sendMessage(
-        recipientId: _currentChatUserId!,
+        recipientPhone: _currentChatUserId!,  // This is now a phone number
         content: content.trim(),
+        senderName: senderName,
+        recipientName: recipientName,
       );
       // Message will be added via the startChat callback when echoed back
     } catch (e) {
@@ -409,24 +448,24 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Send typing indicator
+  /// Send typing indicator (using phone numbers)
   Future<void> sendTypingIndicator(bool isTyping) async {
     if (!_isConnected || _currentChatUserId == null) return;
     
     try {
-      await _chatService.sendTypingIndicator(_currentChatUserId!, isTyping);
+      await _chatService.sendTypingIndicator(_currentChatUserId!, isTyping);  // Phone number
     } catch (e) {
       // Silently fail - typing indicator is not critical
     }
   }
 
-  /// Mark all messages from other user as read
+  /// Mark all messages from other user as read (using phone numbers)
   Future<void> markMessagesAsRead() async {
     if (_currentChatUserId == null) return;
     
     for (final message in _messages) {
       if (message.senderId == _currentChatUserId && message.status != MessageStatus.read) {
-        await _chatService.markAsRead(message.id, message.senderId);
+        await _chatService.markAsRead(message.id, message.senderId);  // senderId is now phone number
         message.status = MessageStatus.read;
       }
     }
@@ -460,14 +499,14 @@ class ChatProvider extends ChangeNotifier {
     return [
       ChatConversation(
         id: 'conv_1',
-        otherUserId: 'user_2',
+        otherUserPhone: '+254700000001',
         otherUserName: 'John Smith',
         otherUserRole: 'Driver',
         otherUserAvatar: null,
         lastMessage: ChatMessage(
           id: 'msg_1',
-          senderId: 'user_2',
-          recipientId: 'user_1',
+          senderId: '+254700000001',
+          recipientId: '+254700000000',
           content: 'I\'ll be there in 5 minutes to pick up the kids',
           timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
           status: MessageStatus.read,
@@ -478,14 +517,14 @@ class ChatProvider extends ChangeNotifier {
       ),
       ChatConversation(
         id: 'conv_2',
-        otherUserId: 'user_3',
+        otherUserPhone: '+254700000002',
         otherUserName: 'Sarah Johnson',
         otherUserRole: 'Guardian',
         otherUserAvatar: null,
         lastMessage: ChatMessage(
           id: 'msg_2',
-          senderId: 'user_3',
-          recipientId: 'user_1',
+          senderId: '+254700000002',
+          recipientId: '+254700000000',
           content: 'Thanks for the update!',
           timestamp: DateTime.now().subtract(const Duration(hours: 2)),
           status: MessageStatus.read,
@@ -496,14 +535,14 @@ class ChatProvider extends ChangeNotifier {
       ),
       ChatConversation(
         id: 'conv_3',
-        otherUserId: 'user_4',
+        otherUserPhone: '+254700000003',
         otherUserName: 'Michael Brown',
         otherUserRole: 'Driver',
         otherUserAvatar: null,
         lastMessage: ChatMessage(
           id: 'msg_3',
-          senderId: 'user_4',
-          recipientId: 'user_1',
+          senderId: '+254700000003',
+          recipientId: '+254700000000',
           content: 'The bus has arrived at the school',
           timestamp: DateTime.now().subtract(const Duration(hours: 5)),
           status: MessageStatus.delivered,
@@ -514,14 +553,14 @@ class ChatProvider extends ChangeNotifier {
       ),
       ChatConversation(
         id: 'conv_4',
-        otherUserId: 'user_5',
+        otherUserPhone: '+254700000004',
         otherUserName: 'Emily Davis',
         otherUserRole: 'Staff',
         otherUserAvatar: null,
         lastMessage: ChatMessage(
           id: 'msg_4',
-          senderId: 'user_1',
-          recipientId: 'user_5',
+          senderId: '+254700000000',
+          recipientId: '+254700000004',
           content: 'Can you help me with the pickup schedule?',
           timestamp: DateTime.now().subtract(const Duration(days: 1)),
           status: MessageStatus.sent,
@@ -532,14 +571,14 @@ class ChatProvider extends ChangeNotifier {
       ),
       ChatConversation(
         id: 'conv_5',
-        otherUserId: 'user_6',
+        otherUserPhone: '+254700000005',
         otherUserName: 'David Wilson',
         otherUserRole: 'Guardian',
         otherUserAvatar: null,
         lastMessage: ChatMessage(
           id: 'msg_5',
-          senderId: 'user_6',
-          recipientId: 'user_1',
+          senderId: '+254700000005',
+          recipientId: '+254700000000',
           content: 'My child will be absent today due to illness',
           timestamp: DateTime.now().subtract(const Duration(days: 2)),
           status: MessageStatus.read,

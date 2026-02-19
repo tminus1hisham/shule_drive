@@ -10,7 +10,7 @@ import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ChatScreen extends StatefulWidget {
-  final String? receiverId;
+  final String? receiverPhone;  // Phone number of the receiver (used as chat ID)
   final String? receiverName;
   final String? receiverAvatar;
   final String? tripId;
@@ -18,7 +18,7 @@ class ChatScreen extends StatefulWidget {
 
   const ChatScreen({
     super.key,
-    this.receiverId,
+    this.receiverPhone,
     this.receiverName,
     this.receiverAvatar,
     this.tripId,
@@ -96,7 +96,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _initializeChat() async {
-    if (widget.receiverId == null) {
+    if (widget.receiverPhone == null) {
       if (mounted) {
         setState(() {
           _isInitializing = false;
@@ -108,9 +108,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final currentUserId = authProvider.userId;
+      // Get current user's phone number for chat
+      final currentUserPhone = authProvider.userPhone;
       
-      if (currentUserId == null) {
+      if (currentUserPhone == null) {
         if (mounted) {
           setState(() {
             _isInitializing = false;
@@ -121,7 +122,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       final chatProvider = context.read<ChatProvider>();
-      await chatProvider.initialize(currentUserId, widget.receiverId!);
+      // Initialize chat using phone numbers
+      await chatProvider.initialize(currentUserPhone, widget.receiverPhone!);
 
       if (mounted) {
         setState(() => _isInitializing = false);
@@ -152,12 +154,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final chatProvider = context.read<ChatProvider>();
+    final authProvider = context.read<AuthProvider>();
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
 
     _messageController.clear();
     HapticFeedback.lightImpact();
-    await chatProvider.sendMessage(content);
+    
+    // Pass sender and recipient names for MQTT message format
+    await chatProvider.sendMessage(
+      content,
+      senderName: authProvider.userName ?? 'Unknown',
+      recipientName: widget.receiverName ?? 'Unknown',
+    );
     _scrollToBottom();
   }
 

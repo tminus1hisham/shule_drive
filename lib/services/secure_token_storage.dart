@@ -90,6 +90,10 @@ class SecureTokenStorage {
     if (schoolName != null) {
       await _secureStorage.write(key: _userSchoolNameKey, value: schoolName);
     }
+    
+    // Cache for sync access
+    _cachedUserId = userId;
+    _cachedUserPhone = phone;
   }
 
   /// Get user ID (async)
@@ -100,6 +104,7 @@ class SecureTokenStorage {
   // Note: flutter_secure_storage doesn't support sync reads
   // Use cached value or async method instead
   String? _cachedUserId;
+  String? _cachedUserPhone;
   
   /// Cache user ID for sync access (call after login)
   void cacheUserId(String userId) {
@@ -108,6 +113,14 @@ class SecureTokenStorage {
   
   /// Get cached user ID (sync, may be null if not cached)
   String? getUserIdSync() => _cachedUserId;
+  
+  /// Cache user phone for sync access (call after login)
+  void cacheUserPhone(String phone) {
+    _cachedUserPhone = phone;
+  }
+  
+  /// Get cached user phone (sync, may be null if not cached)
+  String? getUserPhoneSync() => _cachedUserPhone;
 
   /// Get user name
   Future<String?> getUserName() async {

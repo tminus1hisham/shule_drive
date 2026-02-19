@@ -565,7 +565,7 @@ Route _buildPageRoute(RouteSettings settings) {
     case '/chat-detail':
       final args = settings.arguments as Map<String, dynamic>?;
       page = ChatScreen(
-        receiverId: args?['receiverId'] as String?,
+        receiverPhone: args?['receiverPhone'] as String?,
         receiverName: args?['receiverName'] as String?,
         receiverAvatar: args?['receiverAvatar'] as String?,
         tripId: args?['tripId'] as String?,

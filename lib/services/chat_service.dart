@@ -4,10 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
 import '../mqtt_client.dart';
+import '../api/api_client.dart';
+import '../api/endpoints.dart';
 import 'secure_token_storage.dart';
 import 'local_database_service.dart';
 
 /// Chat Service - Real-time messaging using MQTT
+/// Backend handles persistence via MQTT bridge
 class ChatService {
   static final ChatService _instance = ChatService._internal();
   factory ChatService() => _instance;
@@ -16,6 +19,7 @@ class ChatService {
   final MqttService _mqttService = MqttService();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
   final LocalDatabaseService _localDb = LocalDatabaseService();
+  final ApiClient _apiClient = ApiClient();
   final _uuid = const Uuid();
 
   // Message history (in-memory cache)
@@ -46,35 +50,68 @@ class ChatService {
     await _mqttService.disconnect();
   }
 
-  /// Start a chat with another user
-  Future<void> startChat(String otherUserId, Function(ChatMessage) onMessage) async {
-    final currentUserId = await _tokenStorage.getUserId();
-    if (currentUserId == null) throw Exception('Not authenticated');
+  /// Start a chat with another user (using phone numbers)
+  /// Subscribes to user's own topic 'chat/{currentUserPhone}' to receive messages
+  Future<void> startChat(String otherUserPhone, Function(ChatMessage) onMessage) async {
+    final currentUserPhone = await _tokenStorage.getUserPhone();
+    if (currentUserPhone == null) throw Exception('Not authenticated');
 
-    final chatTopic = _getChatTopic(currentUserId, otherUserId);
+    final chatTopic = _getChatTopic(currentUserPhone, otherUserPhone);
+    // Subscribe to own topic to receive messages sent to current user
+    final receiveTopic = 'chat/$currentUserPhone';
+    
+    debugPrint('📱 Current user phone: $currentUserPhone');
+    debugPrint('📱 Other user phone: $otherUserPhone');
+    debugPrint('📱 Chat topic (for DB): $chatTopic');
+    debugPrint('📱 Receive topic (MQTT): $receiveTopic');
 
     // Load message history from local database first
     await _loadMessageHistoryFromDb(chatTopic, onMessage);
 
-    // Subscribe to chat topic for real-time messages
-    debugPrint('📥 Subscribing to chat topic: $chatTopic');
-    await _mqttService.subscribe(chatTopic, (topic, message) {
+    // Subscribe to user's own topic for incoming messages
+    debugPrint('📥 Subscribing to receive topic: $receiveTopic');
+    await _mqttService.subscribe(receiveTopic, (topic, message) {
       debugPrint('📨 Received message on topic: $topic');
       try {
-        final data = jsonDecode(message);
-        final chatMessage = ChatMessage.fromJson(data);
-        debugPrint('   ├─ From: ${chatMessage.senderId}');
+        final data = jsonDecode(message) as Map<String, dynamic>;
+        
+        // Parse message from backend format
+        final senderId = data['senderId']?.toString() ?? '';
+        final receiverId = data['receiverId']?.toString() ?? '';
+        final messageText = data['message']?.toString() ?? '';
+        final createdAt = data['createdAt']?.toString() ?? '';
+        
+        // Only process if this message is for the current chat
+        if (senderId != otherUserPhone && receiverId != otherUserPhone) {
+          debugPrint('   ℹ️ Message not for current chat, ignoring');
+          return;
+        }
+        
+        final chatMessage = ChatMessage(
+          id: _uuid.v4(),
+          senderId: senderId,
+          recipientId: receiverId,
+          content: messageText,
+          timestamp: DateTime.tryParse(createdAt) ?? DateTime.now(),
+          status: MessageStatus.delivered,
+        );
+        
+        debugPrint('   ├─ From (phone): ${chatMessage.senderId}');
+        debugPrint('   ├─ To (phone): ${chatMessage.recipientId}');
         debugPrint('   ├─ Content: ${chatMessage.content}');
         debugPrint('   └─ Timestamp: ${chatMessage.timestamp}');
         
-        // Save to local database (if not already exists)
-        _saveMessageToDb(chatTopic, chatMessage);
+        // Determine the correct chat topic for storage
+        final msgChatTopic = _getChatTopic(senderId, receiverId);
+        
+        // Save to local database
+        _saveMessageToDb(msgChatTopic, chatMessage);
         
         // Notify listener
         onMessage(chatMessage);
 
         // Store in memory cache
-        _addToHistory(chatTopic, chatMessage);
+        _addToHistory(msgChatTopic, chatMessage);
         
         debugPrint('✅ Message processed successfully');
       } catch (e) {
@@ -114,9 +151,14 @@ class ChatService {
     }
   }
 
-  /// Save message to local database
-  Future<void> _saveMessageToDb(String chatTopic, ChatMessage message) async {
+  /// Save message to local database under sender's phone path
+  /// Format: chats/$senderPhone/$chatTopic
+  Future<void> _saveMessageToDb(String chatTopic, ChatMessage message, {String? senderPhone}) async {
     try {
+      // Create sender-specific path: chats/$senderPhone
+      final senderPath = senderPhone ?? message.senderId;
+      final fullPath = 'chats/$senderPath/$chatTopic';
+      
       await _localDb.saveChatMessage(
         id: message.id,
         senderId: message.senderId,
@@ -124,51 +166,69 @@ class ChatService {
         content: message.content,
         timestamp: message.timestamp,
         status: message.status.name,
-        chatTopic: chatTopic,
+        chatTopic: fullPath,  // Save with full path including sender
         replyToMessageId: message.replyToMessageId,
         synced: true,
       );
+      
+      debugPrint('💾 Saved to DB: $fullPath');
     } catch (e) {
       print('⚠️ Failed to save message to database: $e');
     }
   }
 
-  /// Send a text message
+  /// Send a text message via MQTT (backend handles persistence)
+  /// Publishes to 'chat/{receiverPhone}' topic
   Future<void> sendMessage({
-    required String recipientId,
+    required String recipientPhone,
     required String content,
-    String? replyToMessageId,
+    String? senderName,
+    String? recipientName,
   }) async {
-    final currentUserId = await _tokenStorage.getUserId();
-    if (currentUserId == null) throw Exception('Not authenticated');
+    final currentUserPhone = await _tokenStorage.getUserPhone();
+    if (currentUserPhone == null) throw Exception('Not authenticated');
 
-    final chatTopic = _getChatTopic(currentUserId, recipientId);
-    debugPrint('📤 Sending message to topic: $chatTopic');
-    debugPrint('   ├─ From: $currentUserId');
-    debugPrint('   ├─ To: $recipientId');
+    // Get current user's name if not provided
+    final currentUserName = senderName ?? await _tokenStorage.getUserName() ?? 'Unknown';
+    final receiverUserName = recipientName ?? 'Unknown';
+
+    // Publish to receiver's topic: chat/{receiverPhone}
+    final publishTopic = 'chat/$recipientPhone';
+    
+    debugPrint('📤 Sending message via MQTT:');
+    debugPrint('   ├─ Topic: $publishTopic');
+    debugPrint('   ├─ From: $currentUserPhone ($currentUserName)');
+    debugPrint('   ├─ To: $recipientPhone ($receiverUserName)');
     debugPrint('   └─ Content: $content');
 
+    // Build message in backend format
+    final messageData = {
+      'chat': true,
+      'senderId': currentUserPhone,
+      'senderName': currentUserName.split('-').first.trim(),
+      'receiverId': recipientPhone,
+      'receiverName': receiverUserName.split('-').first.trim(),
+      'message': content,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+
+    // Save to local database for immediate UI feedback
+    final chatTopic = _getChatTopic(currentUserPhone, recipientPhone);
     final message = ChatMessage(
       id: _uuid.v4(),
-      senderId: currentUserId,
-      recipientId: recipientId,
+      senderId: currentUserPhone,
+      recipientId: recipientPhone,
       content: content,
       timestamp: DateTime.now(),
       status: MessageStatus.sent,
-      replyToMessageId: replyToMessageId,
     );
-
-    // Save to local database immediately (offline support)
-    await _saveMessageToDb(chatTopic, message);
-    
-    // Add to in-memory cache
+    await _saveMessageToDb(chatTopic, message, senderPhone: currentUserPhone);
     _addToHistory(chatTopic, message);
 
-    // Publish via MQTT (with retain flag for offline delivery of last message)
-    // Note: retain=true keeps the last message on broker for new subscribers
+    // Publish via MQTT - backend will handle persistence and forwarding
     try {
-      await _mqttService.publishJson(chatTopic, message.toJson(), retain: true);
-      debugPrint('✅ Message published successfully');
+      await _mqttService.publishJson(publishTopic, messageData, retain: false);
+      debugPrint('✅ Message published to MQTT successfully');
     } catch (e) {
       debugPrint('❌ Failed to publish message: $e');
       throw Exception('Failed to send message: $e');
@@ -176,25 +236,25 @@ class ChatService {
   }
 
   /// Send typing indicator
-  Future<void> sendTypingIndicator(String recipientId, bool isTyping) async {
-    final currentUserId = await _tokenStorage.getUserId();
-    if (currentUserId == null) return;
+  Future<void> sendTypingIndicator(String recipientPhone, bool isTyping) async {
+    final currentUserPhone = await _tokenStorage.getUserPhone();
+    if (currentUserPhone == null) return;
 
-    final typingTopic = 'typing/${_getChatTopic(currentUserId, recipientId)}';
+    final typingTopic = 'typing/$recipientPhone';
 
     await _mqttService.publishJson(typingTopic, {
-      'userId': currentUserId,
+      'userPhone': currentUserPhone,
       'isTyping': isTyping,
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
 
-  /// Listen to typing indicators from a user
-  Stream<bool> onTypingIndicator(String otherUserId) {
-    final currentUserId = _tokenStorage.getUserIdSync();
-    if (currentUserId == null) return Stream.empty();
+  /// Listen to typing indicators from a user (using phone numbers)
+  Stream<bool> onTypingIndicator(String otherUserPhone) {
+    final currentUserPhone = _tokenStorage.getUserPhoneSync();
+    if (currentUserPhone == null) return Stream.empty();
 
-    final typingTopic = 'typing/${_getChatTopic(currentUserId, otherUserId)}';
+    final typingTopic = 'typing/$currentUserPhone';
 
     if (!_typingControllers.containsKey(typingTopic)) {
       _typingControllers[typingTopic] = StreamController<bool>.broadcast();
@@ -202,7 +262,7 @@ class ChatService {
       _mqttService.subscribe(typingTopic, (topic, message) {
         try {
           final data = jsonDecode(message);
-          if (data['userId'] == otherUserId) {
+          if (data['userPhone'] == otherUserPhone) {
             _typingControllers[typingTopic]!.add(data['isTyping'] as bool);
           }
         } catch (e) {
@@ -214,39 +274,39 @@ class ChatService {
     return _typingControllers[typingTopic]!.stream;
   }
 
-  /// Get message history for a chat
-  List<ChatMessage> getMessageHistory(String otherUserId) {
-    final currentUserId = _tokenStorage.getUserIdSync();
-    if (currentUserId == null) return [];
+  /// Get message history for a chat (using phone numbers)
+  List<ChatMessage> getMessageHistory(String otherUserPhone) {
+    final currentUserPhone = _tokenStorage.getUserPhoneSync();
+    if (currentUserPhone == null) return [];
 
-    final chatTopic = _getChatTopic(currentUserId, otherUserId);
+    final chatTopic = _getChatTopic(currentUserPhone, otherUserPhone);
     return _messageHistory[chatTopic] ?? [];
   }
 
-  /// Mark message as delivered
-  Future<void> markAsDelivered(String messageId, String senderId) async {
-    final currentUserId = await _tokenStorage.getUserId();
-    if (currentUserId == null) return;
+  /// Mark message as delivered (using phone numbers)
+  Future<void> markAsDelivered(String messageId, String senderPhone) async {
+    final currentUserPhone = await _tokenStorage.getUserPhone();
+    if (currentUserPhone == null) return;
 
     final statusTopic = 'status/$messageId';
     await _mqttService.publishJson(statusTopic, {
       'messageId': messageId,
       'status': 'delivered',
-      'deliveredBy': currentUserId,
+      'deliveredBy': currentUserPhone,  // Use phone number
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
 
-  /// Mark message as read
-  Future<void> markAsRead(String messageId, String senderId) async {
-    final currentUserId = await _tokenStorage.getUserId();
-    if (currentUserId == null) return;
+  /// Mark message as read (using phone numbers)
+  Future<void> markAsRead(String messageId, String senderPhone) async {
+    final currentUserPhone = await _tokenStorage.getUserPhone();
+    if (currentUserPhone == null) return;
 
     final statusTopic = 'status/$messageId';
     await _mqttService.publishJson(statusTopic, {
       'messageId': messageId,
       'status': 'read',
-      'readBy': currentUserId,
+      'readBy': currentUserPhone,  // Use phone number
       'timestamp': DateTime.now().toIso8601String(),
     });
   }

@@ -101,7 +101,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       context,
       '/chat-detail',
       arguments: {
-        'receiverId': conversation.otherUserId,
+        'receiverPhone': conversation.otherUserPhone,  // Use phone number
         'receiverName': conversation.otherUserName,
         'receiverAvatar': conversation.otherUserAvatar,
       },
