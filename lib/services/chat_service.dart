@@ -57,10 +57,15 @@ class ChatService {
     await _loadMessageHistoryFromDb(chatTopic, onMessage);
 
     // Subscribe to chat topic for real-time messages
+    debugPrint('📥 Subscribing to chat topic: $chatTopic');
     await _mqttService.subscribe(chatTopic, (topic, message) {
+      debugPrint('📨 Received message on topic: $topic');
       try {
         final data = jsonDecode(message);
         final chatMessage = ChatMessage.fromJson(data);
+        debugPrint('   ├─ From: ${chatMessage.senderId}');
+        debugPrint('   ├─ Content: ${chatMessage.content}');
+        debugPrint('   └─ Timestamp: ${chatMessage.timestamp}');
         
         // Save to local database (if not already exists)
         _saveMessageToDb(chatTopic, chatMessage);
@@ -70,8 +75,10 @@ class ChatService {
 
         // Store in memory cache
         _addToHistory(chatTopic, chatMessage);
+        
+        debugPrint('✅ Message processed successfully');
       } catch (e) {
-        print('Failed to parse chat message: $e');
+        debugPrint('❌ Failed to parse chat message: $e');
       }
     });
   }
@@ -136,6 +143,10 @@ class ChatService {
     if (currentUserId == null) throw Exception('Not authenticated');
 
     final chatTopic = _getChatTopic(currentUserId, recipientId);
+    debugPrint('📤 Sending message to topic: $chatTopic');
+    debugPrint('   ├─ From: $currentUserId');
+    debugPrint('   ├─ To: $recipientId');
+    debugPrint('   └─ Content: $content');
 
     final message = ChatMessage(
       id: _uuid.v4(),
@@ -155,7 +166,13 @@ class ChatService {
 
     // Publish via MQTT (with retain flag for offline delivery of last message)
     // Note: retain=true keeps the last message on broker for new subscribers
-    await _mqttService.publishJson(chatTopic, message.toJson(), retain: true);
+    try {
+      await _mqttService.publishJson(chatTopic, message.toJson(), retain: true);
+      debugPrint('✅ Message published successfully');
+    } catch (e) {
+      debugPrint('❌ Failed to publish message: $e');
+      throw Exception('Failed to send message: $e');
+    }
   }
 
   /// Send typing indicator
@@ -268,6 +285,11 @@ class ChatService {
   String _getChatTopic(String userId1, String userId2) {
     final ids = [userId1, userId2]..sort();
     return 'chat/${ids[0]}_${ids[1]}';
+  }
+  
+  /// Public method to get chat topic for two users
+  String getChatTopic(String userId1, String userId2) {
+    return _getChatTopic(userId1, userId2);
   }
 
   void _addToHistory(String chatTopic, ChatMessage message) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'dart:math';
@@ -12,21 +13,24 @@ class MqttService {
   static final MqttService _singleton = MqttService._internal();
   late MqttServerClient _client;
   bool _isConnected = false;
-  
+
   // Subscriptions map: topic -> callback
-  final Map<String, List<Function(String topic, String message)>> _subscriptions = {};
-  
+  final Map<String, List<Function(String topic, String message)>>
+  _subscriptions = {};
+
   // Connection status stream
-  final StreamController<bool> _connectionController = StreamController<bool>.broadcast();
+  final StreamController<bool> _connectionController =
+      StreamController<bool>.broadcast();
   Stream<bool> get connectionStatus => _connectionController.stream;
-  
+
   // Message stream for general consumption
-  final StreamController<MqttMessageEvent> _messageController = StreamController<MqttMessageEvent>.broadcast();
+  final StreamController<MqttMessageEvent> _messageController =
+      StreamController<MqttMessageEvent>.broadcast();
   Stream<MqttMessageEvent> get messages => _messageController.stream;
-  
+
   // Secure storage
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
-  
+
   // Reconnect timer
   Timer? _reconnectTimer;
 
@@ -44,7 +48,7 @@ class MqttService {
     return String.fromCharCodes(
       Iterable.generate(
         length,
-            (_) => characters.codeUnitAt(random.nextInt(characters.length)),
+        (_) => characters.codeUnitAt(random.nextInt(characters.length)),
       ),
     );
   }
@@ -63,7 +67,9 @@ class MqttService {
       final token = await _tokenStorage.getAccessToken();
 
       print('   ├─ User ID: ${userId ?? "NOT FOUND"}');
-      print('   ├─ Token: ${token != null ? "${token.substring(0, min(20, token.length))}..." : "NOT FOUND"}');
+      print(
+        '   ├─ Token: ${token != null ? "${token.substring(0, min(20, token.length))}..." : "NOT FOUND"}',
+      );
 
       if (userId == null || token == null) {
         print('   └─ ❌ Missing credentials - cannot connect');
@@ -82,10 +88,17 @@ class MqttService {
 
       // Set up the connection message
       final connMess = MqttConnectMessage()
-          .withClientIdentifier('shuledrive_${userId}_${DateTime.now().millisecondsSinceEpoch}')
+          .withClientIdentifier(
+            'shuledrive_${userId}_${DateTime.now().millisecondsSinceEpoch}',
+          )
           .startClean()
           .withWillTopic('users/$userId/status')
-          .withWillMessage(jsonEncode({'status': 'offline', 'timestamp': DateTime.now().toIso8601String()}))
+          .withWillMessage(
+            jsonEncode({
+              'status': 'offline',
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          )
           .withWillQos(MqttQos.atLeastOnce)
           .withWillRetain()
           .authenticateAs('teleezaAnalytics', 'teleezaAnalyticsAdmin2023');
@@ -99,13 +112,19 @@ class MqttService {
       _client.updates!.listen(_onMessage);
 
       // Publish online status
-      await publish('users/$userId/status', jsonEncode({
-        'status': 'online',
-        'timestamp': DateTime.now().toIso8601String(),
-      }), retain: true);
+      await publish(
+        'users/$userId/status',
+        jsonEncode({
+          'status': 'online',
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+        retain: true,
+      );
 
       print('✅ MQTT setup complete - listening for messages');
 
+      final senderId = await _tokenStorage.getUserPhone().toString();
+      await subscribe("chats/$senderId", handleMessage);
     } on SocketException catch (e) {
       print('❌ MQTT CONNECTION FAILED: Network error - $e');
       throw NetworkException();
@@ -113,6 +132,11 @@ class MqttService {
       print('❌ MQTT CONNECTION FAILED: $e');
       throw ApiException(message: 'MQTT connection failed: $e');
     }
+  }
+
+  void handleMessage(String topic, String message) {
+    print('Received message on $topic: $message');
+    // Do something with the message
   }
 
   /// Disconnect from MQTT broker
@@ -123,10 +147,14 @@ class MqttService {
       final userId = await _tokenStorage.getUserId();
       if (userId != null) {
         // Publish offline status
-        await publish('users/$userId/status', jsonEncode({
-          'status': 'offline',
-          'timestamp': DateTime.now().toIso8601String(),
-        }), retain: true);
+        await publish(
+          'users/$userId/status',
+          jsonEncode({
+            'status': 'offline',
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+          retain: true,
+        );
       }
 
       _client.disconnect();
@@ -137,7 +165,10 @@ class MqttService {
   }
 
   /// Subscribe to a topic
-  Future<void> subscribe(String topic, Function(String topic, String message) callback) async {
+  Future<void> subscribe(
+    String topic,
+    Function(String topic, String message) callback,
+  ) async {
     if (!_isConnected) {
       await connect();
     }
@@ -151,7 +182,10 @@ class MqttService {
   }
 
   /// Unsubscribe from a topic
-  Future<void> unsubscribe(String topic, [Function(String topic, String message)? callback]) async {
+  Future<void> unsubscribe(
+    String topic, [
+    Function(String topic, String message)? callback,
+  ]) async {
     if (callback != null && _subscriptions.containsKey(topic)) {
       _subscriptions[topic]!.remove(callback);
 
@@ -171,7 +205,11 @@ class MqttService {
   }
 
   /// Publish a message to a topic
-  Future<void> publish(String topic, String message, {bool retain = false}) async {
+  Future<void> publish(
+    String topic,
+    String message, {
+    bool retain = false,
+  }) async {
     if (!_isConnected) {
       throw ApiException(message: 'MQTT not connected');
     }
@@ -179,16 +217,24 @@ class MqttService {
     final builder = MqttClientPayloadBuilder();
     builder.addString(message);
 
-    _client.publishMessage(
+    final result = _client.publishMessage(
       topic,
       MqttQos.exactlyOnce,
       builder.payload!,
       retain: retain,
     );
+
+    if (kDebugMode) {
+      print('📤 MQTT Publish: topic=$topic, retain=$retain, result=$result');
+    }
   }
 
   /// Publish a JSON message
-  Future<void> publishJson(String topic, Map<String, dynamic> data, {bool retain = false}) async {
+  Future<void> publishJson(
+    String topic,
+    Map<String, dynamic> data, {
+    bool retain = false,
+  }) async {
     await publish(topic, jsonEncode(data), retain: retain);
   }
 
@@ -229,7 +275,9 @@ class MqttService {
     for (final received in messages) {
       final topic = received.topic;
       final message = received.payload as MqttPublishMessage;
-      final payload = MqttPublishPayload.bytesToStringAsString(message.payload.message);
+      final payload = MqttPublishPayload.bytesToStringAsString(
+        message.payload.message,
+      );
 
       // Add to message stream
       _messageController.add(MqttMessageEvent(topic: topic, message: payload));
@@ -293,10 +341,8 @@ class MqttMessageEvent {
   final String message;
   final DateTime timestamp;
 
-  MqttMessageEvent({
-    required this.topic,
-    required this.message,
-  }) : timestamp = DateTime.now();
+  MqttMessageEvent({required this.topic, required this.message})
+    : timestamp = DateTime.now();
 
   Map<String, dynamic> toJson() => jsonDecode(message);
 }
@@ -318,7 +364,8 @@ class MqttTopics {
   String tripEvents(String tripId) => 'trips/$tripId/events';
 
   // Chat topics
-  String chatWithUser(String otherUserId) => 'chat/${_sortedIds(userId, otherUserId)}';
+  String chatWithUser(String otherUserId) =>
+      'chat/${_sortedIds(userId, otherUserId)}';
 
   // Helper to create consistent chat room IDs
   String _sortedIds(String id1, String id2) {

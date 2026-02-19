@@ -53,6 +53,8 @@ class _ChatListScreenState extends State<ChatListScreen>
       final mqtt = MqttService();
       if (!mqtt.isConnected) {
         await mqtt.connect();
+
+        //if(mqtt.is)
       }
     } catch (e) {
       // Silently log error - don't show to user

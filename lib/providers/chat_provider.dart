@@ -7,11 +7,13 @@ import '../models/chat_conversation.dart';
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import '../services/secure_token_storage.dart';
+import '../services/local_database_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
   final ApiClient _apiClient = ApiClient();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
+  final LocalDatabaseService _localDb = LocalDatabaseService();
 
   // Messages for current chat
   final List<ChatMessage> _messages = [];
@@ -65,15 +67,91 @@ class ChatProvider extends ChangeNotifier {
     _conversationsError = null;
     await Future.microtask(() => notifyListeners());
 
-    // NOTE: Using mock data because the API endpoint /api/chats/get 
-    // requires receiverId which doesn't make sense for getting all conversations
-    // TODO: Fix backend API or implement proper conversation storage
-    await Future.delayed(const Duration(milliseconds: 500));
-    _conversations = _getMockConversations();
+    try {
+      // Load conversations from local database (chat messages)
+      final currentUserId = await _tokenStorage.getUserId();
+      if (currentUserId == null) {
+        _conversationsError = 'Not authenticated';
+        _isLoadingConversations = false;
+        await Future.microtask(() => notifyListeners());
+        return _conversations;
+      }
+
+      // Get all available users to build conversation list
+      final users = await getAvailableUsers();
+      
+      // Build conversations from local message history
+      final List<ChatConversation> conversations = [];
+      
+      for (final user in users) {
+        // Get message history for this user
+        final chatTopic = _chatService.getChatTopic(currentUserId, user.id);
+        final messages = await _localDb.getChatMessages(chatTopic, limit: 100);
+        
+        if (messages.isNotEmpty) {
+          final lastMessageData = messages.last; // Most recent message
+          final unreadCount = await _getUnreadCountForUser(currentUserId, user.id);
+          
+          // Create ChatMessage for last message
+          final lastMessage = ChatMessage(
+            id: lastMessageData['id'],
+            senderId: lastMessageData['sender_id'],
+            recipientId: lastMessageData['recipient_id'],
+            content: lastMessageData['content'],
+            timestamp: DateTime.parse(lastMessageData['timestamp']),
+            status: MessageStatus.values.firstWhere(
+              (s) => s.name == lastMessageData['status'],
+              orElse: () => MessageStatus.sent,
+            ),
+            replyToMessageId: lastMessageData['reply_to_message_id'],
+          );
+          
+          conversations.add(ChatConversation(
+            id: chatTopic,
+            otherUserId: user.id,
+            otherUserName: user.name,
+            otherUserAvatar: user.avatar,
+            otherUserRole: user.role,
+            lastMessage: lastMessage,
+            unreadCount: unreadCount,
+            lastActivity: lastMessage.timestamp,
+            isOnline: user.isOnline,
+          ));
+        }
+      }
+      
+      // Sort by last activity time (most recent first)
+      conversations.sort((a, b) {
+        if (a.lastActivity == null && b.lastActivity == null) return 0;
+        if (a.lastActivity == null) return 1;
+        if (b.lastActivity == null) return -1;
+        return b.lastActivity!.compareTo(a.lastActivity!);
+      });
+      
+      _conversations = conversations;
+      debugPrint('✅ Loaded ${conversations.length} conversations from local DB');
+    } catch (e) {
+      _conversationsError = 'Error loading conversations: $e';
+      debugPrint('❌ Error loading conversations: $e');
+    }
 
     _isLoadingConversations = false;
     await Future.microtask(() => notifyListeners());
     return _conversations;
+  }
+  
+  /// Get unread message count for a specific user
+  Future<int> _getUnreadCountForUser(String currentUserId, String otherUserId) async {
+    try {
+      final chatTopic = _chatService.getChatTopic(currentUserId, otherUserId);
+      final messages = await _localDb.getChatMessages(chatTopic);
+      
+      return messages.where((m) {
+        return m['sender_id'] != currentUserId && m['status'] != 'read';
+      }).length;
+    } catch (e) {
+      return 0;
+    }
   }
 
   /// Get total unread count across all conversations
@@ -264,8 +342,15 @@ class ChatProvider extends ChangeNotifier {
       _isConnected = true;
 
       // Start chat and listen for messages
+      debugPrint('💬 Starting chat with: $otherUserId');
+      debugPrint('💬 Current user: $currentUserId');
       await _chatService.startChat(otherUserId, (message) {
+        debugPrint('💬 Received message in callback: ${message.id}');
+        debugPrint('   ├─ Sender: ${message.senderId}');
+        debugPrint('   ├─ Content: ${message.content}');
+        debugPrint('   └─ Current user: $currentUserId');
         if (!_messages.any((m) => m.id == message.id)) {
+          debugPrint('💬 Adding new message to list');
           _messages.add(message);
           _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
           notifyListeners();
@@ -274,6 +359,8 @@ class ChatProvider extends ChangeNotifier {
           if (message.senderId == otherUserId) {
             _chatService.markAsDelivered(message.id, message.senderId);
           }
+        } else {
+          debugPrint('💬 Message already exists, skipping');
         }
       });
 
