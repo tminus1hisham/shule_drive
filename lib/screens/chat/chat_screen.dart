@@ -338,7 +338,8 @@ class _ChatScreenState extends State<ChatScreen> {
     return Consumer2<ChatProvider, AuthProvider>(
       builder: (context, chatProvider, authProvider, child) {
         final messages = chatProvider.messages;
-        final currentUserId = authProvider.userId ?? '';
+        // Use phone number for comparison since that's what we use as senderId
+        final currentUserPhone = authProvider.userPhone ?? '';
 
         if (messages.isEmpty) {
           return _buildEmptyState(isDarkMode);
@@ -356,7 +357,8 @@ class _ChatScreenState extends State<ChatScreen> {
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final message = messages[index];
-            final isMe = message.senderId == currentUserId;
+            // Compare using phone numbers
+            final isMe = message.senderId == currentUserPhone;
             final showDate = index == 0 || !_isSameDay(messages[index - 1].timestamp, message.timestamp);
 
             return Column(

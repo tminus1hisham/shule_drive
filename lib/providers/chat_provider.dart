@@ -68,7 +68,7 @@ class ChatProvider extends ChangeNotifier {
     await Future.microtask(() => notifyListeners());
 
     try {
-      // Load conversations from API using phone numbers
+      // Load conversations from contacts API (single call, much faster)
       final currentUserPhone = await _tokenStorage.getUserPhone();
       if (currentUserPhone == null) {
         _conversationsError = 'Not authenticated';
@@ -77,73 +77,10 @@ class ChatProvider extends ChangeNotifier {
         return _conversations;
       }
 
-      // Get all available users to build conversation list
-      final users = await getAvailableUsers();
+      // Fetch contacts from API using the contacts endpoint
+      _conversations = await _fetchChatContactsFromApi(senderPhone: currentUserPhone);
       
-      // Build conversations from API and local message history
-      final List<ChatConversation> conversations = [];
-      
-      for (final user in users) {
-        // Fetch chat history from API for this user
-        try {
-          final apiMessages = await _fetchChatHistoryFromApi(
-            senderPhone: currentUserPhone,
-            receiverPhone: user.phone,
-          );
-          
-          // Also get local messages and convert to ChatMessage
-          final chatTopic = _chatService.getChatTopic(currentUserPhone, user.phone);
-          final localMessagesData = await _localDb.getChatMessages(chatTopic, limit: 100);
-          final localMessages = localMessagesData.map((data) => ChatMessage(
-            id: data['id'],
-            senderId: data['sender_id'],
-            recipientId: data['recipient_id'],
-            content: data['content'],
-            timestamp: DateTime.parse(data['timestamp']),
-            status: MessageStatus.values.firstWhere(
-              (s) => s.name == data['status'],
-              orElse: () => MessageStatus.sent,
-            ),
-            replyToMessageId: data['reply_to_message_id'],
-          )).toList();
-          
-          // Merge and get latest message
-          if (apiMessages.isNotEmpty || localMessages.isNotEmpty) {
-            final allMessages = [...apiMessages, ...localMessages];
-            allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            
-            final lastMessage = allMessages.first;
-            final unreadCount = allMessages.where((m) => 
-              m.senderId == user.phone && m.status != MessageStatus.read
-            ).length;
-            
-            conversations.add(ChatConversation(
-              id: chatTopic,
-              otherUserPhone: user.phone,
-              otherUserName: user.name,
-              otherUserAvatar: user.avatar,
-              otherUserRole: user.role,
-              lastMessage: lastMessage,
-              unreadCount: unreadCount,
-              lastActivity: lastMessage.timestamp,
-              isOnline: user.isOnline,
-            ));
-          }
-        } catch (e) {
-          debugPrint('⚠️ Failed to load chat with ${user.phone}: $e');
-        }
-      }
-      
-      // Sort by last activity time (most recent first)
-      conversations.sort((a, b) {
-        if (a.lastActivity == null && b.lastActivity == null) return 0;
-        if (a.lastActivity == null) return 1;
-        if (b.lastActivity == null) return -1;
-        return b.lastActivity!.compareTo(a.lastActivity!);
-      });
-      
-      _conversations = conversations;
-      debugPrint('✅ Loaded ${conversations.length} conversations');
+      debugPrint('✅ Loaded ${_conversations.length} conversations from contacts API');
     } catch (e) {
       _conversationsError = 'Error loading conversations: $e';
       debugPrint('❌ Error loading conversations: $e');
@@ -154,7 +91,72 @@ class ChatProvider extends ChangeNotifier {
     return _conversations;
   }
   
-  /// Fetch chat history from API using phone numbers
+  /// Fetch chat contacts from API - returns list of users with whom current user has chatted
+  Future<List<ChatConversation>> _fetchChatContactsFromApi({
+    required String senderPhone,
+  }) async {
+    try {
+      final url = Endpoints.buildUrl(
+        Endpoints.getChatContacts,
+        queryParams: {
+          'senderId': senderPhone,
+        },
+      );
+      
+      debugPrint('🔷 Fetching chat contacts: $url');
+      final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
+      
+      // Response is already decoded - handle as List
+      final List<dynamic> contactsData = response is List ? response : (response['data'] ?? []);
+      
+      debugPrint('📥 Received ${contactsData.length} contacts from API');
+      
+      return contactsData.map((json) {
+        final otherUserPhone = json['phoneNumber']?.toString() ?? 
+                              json['phone']?.toString() ?? 
+                              json['receiverId']?.toString() ?? '';
+        final otherUserName = json['fullname']?.toString() ?? 
+                             json['name']?.toString() ?? 
+                             json['receiverName']?.toString() ?? 'Unknown';
+        final lastMessageText = json['lastMessage']?.toString() ?? 
+                               json['message']?.toString() ?? '';
+        final lastMessageTime = json['lastMessageTime']?.toString() ?? 
+                               json['createdAt']?.toString() ?? '';
+        final unreadCount = json['unreadCount'] ?? json['unread'] ?? 0;
+        
+        final chatTopic = _chatService.getChatTopic(senderPhone, otherUserPhone);
+        
+        return ChatConversation(
+          id: chatTopic,
+          otherUserPhone: otherUserPhone,
+          otherUserName: otherUserName,
+          otherUserAvatar: json['avatar']?.toString(),
+          otherUserRole: json['role']?.toString(),
+          lastMessage: lastMessageText.isNotEmpty ? ChatMessage(
+            id: json['id']?.toString() ?? '',
+            senderId: json['senderId']?.toString() ?? '',
+            recipientId: otherUserPhone,
+            content: lastMessageText,
+            timestamp: DateTime.tryParse(lastMessageTime) ?? DateTime.now(),
+            status: MessageStatus.sent,
+          ) : null,
+          unreadCount: unreadCount is int ? unreadCount : int.tryParse(unreadCount.toString()) ?? 0,
+          lastActivity: DateTime.tryParse(lastMessageTime),
+          isOnline: json['isOnline'] ?? false,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('⚠️ API fetch contacts failed: $e');
+    }
+    return [];
+  }
+
+  /// Get total unread count across all conversations
+  int get totalUnreadCount {
+    return _conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
+  }
+
+  /// Fetch chat history from API using phone numbers (for loading messages in chat screen)
   Future<List<ChatMessage>> _fetchChatHistoryFromApi({
     required String senderPhone,
     required String receiverPhone,
@@ -169,7 +171,6 @@ class ChatProvider extends ChangeNotifier {
       );
       
       debugPrint('🔷 Fetching chat history: $url');
-      // _apiClient.get returns the decoded body directly (List or Map)
       final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
       
       // Response is already decoded - handle as List
@@ -189,11 +190,6 @@ class ChatProvider extends ChangeNotifier {
       debugPrint('⚠️ API fetch failed: $e');
     }
     return [];
-  }
-
-  /// Get total unread count across all conversations
-  int get totalUnreadCount {
-    return _conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
   }
 
   // ============================================================================
@@ -401,11 +397,42 @@ class ChatProvider extends ChangeNotifier {
         }
       });
 
-      // Load message history (using phone numbers)
-      final history = _chatService.getMessageHistory(otherUserPhone);
+      // Load message history from API first
+      debugPrint('📥 Loading message history from API...');
+      final apiMessages = await _fetchChatHistoryFromApi(
+        senderPhone: currentUserPhone,
+        receiverPhone: otherUserPhone,
+      );
+      debugPrint('📥 Loaded ${apiMessages.length} messages from API');
+      
+      // Also load from local database for offline messages
+      final localHistory = _chatService.getMessageHistory(otherUserPhone);
+      debugPrint('📥 Loaded ${localHistory.length} messages from local DB');
+      
+      // Merge and deduplicate messages
+      final allMessages = <ChatMessage>[];
+      final messageIds = <String>{};
+      
+      // Add API messages first
+      for (final msg in apiMessages) {
+        if (!messageIds.contains(msg.id)) {
+          allMessages.add(msg);
+          messageIds.add(msg.id);
+        }
+      }
+      
+      // Add local messages that aren't already in the list
+      for (final msg in localHistory) {
+        if (!messageIds.contains(msg.id)) {
+          allMessages.add(msg);
+          messageIds.add(msg.id);
+        }
+      }
+      
       _messages.clear();
-      _messages.addAll(history);
+      _messages.addAll(allMessages);
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      debugPrint('📥 Total messages after merge: ${_messages.length}');
 
       // Listen to typing indicators (using phone numbers)
       _typingSubscription?.cancel();
