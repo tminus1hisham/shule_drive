@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
 import '../mqtt_client.dart';
 import 'secure_token_storage.dart';
+import 'local_database_service.dart';
 
 /// Chat Service - Real-time messaging using MQTT
 class ChatService {
@@ -13,6 +15,7 @@ class ChatService {
 
   final MqttService _mqttService = MqttService();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
+  final LocalDatabaseService _localDb = LocalDatabaseService();
   final _uuid = const Uuid();
 
   // Message history (in-memory cache)
@@ -50,19 +53,77 @@ class ChatService {
 
     final chatTopic = _getChatTopic(currentUserId, otherUserId);
 
-    // Subscribe to chat topic
+    // Load message history from local database first
+    await _loadMessageHistoryFromDb(chatTopic, onMessage);
+
+    // Subscribe to chat topic for real-time messages
     await _mqttService.subscribe(chatTopic, (topic, message) {
       try {
         final data = jsonDecode(message);
         final chatMessage = ChatMessage.fromJson(data);
+        
+        // Save to local database (if not already exists)
+        _saveMessageToDb(chatTopic, chatMessage);
+        
+        // Notify listener
         onMessage(chatMessage);
 
-        // Store in history
+        // Store in memory cache
         _addToHistory(chatTopic, chatMessage);
       } catch (e) {
         print('Failed to parse chat message: $e');
       }
     });
+  }
+
+  /// Load message history from local database
+  Future<void> _loadMessageHistoryFromDb(String chatTopic, Function(ChatMessage) onMessage) async {
+    try {
+      final messages = await _localDb.getChatMessages(chatTopic);
+      
+      for (final msgData in messages) {
+        final message = ChatMessage(
+          id: msgData['id'],
+          senderId: msgData['sender_id'],
+          recipientId: msgData['recipient_id'],
+          content: msgData['content'],
+          timestamp: DateTime.parse(msgData['timestamp']),
+          status: MessageStatus.values.firstWhere(
+            (s) => s.name == msgData['status'],
+            orElse: () => MessageStatus.sent,
+          ),
+          replyToMessageId: msgData['reply_to_message_id'],
+        );
+        
+        _addToHistory(chatTopic, message);
+        onMessage(message);
+      }
+      
+      if (kDebugMode && messages.isNotEmpty) {
+        print('📦 Loaded ${messages.length} messages from local database');
+      }
+    } catch (e) {
+      print('⚠️ Failed to load message history: $e');
+    }
+  }
+
+  /// Save message to local database
+  Future<void> _saveMessageToDb(String chatTopic, ChatMessage message) async {
+    try {
+      await _localDb.saveChatMessage(
+        id: message.id,
+        senderId: message.senderId,
+        recipientId: message.recipientId,
+        content: message.content,
+        timestamp: message.timestamp,
+        status: message.status.name,
+        chatTopic: chatTopic,
+        replyToMessageId: message.replyToMessageId,
+        synced: true,
+      );
+    } catch (e) {
+      print('⚠️ Failed to save message to database: $e');
+    }
   }
 
   /// Send a text message
@@ -86,8 +147,15 @@ class ChatService {
       replyToMessageId: replyToMessageId,
     );
 
-    await _mqttService.publishJson(chatTopic, message.toJson());
+    // Save to local database immediately (offline support)
+    await _saveMessageToDb(chatTopic, message);
+    
+    // Add to in-memory cache
     _addToHistory(chatTopic, message);
+
+    // Publish via MQTT (with retain flag for offline delivery of last message)
+    // Note: retain=true keeps the last message on broker for new subscribers
+    await _mqttService.publishJson(chatTopic, message.toJson(), retain: true);
   }
 
   /// Send typing indicator
@@ -106,10 +174,10 @@ class ChatService {
 
   /// Listen to typing indicators from a user
   Stream<bool> onTypingIndicator(String otherUserId) {
-    final currentUserId = _tokenStorage.getUserId();
+    final currentUserId = _tokenStorage.getUserIdSync();
     if (currentUserId == null) return Stream.empty();
 
-    final typingTopic = 'typing/${_getChatTopic(currentUserId as String, otherUserId)}';
+    final typingTopic = 'typing/${_getChatTopic(currentUserId, otherUserId)}';
 
     if (!_typingControllers.containsKey(typingTopic)) {
       _typingControllers[typingTopic] = StreamController<bool>.broadcast();
@@ -182,12 +250,14 @@ class ChatService {
 
       // Update message status in history
       _messageHistory.forEach((topic, messages) {
-        final message = messages.firstWhere((m) => m.id == messageId, orElse: () => null as ChatMessage);
-        if (message != null) {
+        try {
+          final message = messages.firstWhere((m) => m.id == messageId);
           message.status = MessageStatus.values.firstWhere(
             (s) => s.name == status,
             orElse: () => message.status,
           );
+        } catch (_) {
+          // Message not found in this topic, continue
         }
       });
     } catch (e) {

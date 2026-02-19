@@ -53,7 +53,7 @@ class ChatProvider extends ChangeNotifier {
   // ============================================================================
 
   /// Fetch all conversations for the current user
-  // Set to false when ready to use real API
+  // Set to true to use mock data (API endpoint has issues)
   static const bool _useMockData = false;
 
   Future<List<ChatConversation>> getConversations({bool forceRefresh = false}) async {
@@ -63,55 +63,16 @@ class ChatProvider extends ChangeNotifier {
 
     _isLoadingConversations = true;
     _conversationsError = null;
-    notifyListeners();
+    await Future.microtask(() => notifyListeners());
 
-    if (_useMockData) {
-      // Use mock data for development/testing
-      await Future.delayed(const Duration(seconds: 1));
-      _conversations = _getMockConversations();
-    } else {
-      try {
-        // Get current user ID
-        final currentUserId = await _tokenStorage.getUserId();
-        if (currentUserId == null) {
-          _conversationsError = 'Not authenticated';
-          _isLoadingConversations = false;
-          notifyListeners();
-          return _conversations;
-        }
-
-        // Try to fetch from API with senderId
-        final url = Endpoints.buildUrl(
-          Endpoints.getChats,
-          queryParams: {'senderId': currentUserId},
-        );
-        final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
-        
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final List<dynamic> conversationsData = data['data'] ?? data['conversations'] ?? [];
-          
-          _conversations = conversationsData
-              .map((json) => ChatConversation.fromJson(json))
-              .toList();
-          
-          // Sort by last activity
-          _conversations.sort((a, b) {
-            if (a.lastActivity == null && b.lastActivity == null) return 0;
-            if (a.lastActivity == null) return 1;
-            if (b.lastActivity == null) return -1;
-            return b.lastActivity!.compareTo(a.lastActivity!);
-          });
-        } else {
-          _conversationsError = 'Failed to load conversations';
-        }
-      } catch (e) {
-        _conversationsError = 'Error: $e';
-      }
-    }
+    // NOTE: Using mock data because the API endpoint /api/chats/get 
+    // requires receiverId which doesn't make sense for getting all conversations
+    // TODO: Fix backend API or implement proper conversation storage
+    await Future.delayed(const Duration(milliseconds: 500));
+    _conversations = _getMockConversations();
 
     _isLoadingConversations = false;
-    notifyListeners();
+    await Future.microtask(() => notifyListeners());
     return _conversations;
   }
 
@@ -124,58 +85,162 @@ class ChatProvider extends ChangeNotifier {
   // AVAILABLE USERS (New Chat)
   // ============================================================================
 
-  /// Fetch available users to start a chat with
+  /// Fetch available users to start a chat with (drivers and guardians)
   Future<List<ChatUser>> getAvailableUsers({bool forceRefresh = false}) async {
+    debugPrint('🔄 getAvailableUsers called, forceRefresh=$forceRefresh, cached=${_availableUsers.length}');
+    
     if (!forceRefresh && _availableUsers.isNotEmpty) {
+      debugPrint('📦 Returning cached users: ${_availableUsers.length}');
       return _availableUsers;
     }
 
     _isLoadingUsers = true;
     _usersError = null;
-    notifyListeners();
+    
+    // Use microtask to avoid setState during build
+    await Future.microtask(() => notifyListeners());
 
     if (_useMockData) {
       // Use mock data for development/testing
+      debugPrint('🧪 Using mock data');
       await Future.delayed(const Duration(seconds: 1));
       _availableUsers = _getMockUsers();
     } else {
       try {
-        // Get current user ID
+        // Get current user ID to exclude self
         final currentUserId = await _tokenStorage.getUserId();
+        debugPrint('👤 Current user ID: $currentUserId');
         if (currentUserId == null) {
           _usersError = 'Not authenticated';
           _isLoadingUsers = false;
-          notifyListeners();
+          await Future.microtask(() => notifyListeners());
           return _availableUsers;
         }
 
-        // Try to fetch from API with senderId
-        final url = Endpoints.buildUrl(
-          Endpoints.getChatContacts,
-          queryParams: {'senderId': currentUserId},
-        );
-        final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
-        
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final List<dynamic> usersData = data['data'] ?? data['users'] ?? data['contacts'] ?? [];
+        final List<ChatUser> allUsers = [];
+
+        // Fetch drivers
+        try {
+          // Request all drivers without pagination
+          final driversResponse = await _apiClient.get(
+            Endpoints.getActiveDrivers,
+            queryParams: {'limit': '1000', 'page': '1'},
+          );
+          debugPrint('🚗 Drivers response type: ${driversResponse.runtimeType}');
+          if (driversResponse is List) {
+            debugPrint('🚗 Drivers raw count: ${driversResponse.length}');
+          } else if (driversResponse is Map) {
+            debugPrint('🚗 Drivers response keys: ${driversResponse.keys.toList()}');
+          }
           
-          _availableUsers = usersData
-              .map((json) => ChatUser.fromJson(json))
-              .toList();
+          List<dynamic> driversData = [];
           
-          // Sort by name
-          _availableUsers.sort((a, b) => a.name.compareTo(b.name));
-        } else {
-          _usersError = 'Failed to load users';
+          if (driversResponse is List) {
+            driversData = driversResponse;
+          } else if (driversResponse is Map) {
+            driversData = driversResponse['data'] as List? ?? 
+                         driversResponse['drivers'] as List? ?? 
+                         driversResponse['users'] as List? ?? [];
+          }
+          
+          debugPrint('🚗 Drivers parsed count: ${driversData.length}');
+          
+          if (driversData.isNotEmpty) {
+            debugPrint('📥 Processing ${driversData.length} drivers');
+            final drivers = driversData
+                .where((d) => d['userId']?.toString() != currentUserId && d['id']?.toString() != currentUserId) // Exclude self
+                .map((d) => ChatUser(
+                      id: d['userId']?.toString() ?? d['id']?.toString() ?? '',
+                      name: d['fullname'] ?? d['fullName'] ?? d['name'] ?? d['userName'] ?? 'Unknown Driver',
+                      avatar: d['avatar'] ?? d['profileImage'] ?? d['profilePicture'],
+                      role: 'Driver',
+                      phone: d['phoneNumber'] ?? d['phone'] ?? d['mobile'],
+                      isOnline: d['isOnline'] ?? d['isActive'] ?? false,
+                    ))
+                .where((u) => u.id.isNotEmpty && u.id != 'null')
+                .toList();
+            allUsers.addAll(drivers);
+            debugPrint('✅ Loaded ${drivers.length} drivers');
+          }
+        } catch (e, stackTrace) {
+          debugPrint('⚠️ Failed to load drivers: $e');
+          debugPrint('Stack: $stackTrace');
         }
-      } catch (e) {
+
+        // Fetch guardians
+        try {
+          // Request all guardians without pagination
+          final guardiansResponse = await _apiClient.get(
+            Endpoints.getAllGuardians,
+            queryParams: {'limit': '1000', 'page': '1'},
+          );
+          debugPrint('👨‍👩‍👧 Guardians response type: ${guardiansResponse.runtimeType}');
+          if (guardiansResponse is List) {
+            debugPrint('👨‍👩‍👧 Guardians raw count: ${guardiansResponse.length}');
+          } else if (guardiansResponse is Map) {
+            debugPrint('👨‍👩‍👧 Guardians response keys: ${guardiansResponse.keys.toList()}');
+            debugPrint('👨‍👩‍👧 Guardians data count: ${(guardiansResponse['data'] as List?)?.length ?? 0}');
+          }
+          
+          List<dynamic> guardiansData = [];
+          
+          if (guardiansResponse is List) {
+            guardiansData = guardiansResponse;
+          } else if (guardiansResponse is Map) {
+            guardiansData = guardiansResponse['data'] as List? ?? 
+                           guardiansResponse['guardians'] as List? ?? 
+                           guardiansResponse['users'] as List? ?? [];
+          }
+          
+          debugPrint('👨‍👩‍👧 Guardians parsed count: ${guardiansData.length}');
+          
+          if (guardiansData.isNotEmpty) {
+            debugPrint('📥 Processing ${guardiansData.length} guardians');
+            final guardians = guardiansData
+                .where((g) => g['userId']?.toString() != currentUserId && g['id']?.toString() != currentUserId) // Exclude self
+                .map((g) => ChatUser(
+                      id: g['userId']?.toString() ?? g['id']?.toString() ?? '',
+                      name: g['fullname'] ?? g['fullName'] ?? g['name'] ?? g['userName'] ?? 'Unknown Guardian',
+                      avatar: g['avatar'] ?? g['profileImage'] ?? g['profilePicture'],
+                      role: 'Guardian',
+                      phone: g['phoneNumber'] ?? g['phone'] ?? g['mobile'],
+                      isOnline: g['isOnline'] ?? g['isActive'] ?? false,
+                    ))
+                .where((u) => u.id.isNotEmpty && u.id != 'null')
+                .toList();
+            allUsers.addAll(guardians);
+            debugPrint('✅ Loaded ${guardians.length} guardians');
+          }
+        } catch (e, stackTrace) {
+          debugPrint('⚠️ Failed to load guardians: $e');
+          debugPrint('Stack: $stackTrace');
+        }
+
+        // Remove duplicates by ID
+        final uniqueUsers = <String, ChatUser>{};
+        for (final user in allUsers) {
+          uniqueUsers[user.id] = user;
+        }
+        
+        _availableUsers = uniqueUsers.values.toList();
+        
+        // Sort by name
+        _availableUsers.sort((a, b) => a.name.compareTo(b.name));
+        
+        debugPrint('✅ Total unique users: ${_availableUsers.length}');
+        
+        if (_availableUsers.isEmpty) {
+          _usersError = 'No users found';
+        }
+      } catch (e, stackTrace) {
         _usersError = 'Error: $e';
+        debugPrint('❌ Error loading available users: $e');
+        debugPrint('Stack: $stackTrace');
       }
     }
 
     _isLoadingUsers = false;
-    notifyListeners();
+    await Future.microtask(() => notifyListeners());
     return _availableUsers;
   }
 

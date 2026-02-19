@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -57,6 +58,10 @@ void main() {
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
   
+  // Allow bad SSL certificates for staging environment (avatars, etc.)
+  // TODO: Remove this for production builds
+  HttpOverrides.global = _DevHttpOverrides();
+  
   // Render a frame immediately with the splash background color
   // This prevents the blank screen between native splash and Flutter UI
   binding.renderView.automaticSystemUiAdjustment = false;
@@ -72,6 +77,22 @@ void main() {
   
   // Run the app immediately - the splash screen background will be shown
   runApp(const ShuleDriveApp());
+}
+
+/// HTTP overrides for development to accept bad SSL certificates
+/// This is needed for staging environments with self-signed certs
+class _DevHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) {
+        // Accept all certificates in debug mode for staging
+        if (kDebugMode) {
+          return true;
+        }
+        return false;
+      };
+  }
 }
 
 /// Critical services that must be ready before showing UI

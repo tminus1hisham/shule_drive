@@ -27,7 +27,7 @@ class _UserListScreenState extends State<UserListScreen>
   String _selectedFilter = 'All';
   Timer? _searchDebounce;
 
-  final List<String> _filters = ['All', 'Drivers', 'Guardians', 'Staff'];
+  final List<String> _filters = ['All', 'Driver', 'Guardian', 'Staff'];
 
   @override
   void initState() {
@@ -76,11 +76,18 @@ class _UserListScreenState extends State<UserListScreen>
   }
 
   Future<void> _loadUsers() async {
-    setState(() => _isLoading = true);
+    // Use WidgetsBinding to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _isLoading = true);
+      }
+    });
     
     try {
       final chatProvider = context.read<ChatProvider>();
+      debugPrint('🔄 Loading available users...');
       final users = await chatProvider.getAvailableUsers();
+      debugPrint('✅ Loaded ${users.length} users');
       
       if (mounted) {
         setState(() {
@@ -91,10 +98,12 @@ class _UserListScreenState extends State<UserListScreen>
         });
         _animationController.forward();
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error loading users: $e');
+      debugPrint('Stack: $stackTrace');
       if (mounted) {
         setState(() {
-          _error = 'Failed to load users';
+          _error = 'Failed to load users: $e';
           _isLoading = false;
         });
       }
@@ -241,11 +250,16 @@ class _UserListScreenState extends State<UserListScreen>
         child: Row(
           children: _filters.map((filter) {
             final isSelected = _selectedFilter == filter;
+            // Display plural labels for better UX
+            final displayLabel = {
+              'Driver': 'Drivers',
+              'Guardian': 'Guardians',
+            }[filter] ?? filter;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
                 selected: isSelected,
-                label: Text(filter),
+                label: Text(displayLabel),
                 labelStyle: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

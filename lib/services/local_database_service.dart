@@ -14,7 +14,7 @@ class LocalDatabaseService {
 
   static Database? _database;
   static const String _databaseName = 'shule_drive.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   // Table names
   static const String _tripsTable = 'trips';
@@ -23,6 +23,7 @@ class LocalDatabaseService {
   static const String _pendingOperationsTable = 'pending_operations';
   static const String _geofenceAlertsTable = 'geofence_alerts';
   static const String _syncMetadataTable = 'sync_metadata';
+  static const String _chatMessagesTable = 'chat_messages';
 
   /// Get database instance
   Future<Database> get database async {
@@ -159,12 +160,30 @@ class LocalDatabaseService {
       )
     ''');
 
+    // Chat messages table (for offline support)
+    await db.execute('''
+      CREATE TABLE $_chatMessagesTable (
+        id TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        recipient_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        status TEXT NOT NULL,
+        chat_topic TEXT NOT NULL,
+        reply_to_message_id TEXT,
+        created_at TEXT NOT NULL,
+        synced INTEGER DEFAULT 0
+      )
+    ''');
+
     // Create indexes
     await db.execute('CREATE INDEX idx_trips_status ON $_tripsTable(status)');
     await db.execute('CREATE INDEX idx_trips_route_id ON $_tripsTable(route_id)');
     await db.execute('CREATE INDEX idx_students_guardian_id ON $_studentsTable(guardian_id)');
     await db.execute('CREATE INDEX idx_pending_ops_type ON $_pendingOperationsTable(operation_type)');
     await db.execute('CREATE INDEX idx_geofence_trip ON $_geofenceAlertsTable(trip_id)');
+    await db.execute('CREATE INDEX idx_chat_messages_topic ON $_chatMessagesTable(chat_topic)');
+    await db.execute('CREATE INDEX idx_chat_messages_timestamp ON $_chatMessagesTable(timestamp)');
 
     if (kDebugMode) {
       print('✅ Database tables created successfully');
@@ -176,7 +195,30 @@ class LocalDatabaseService {
     if (kDebugMode) {
       print('📦 Upgrading database from v$oldVersion to v$newVersion');
     }
-    // Handle migrations here when schema changes
+    
+    // Migration from v1 to v2: Add chat_messages table
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_chatMessagesTable (
+          id TEXT PRIMARY KEY,
+          sender_id TEXT NOT NULL,
+          recipient_id TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          status TEXT NOT NULL,
+          chat_topic TEXT NOT NULL,
+          reply_to_message_id TEXT,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_topic ON $_chatMessagesTable(chat_topic)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON $_chatMessagesTable(timestamp)');
+      
+      if (kDebugMode) {
+        print('✅ Chat messages table created in migration');
+      }
+    }
   }
 
   // ==================== TRIP OPERATIONS ====================
@@ -581,6 +623,125 @@ class LocalDatabaseService {
     );
   }
 
+  // ==================== CHAT MESSAGES ====================
+
+  /// Save a chat message locally
+  Future<void> saveChatMessage({
+    required String id,
+    required String senderId,
+    required String recipientId,
+    required String content,
+    required DateTime timestamp,
+    required String status,
+    required String chatTopic,
+    String? replyToMessageId,
+    bool synced = false,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.insert(
+      _chatMessagesTable,
+      {
+        'id': id,
+        'sender_id': senderId,
+        'recipient_id': recipientId,
+        'content': content,
+        'timestamp': timestamp.toIso8601String(),
+        'status': status,
+        'chat_topic': chatTopic,
+        'reply_to_message_id': replyToMessageId,
+        'created_at': now,
+        'synced': synced ? 1 : 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get all messages for a chat topic
+  Future<List<Map<String, dynamic>>> getChatMessages(String chatTopic, {int limit = 100}) async {
+    final db = await database;
+    
+    final messages = await db.query(
+      _chatMessagesTable,
+      where: 'chat_topic = ?',
+      whereArgs: [chatTopic],
+      orderBy: 'timestamp ASC',
+      limit: limit,
+    );
+    
+    return messages;
+  }
+
+  /// Update message status
+  Future<void> updateChatMessageStatus(String messageId, String status, {bool synced = true}) async {
+    final db = await database;
+    
+    await db.update(
+      _chatMessagesTable,
+      {
+        'status': status,
+        'synced': synced ? 1 : 0,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  /// Get unsynced messages (for retry when back online)
+  Future<List<Map<String, dynamic>>> getUnsyncedChatMessages() async {
+    final db = await database;
+    
+    final messages = await db.query(
+      _chatMessagesTable,
+      where: 'synced = 0',
+      orderBy: 'timestamp ASC',
+    );
+    
+    return messages;
+  }
+
+  /// Mark messages as delivered for a chat
+  Future<void> markChatMessagesAsDelivered(String chatTopic, String senderId) async {
+    final db = await database;
+    
+    await db.update(
+      _chatMessagesTable,
+      {'status': 'delivered'},
+      where: 'chat_topic = ? AND sender_id = ? AND status = ?',
+      whereArgs: [chatTopic, senderId, 'sent'],
+    );
+  }
+
+  /// Clear old chat messages (keep last 30 days)
+  Future<int> clearOldChatMessages({int daysToKeep = 30}) async {
+    final db = await database;
+    final cutoff = DateTime.now().subtract(Duration(days: daysToKeep));
+    
+    final deleted = await db.delete(
+      _chatMessagesTable,
+      where: 'timestamp < ?',
+      whereArgs: [cutoff.toIso8601String()],
+    );
+    
+    if (kDebugMode && deleted > 0) {
+      print('🗑️ Cleared $deleted old chat messages');
+    }
+    
+    return deleted;
+  }
+
+  /// Delete a specific chat message
+  Future<void> deleteChatMessage(String messageId) async {
+    final db = await database;
+    
+    await db.delete(
+      _chatMessagesTable,
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
   // ==================== SYNC METADATA ====================
 
   Future<void> _updateSyncMetadata(String entityType) async {
@@ -642,6 +803,7 @@ class LocalDatabaseService {
     await db.delete(_pendingOperationsTable);
     await db.delete(_geofenceAlertsTable);
     await db.delete(_syncMetadataTable);
+    await db.delete(_chatMessagesTable);
 
     if (kDebugMode) {
       print('🗑️ All local data cleared');
