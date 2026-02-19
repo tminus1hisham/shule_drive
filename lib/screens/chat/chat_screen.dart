@@ -37,11 +37,14 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showScrollToBottom = false;
   bool _isTripActive = false;
   bool _isLoadingTripStatus = true;
+  bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    // Listen to text changes to update send button state
+    _messageController.addListener(_onTextChanged);
     // Defer initialization until after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeChat());
     // Check trip status if this is a trip-based chat
@@ -49,6 +52,13 @@ class _ChatScreenState extends State<ChatScreen> {
       _checkTripStatus();
     } else {
       setState(() => _isLoadingTripStatus = false);
+    }
+  }
+
+  void _onTextChanged() {
+    final hasText = _messageController.text.trim().isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
     }
   }
 
@@ -140,6 +150,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom({bool animated = true}) {
     if (_scrollController.hasClients) {
+      // Scroll to end to show newest messages
       if (animated) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -158,20 +169,28 @@ class _ChatScreenState extends State<ChatScreen> {
     final content = _messageController.text.trim();
     if (content.isEmpty) return;
 
+    // Clear text and update UI immediately
     _messageController.clear();
+    setState(() => _hasText = false);
+    
     HapticFeedback.lightImpact();
     
-    // Pass sender and recipient names for MQTT message format
+    // Send message
     await chatProvider.sendMessage(
       content,
       senderName: authProvider.userName ?? 'Unknown',
       recipientName: widget.receiverName ?? 'Unknown',
     );
-    _scrollToBottom();
+    
+    // Scroll to bottom to show new message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(animated: true);
+    });
   }
 
   @override
   void dispose() {
+    _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -338,26 +357,21 @@ class _ChatScreenState extends State<ChatScreen> {
     return Consumer2<ChatProvider, AuthProvider>(
       builder: (context, chatProvider, authProvider, child) {
         final messages = chatProvider.messages;
-        // Use phone number for comparison since that's what we use as senderId
         final currentUserPhone = authProvider.userPhone ?? '';
+
+        debugPrint('🔨 Building message list with ${messages.length} messages');
 
         if (messages.isEmpty) {
           return _buildEmptyState(isDarkMode);
         }
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_showScrollToBottom) {
-            _scrollToBottom(animated: false);
-          }
-        });
-
+        // Standard ListView: oldest first (top), newest last (bottom)
         return ListView.builder(
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final message = messages[index];
-            // Compare using phone numbers
             final isMe = message.senderId == currentUserPhone;
             final showDate = index == 0 || !_isSameDay(messages[index - 1].timestamp, message.timestamp);
 
@@ -439,11 +453,32 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 if (isMe) ...[
                   const SizedBox(width: 4),
-                  Icon(
-                    message.isRead ? Icons.done_all : Icons.done,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
+                  // Show message status indicator
+                  if (message.status == MessageStatus.sending)
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    )
+                  else if (message.status == MessageStatus.failed)
+                    Icon(
+                      Icons.error_outline,
+                      size: 14,
+                      color: Colors.red.shade300,
+                    )
+                  else
+                    Icon(
+                      message.status == MessageStatus.read 
+                          ? Icons.done_all 
+                          : Icons.done,
+                      size: 14,
+                      color: message.status == MessageStatus.read 
+                          ? Colors.blue.shade200 
+                          : Colors.white.withValues(alpha: 0.7),
+                    ),
                 ],
               ],
             ),
@@ -512,7 +547,7 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(width: 8),
             Consumer<ChatProvider>(
               builder: (context, chatProvider, child) {
-                final canSend = chatProvider.isConnected && _messageController.text.trim().isNotEmpty;
+                final canSend = chatProvider.isConnected && _hasText;
                 return Material(
                   color: canSend ? const Color(0xFF6B9B5B) : isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200,
                   shape: const CircleBorder(),

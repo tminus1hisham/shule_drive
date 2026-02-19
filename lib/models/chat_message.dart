@@ -53,8 +53,9 @@ class ChatMessage {
 }
 
 enum MessageStatus {
-  sent,
-  delivered,
-  read,
-  failed,
+  sending,  // Message is being sent
+  sent,     // Message sent successfully
+  delivered,// Message delivered to recipient
+  read,     // Message read by recipient
+  failed,   // Message failed to send
 }
