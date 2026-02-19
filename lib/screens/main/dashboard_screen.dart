@@ -1222,6 +1222,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         'tripId': trip.id,
         'receiverId': trip.vehicleId, // Use vehicleId as receiver identifier
         'receiverName': 'Driver - ${trip.routeName}',
+        'receiverRole': 'Driver',
         'isTripChat': true,
       },
     );

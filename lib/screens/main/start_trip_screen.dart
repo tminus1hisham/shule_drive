@@ -1208,7 +1208,8 @@ class _StartTripScreenState extends State<StartTripScreen>
       '/chat-detail',
       arguments: {
         'tripId': trip.id,
-        'tripName': trip.routeName,
+        'receiverName': trip.routeName ?? 'Trip Chat',
+        'receiverRole': 'Group',
         'isGroupChat': true,
       },
     );

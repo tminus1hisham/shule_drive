@@ -119,6 +119,7 @@ class _UserListScreenState extends State<UserListScreen>
         'receiverPhone': user.phone,  // Use phone number instead of user ID
         'receiverName': user.name,
         'receiverAvatar': user.avatar,
+        'receiverRole': user.role,
       },
     );
   }

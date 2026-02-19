@@ -1,7 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/chat_message.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -13,6 +15,7 @@ class ChatScreen extends StatefulWidget {
   final String? receiverPhone;  // Phone number of the receiver (used as chat ID)
   final String? receiverName;
   final String? receiverAvatar;
+  final String? receiverRole;
   final String? tripId;
   final bool isTripChat;
 
@@ -21,6 +24,7 @@ class ChatScreen extends StatefulWidget {
     this.receiverPhone,
     this.receiverName,
     this.receiverAvatar,
+    this.receiverRole,
     this.tripId,
     this.isTripChat = false,
   });
@@ -212,10 +216,14 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return MainScaffold(
-      title: receiverName,
+      titleWidget: _buildAppBarTitle(receiverName, isDarkMode),
       showBackButton: true,
+      actions: [
+        _buildVoiceCallButton(isDarkMode),
+      ],
       body: Stack(
         children: [
+          // Original themed background
           Positioned.fill(
             child: Image.asset(
               isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg',
@@ -266,16 +274,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
         color: _isTripActive
-            ? Colors.green.withAlpha(30)
-            : Colors.orange.withAlpha(30),
+            ? const Color(0xFFF0FFF4)
+            : const Color(0xFFFEF3C7),
         border: Border(
           bottom: BorderSide(
             color: _isTripActive
-                ? Colors.green.withAlpha(50)
-                : Colors.orange.withAlpha(50),
+                ? const Color(0xFF86EFAC)
+                : const Color(0xFFFCD34D),
+            width: 0.5,
           ),
         ),
       ),
@@ -283,34 +292,38 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Icon(
             _isTripActive ? Icons.circle : Icons.history,
-            size: 12,
-            color: _isTripActive ? Colors.green : Colors.orange,
+            size: 10,
+            color: _isTripActive 
+                ? const Color(0xFF22C55E) 
+                : const Color(0xFFF59E0B),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _isTripActive
-                  ? 'Trip is active - Chat is enabled'
-                  : 'Trip has ended - Chat history is read-only',
+                  ? 'Trip active - Chat enabled'
+                  : 'Trip ended - Chat read-only',
               style: TextStyle(
                 fontSize: 13,
-                color: isDarkMode ? Colors.white70 : Colors.black87,
+                color: _isTripActive 
+                    ? const Color(0xFF166534) 
+                    : const Color(0xFF92400E),
               ),
             ),
           ),
           if (_isTripActive)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFF22C55E),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: const Text(
                 'LIVE',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -321,12 +334,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildReadOnlyBanner(bool isDarkMode) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
         border: Border(
           top: BorderSide(
-            color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
+            color: isDarkMode 
+                ? const Color(0xFF2C2C2E) 
+                : const Color(0xFFE5E5EA),
           ),
         ),
       ),
@@ -336,15 +351,19 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Icon(
               Icons.lock_outline,
-              size: 18,
-              color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+              size: 16,
+              color: isDarkMode 
+                  ? const Color(0xFF8E8E93) 
+                  : const Color(0xFF8E8E93),
             ),
             const SizedBox(width: 8),
             Text(
-              'This chat is archived and read-only',
+              'This chat is archived',
               style: TextStyle(
-                color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
-                fontSize: 14,
+                color: isDarkMode 
+                    ? const Color(0xFF8E8E93) 
+                    : const Color(0xFF8E8E93),
+                fontSize: 13,
               ),
             ),
           ],
@@ -391,39 +410,23 @@ class _ChatScreenState extends State<ChatScreen> {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: MediaQuery.of(context).size.width * 0.72,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          gradient: isMe
-              ? const LinearGradient(
-                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
           color: isMe
-              ? null
+              ? const Color(0xFF007AFF) // iOS blue - professional
               : isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : Colors.white,
+                  ? const Color(0xFF2C2C2E)
+                  : const Color(0xFFF2F2F7), // iOS light gray
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(20),
-            topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isMe ? 20 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 20),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isMe ? 18 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 18),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isMe
-                  ? const Color(0xFF6B9B5B).withValues(alpha: 0.3)
-                  : Colors.black.withValues(alpha: 0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -431,8 +434,12 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               message.content,
               style: TextStyle(
-                color: isMe ? Colors.white : isDarkMode ? Colors.white.withValues(alpha: 0.95) : const Color(0xFF1A1A1A),
-                fontSize: 15,
+                color: isMe 
+                    ? Colors.white 
+                    : isDarkMode 
+                        ? Colors.white 
+                        : const Color(0xFF1C1C1E),
+                fontSize: 16,
                 height: 1.3,
               ),
             ),
@@ -444,41 +451,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   DateFormat('h:mm a').format(message.timestamp),
                   style: TextStyle(
                     color: isMe
-                        ? Colors.white.withValues(alpha: 0.75)
+                        ? Colors.white.withOpacity(0.7)
                         : isDarkMode
-                            ? Colors.white.withValues(alpha: 0.54)
-                            : const Color(0xFF666666),
-                    fontSize: 10,
+                            ? Colors.white.withOpacity(0.5)
+                            : const Color(0xFF8E8E93),
+                    fontSize: 11,
                   ),
                 ),
                 if (isMe) ...[
                   const SizedBox(width: 4),
-                  // Show message status indicator
-                  if (message.status == MessageStatus.sending)
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                    )
-                  else if (message.status == MessageStatus.failed)
-                    Icon(
-                      Icons.error_outline,
-                      size: 14,
-                      color: Colors.red.shade300,
-                    )
-                  else
-                    Icon(
-                      message.status == MessageStatus.read 
-                          ? Icons.done_all 
-                          : Icons.done,
-                      size: 14,
-                      color: message.status == MessageStatus.read 
-                          ? Colors.blue.shade200 
-                          : Colors.white.withValues(alpha: 0.7),
-                    ),
+                  _buildStatusIcon(message.status),
                 ],
               ],
             ),
@@ -488,75 +470,105 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Widget _buildStatusIcon(MessageStatus status) {
+    switch (status) {
+      case MessageStatus.sending:
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Colors.white.withOpacity(0.7),
+          ),
+        );
+      case MessageStatus.failed:
+        return Icon(
+          Icons.error_outline,
+          size: 14,
+          color: Colors.red.shade200,
+        );
+      case MessageStatus.read:
+        return Icon(
+          Icons.done_all,
+          size: 14,
+          color: Colors.white.withOpacity(0.9),
+        );
+      default:
+        return Icon(
+          Icons.done,
+          size: 14,
+          color: Colors.white.withOpacity(0.6),
+        );
+    }
+  }
+
   Widget _buildMessageInput(bool isDarkMode) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? const Color(0xFF1E1E1E).withValues(alpha: 0.98)
-            : Colors.white.withValues(alpha: 0.98),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+        color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
+        border: Border(
+          top: BorderSide(
+            color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+            width: 0.5,
           ),
-        ],
+        ),
       ),
       child: SafeArea(
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: Icon(Icons.add_circle_outline, color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666)),
-                onPressed: () {},
-              ),
-            ),
-            const SizedBox(width: 8),
+            // Text field - Shule Drive style
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(24),
+                  color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: TextField(
                   controller: _messageController,
-                  style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A), fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    hintStyle: TextStyle(color: isDarkMode ? Colors.white.withValues(alpha: 0.38) : Colors.grey.shade500, fontSize: 15),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    border: InputBorder.none,
-                    suffixIcon: IconButton(
-                      icon: Icon(Icons.emoji_emotions_outlined, color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500),
-                      onPressed: () {},
-                    ),
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                    fontSize: 16,
                   ),
+                  decoration: InputDecoration(
+                    hintText: 'Message about the trip...',
+                    hintStyle: TextStyle(
+                      color: isDarkMode 
+                          ? const Color(0xFF8E8E93) 
+                          : const Color(0xFF8E8E93),
+                      fontSize: 16,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    border: InputBorder.none,
+                  ),
+                  maxLines: 6,
+                  minLines: 1,
                   onSubmitted: (_) => _sendMessage(),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            // Send button - clean
             Consumer<ChatProvider>(
               builder: (context, chatProvider, child) {
                 final canSend = chatProvider.isConnected && _hasText;
                 return Material(
-                  color: canSend ? const Color(0xFF6B9B5B) : isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200,
-                  shape: const CircleBorder(),
+                  color: Colors.transparent,
                   child: InkWell(
-                    customBorder: const CircleBorder(),
+                    borderRadius: BorderRadius.circular(20),
                     onTap: canSend ? _sendMessage : null,
                     child: Container(
-                      padding: const EdgeInsets.all(12),
-                      child: Icon(Icons.send_rounded, color: canSend ? Colors.white : isDarkMode ? Colors.white.withValues(alpha: 0.3) : Colors.grey.shade400, size: 20),
+                      padding: const EdgeInsets.all(10),
+                      child: Icon(
+                        Icons.arrow_upward,
+                        color: canSend 
+                            ? const Color(0xFF007AFF)
+                            : isDarkMode 
+                                ? const Color(0xFF3A3A3C) 
+                                : const Color(0xFFBDBDBD),
+                        size: 24,
+                      ),
                     ),
                   ),
                 );
@@ -571,45 +583,25 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildDateSeparator(DateTime date, bool isDarkMode) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.transparent, isDarkMode ? Colors.white.withValues(alpha: 0.24) : Colors.black.withValues(alpha: 0.12)],
-                ),
-              ),
-            ),
+      alignment: Alignment.center,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDarkMode 
+              ? const Color(0xFF2C2C2E) 
+              : const Color(0xFFE5E5EA).withOpacity(0.7),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          _formatDate(date),
+          style: TextStyle(
+            color: isDarkMode 
+                ? const Color(0xFF8E8E93) 
+                : const Color(0xFF8E8E93),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _formatDate(date),
-              style: TextStyle(
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [isDarkMode ? Colors.white.withValues(alpha: 0.24) : Colors.black.withValues(alpha: 0.12), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -619,33 +611,22 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.chat_bubble_outline,
-              size: 48,
-              color: isDarkMode ? Colors.white.withValues(alpha: 0.3) : const Color(0xFF6B9B5B),
-            ),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 48,
+            color: isDarkMode 
+                ? const Color(0xFF3A3A3C) 
+                : const Color(0xFFC7C7CC),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Text(
             'No messages yet',
             style: TextStyle(
-              color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF666666),
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start a conversation by sending a message!',
-            style: TextStyle(
-              color: isDarkMode ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF999999),
-              fontSize: 14,
+              color: isDarkMode 
+                  ? const Color(0xFF8E8E93) 
+                  : const Color(0xFF8E8E93),
+              fontSize: 16,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -655,39 +636,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildLoadingScreen(bool isDarkMode) {
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
-                  strokeWidth: 3,
-                ),
+      backgroundColor: isDarkMode ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
               ),
-              const SizedBox(height: 20),
-              Text(
-                'Connecting to chat...',
-                style: TextStyle(
-                  color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF666666),
-                  fontSize: 16,
-                ),
+              strokeWidth: 2.5,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Connecting...',
+              style: TextStyle(
+                color: isDarkMode 
+                    ? const Color(0xFF8E8E93) 
+                    : const Color(0xFF8E8E93),
+                fontSize: 15,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -695,15 +665,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildErrorScreen(bool isDarkMode, String receiverName) {
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      backgroundColor: isDarkMode ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
       appBar: AppBar(
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A)),
+          icon: Icon(
+            Icons.arrow_back_ios, 
+            color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(receiverName, style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A))),
+        title: Text(
+          receiverName, 
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+          ),
+        ),
       ),
       body: Center(
         child: Padding(
@@ -711,24 +689,32 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
-                child: Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
+              Icon(
+                Icons.error_outline, 
+                size: 48, 
+                color: const Color(0xFFFF3B30),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Text(
                 'Connection Failed',
-                style: TextStyle(color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A), fontSize: 20, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E), 
+                  fontSize: 18, 
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 _initError!,
-                style: TextStyle(color: isDarkMode ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF666666)),
+                style: TextStyle(
+                  color: isDarkMode 
+                      ? const Color(0xFF8E8E93) 
+                      : const Color(0xFF8E8E93),
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
+              const SizedBox(height: 24),
+              CupertinoButton(
                 onPressed: () {
                   setState(() {
                     _isInitializing = true;
@@ -736,8 +722,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   });
                   _initializeChat();
                 },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Try Again'),
+                child: Text(
+                  'Try Again',
+                  style: TextStyle(
+                    color: isDarkMode 
+                        ? const Color(0xFF0A84FF) 
+                        : const Color(0xFF007AFF),
+                  ),
+                ),
               ),
             ],
           ),
@@ -752,25 +744,38 @@ class _ChatScreenState extends State<ChatScreen> {
         if (chatProvider.error == null) return const SizedBox.shrink();
         return Container(
           width: double.infinity,
-          margin: const EdgeInsets.all(16),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.red.shade600,
-            borderRadius: BorderRadius.circular(12),
+            color: const Color(0xFFFF3B30).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: const Color(0xFFFF3B30).withOpacity(0.2),
+            ),
           ),
           child: Row(
             children: [
-              const Icon(Icons.error_outline, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
+              const Icon(
+                Icons.error_outline, 
+                color: Color(0xFFFF3B30), 
+                size: 18,
+              ),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(chatProvider.error!, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                child: Text(
+                  chatProvider.error!, 
+                  style: const TextStyle(
+                    color: Color(0xFFFF3B30), 
+                    fontSize: 13,
+                  ),
+                ),
               ),
               GestureDetector(
                 onTap: () => chatProvider.clearError(),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                child: const Icon(
+                  Icons.close, 
+                  color: Color(0xFFFF3B30), 
+                  size: 18,
                 ),
               ),
             ],
@@ -781,16 +786,36 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildScrollToBottomButton(bool isDarkMode) {
-    return Material(
-      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
-      elevation: 4,
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        onTap: () => _scrollToBottom(),
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          child: Icon(Icons.keyboard_arrow_down_rounded, color: isDarkMode ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B9B5B)),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode 
+            ? const Color(0xFF2C2C2E) 
+            : Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _scrollToBottom(),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: Icon(
+              Icons.keyboard_arrow_down,
+              color: isDarkMode 
+                  ? const Color(0xFF0A84FF) 
+                  : const Color(0xFF007AFF),
+              size: 24,
+            ),
+          ),
         ),
       ),
     );
@@ -806,5 +831,102 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isSameDay(date, now.subtract(const Duration(days: 1)))) return 'Yesterday';
     if (now.difference(date).inDays < 7) return DateFormat('EEEE').format(date);
     return DateFormat('MMMM d, yyyy').format(date);
+  }
+
+  // Professional AppBar widgets
+  Widget _buildAppBarTitle(String receiverName, bool isDarkMode) {
+    final role = widget.receiverRole;
+    final roleText = role != null && role.isNotEmpty
+        ? role.toLowerCase() == 'driver'
+            ? 'Driver'
+            : role.toLowerCase() == 'guardian'
+                ? 'Guardian'
+                : role
+        : 'User';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Clean avatar
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF3A3A3C) : const Color(0xFF007AFF),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              receiverName.isNotEmpty ? receiverName[0].toUpperCase() : '?',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Name and role
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              receiverName,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              roleText,
+              style: TextStyle(
+                color: isDarkMode 
+                    ? const Color(0xFF8E8E93) 
+                    : const Color(0xFF8E8E93),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVoiceCallButton(bool isDarkMode) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () async {
+          final phoneNumber = widget.receiverPhone;
+          if (phoneNumber != null && phoneNumber.isNotEmpty) {
+            final Uri launchUri = Uri(
+              scheme: 'tel',
+              path: phoneNumber,
+            );
+            try {
+              await launchUrl(
+                launchUri,
+                mode: LaunchMode.externalApplication,
+              );
+            } catch (e) {
+              debugPrint('Could not launch phone dialer: $e');
+            }
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          child: Icon(
+            Icons.phone,
+            color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+            size: 22,
+          ),
+        ),
+      ),
+    );
   }
 }

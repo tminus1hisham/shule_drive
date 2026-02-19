@@ -104,6 +104,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         'receiverPhone': conversation.otherUserPhone,  // Use phone number
         'receiverName': conversation.otherUserName,
         'receiverAvatar': conversation.otherUserAvatar,
+        'receiverRole': conversation.otherUserRole,
       },
     ).then((_) => _loadConversations(silent: true));
   }

@@ -9,6 +9,7 @@ import 'bottom_navigation.dart';
 class MainScaffold extends StatefulWidget {
   final Widget body;
   final String? title;
+  final Widget? titleWidget;
   final bool showBottomNav;
   final int bottomNavIndex;
   final Function(int)? onBottomNavTap;
@@ -24,6 +25,7 @@ class MainScaffold extends StatefulWidget {
     super.key,
     required this.body,
     this.title,
+    this.titleWidget,
     this.showBottomNav = false,
     this.bottomNavIndex = 0,
     this.onBottomNavTap,
@@ -58,7 +60,7 @@ class _MainScaffoldState extends State<MainScaffold> {
               elevation: 0,
               centerTitle: widget.centerTitle,
               leading: widget.leading ?? _buildLeadingButton(isDarkMode),
-              title: widget.title != null
+              title: widget.titleWidget ?? (widget.title != null
                   ? Text(
                       widget.title!,
                       style: TextStyle(
@@ -67,7 +69,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                         fontWeight: FontWeight.w600,
                       ),
                     )
-                  : null,
+                  : null),
               actions: widget.actions,
             )
           : null,

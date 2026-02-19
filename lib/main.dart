@@ -568,6 +568,7 @@ Route _buildPageRoute(RouteSettings settings) {
         receiverPhone: args?['receiverPhone'] as String?,
         receiverName: args?['receiverName'] as String?,
         receiverAvatar: args?['receiverAvatar'] as String?,
+        receiverRole: args?['receiverRole'] as String?,
         tripId: args?['tripId'] as String?,
         isTripChat: args?['isTripChat'] as bool? ?? false,
       );
