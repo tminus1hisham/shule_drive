@@ -34,6 +34,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Refresh interval (30 seconds)
   static const Duration _refreshInterval = Duration(seconds: 30);
 
+  // Flag to prevent multiple master trip checks
+  bool _hasCheckedMasterTrips = false;
+  bool _isCheckingMasterTrips = false;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +45,107 @@ class _DashboardScreenState extends State<DashboardScreen>
     _startPeriodicRefresh();
     // Subscribe to app lifecycle
     WidgetsBinding.instance.addObserver(this);
+    
+    // Check for master trips if driver - with slight delay to ensure auth is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _checkMasterTripsForDriver();
+        }
+      });
+    });
+  }
+
+  /// Check if driver has master trips and redirect accordingly
+  Future<void> _checkMasterTripsForDriver() async {
+    if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
+      debugPrint('🔍 Master trip check already performed or in progress, skipping');
+      return;
+    }
+    
+    setState(() => _isCheckingMasterTrips = true);
+    
+    final authProvider = context.read<AuthProvider>();
+    
+    debugPrint('🔍 =========================================');
+    debugPrint('🔍 CHECKING MASTER TRIPS FOR DRIVER');
+    debugPrint('🔍 =========================================');
+    debugPrint('🔍 isDriver: ${authProvider.isDriver}');
+    debugPrint('🔍 User role: ${authProvider.userRole}');
+    debugPrint('🔍 User role from data: ${authProvider.userData['role']}');
+    debugPrint('🔍 Current user ID: ${authProvider.currentUser?.id}');
+    debugPrint('🔍 Current user name: ${authProvider.currentUser?.name}');
+    
+    // Only check for drivers
+    if (!authProvider.isDriver) {
+      debugPrint('🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check');
+      setState(() {
+        _hasCheckedMasterTrips = true;
+        _isCheckingMasterTrips = false;
+      });
+      return;
+    }
+    
+    // Check if there's an active trip - if so, skip master trip check
+    final tripProvider = context.read<TripProvider>();
+    if (tripProvider.activeTrip != null) {
+      debugPrint('🔍 Active trip exists, skipping master trip check');
+      setState(() {
+        _hasCheckedMasterTrips = true;
+        _isCheckingMasterTrips = false;
+      });
+      return;
+    }
+    
+    try {
+      final tripService = TripService();
+      final driverId = authProvider.currentUser?.id;
+      
+      debugPrint('🔍 Driver ID: $driverId');
+      
+      if (driverId == null || driverId.isEmpty) {
+        debugPrint('❌ Driver ID is null or empty');
+        setState(() {
+          _hasCheckedMasterTrips = true;
+          _isCheckingMasterTrips = false;
+        });
+        return;
+      }
+      
+      debugPrint('🔍 Calling API: getMasterTripsByDriver($driverId)');
+      
+      final masterTrips = await tripService.getMasterTripsByDriver(driverId);
+      
+      debugPrint('🔍 API returned ${masterTrips.length} master trips');
+      for (final trip in masterTrips) {
+        debugPrint('  - ${trip.tripName} (ID: ${trip.id}, Route: ${trip.route})');
+      }
+      
+      if (!mounted) {
+        debugPrint('🔍 Widget not mounted');
+        return;
+      }
+      
+      if (masterTrips.isNotEmpty) {
+        debugPrint('✅ Redirecting to trip selection screen');
+        
+        // Redirect to trip selection screen
+        Navigator.pushReplacementNamed(context, '/trip-selection');
+      } else {
+        debugPrint('ℹ️ No master trips found');
+        setState(() {
+          _hasCheckedMasterTrips = true;
+          _isCheckingMasterTrips = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error: $e');
+      debugPrint('❌ Stack: $stackTrace');
+      setState(() {
+        _hasCheckedMasterTrips = true;
+        _isCheckingMasterTrips = false;
+      });
+    }
   }
 
   @override
@@ -149,21 +254,23 @@ class _DashboardScreenState extends State<DashboardScreen>
       showBottomNav: true,
       bottomNavIndex: 0,
       onBottomNavTap: (index) => _handleNavigation(index, isDriver),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        color: const Color(0xFF6B9B5B),
-        child: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader(userData, isDarkMode)),
-              SliverToBoxAdapter(
-                child: _buildGreeting(
-                  userData,
-                  isDriver,
-                  hasActiveTrip,
-                  isDarkMode,
-                ),
-              ),
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _refresh,
+            color: const Color(0xFF6B9B5B),
+            child: SafeArea(
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildHeader(userData, isDarkMode)),
+                  SliverToBoxAdapter(
+                    child: _buildGreeting(
+                      userData,
+                      isDriver,
+                      hasActiveTrip,
+                      isDarkMode,
+                    ),
+                  ),
 
               // Main content based on role and trip status
               if (isDriver)
@@ -202,6 +309,31 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
         ),
       ),
+      // Loading overlay when checking master trips
+      if (_isCheckingMasterTrips)
+        Container(
+          color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.7),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Checking for scheduled trips...',
+                  style: TextStyle(
+                    color: Color(0xFF6B9B5B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ],
+    ),
     );
   }
 

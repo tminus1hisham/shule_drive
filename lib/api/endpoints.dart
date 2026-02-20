@@ -204,6 +204,7 @@ class Endpoints {
   // TRIPS ENDPOINTS
   // ==========================================================================
   static const String getAllMasterTrips = '/api/trips/get/all/master/trips';
+  static const String getMasterTripsByDriver = '/api/trips/get/master/trips/by/driver';
   static const String createMasterTrip = '/api/trips/master/create';
   static const String addStudentToMasterTrip = '/api/trips/add/student/to/master';
   static const String activateDeactivateMasterTrip = '/api/trips/activate/deactivate/master/trip';

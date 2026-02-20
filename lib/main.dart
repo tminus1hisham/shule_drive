@@ -23,6 +23,9 @@ import 'screens/main/start_trip_screen.dart';
 import 'screens/main/select_students_screen.dart';
 import 'screens/main/active_trip_screen.dart';
 import 'screens/main/students_list_screen.dart';
+import 'screens/driver/trip_selection_screen.dart';
+import 'screens/driver/vehicle_selection_screen.dart';
+import 'models/master_trip.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/profile/edit_profile_screen.dart';
 import 'screens/profile/change_password_screen.dart';
@@ -479,6 +482,19 @@ Route _buildPageRoute(RouteSettings settings) {
       break;
     case '/start-trip':
       page = const StartTripScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/trip-selection':
+      page = const TripSelectionScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/vehicle-selection':
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = VehicleSelectionScreen(
+        masterTrip: args?['masterTrip'] as MasterTrip?,
+      );
       protected = true;
       allowedRoles = [UserRole.driver];
       break;

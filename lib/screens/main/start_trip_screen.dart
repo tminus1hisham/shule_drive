@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../models/master_trip.dart';
+import '../../api/services/bus_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
@@ -20,6 +22,11 @@ import '../../widgets/main_scaffold.dart';
 /// - View-only access to child's trip
 /// - Can track bus location
 /// - Can chat with driver
+///
+/// Arguments:
+/// - masterTrip: Pre-selected MasterTrip from trip selection (optional)
+/// - vehicle: Pre-selected Bus from vehicle selection (optional)
+/// - preSelectedRoute: Route name to pre-select (optional)
 class StartTripScreen extends StatefulWidget {
   const StartTripScreen({super.key});
 
@@ -32,6 +39,11 @@ class _StartTripScreenState extends State<StartTripScreen>
   String? _selectedVehicle;
   String? _selectedRoute;
   String? _selectedAttendant;
+
+  // Pre-populated data from navigation arguments
+  MasterTrip? _preSelectedMasterTrip;
+  Bus? _preSelectedVehicle;
+  String? _preSelectedRouteName;
 
   bool _isLoading = false;
   int _currentStep = 0;
@@ -64,8 +76,27 @@ class _StartTripScreenState extends State<StartTripScreen>
     _animationController.forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _processArguments();
       _loadData();
     });
+  }
+
+  /// Process navigation arguments to pre-populate selections
+  void _processArguments() {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    
+    if (args != null) {
+      _preSelectedMasterTrip = args['masterTrip'] as MasterTrip?;
+      _preSelectedVehicle = args['vehicle'] as Bus?;
+      _preSelectedRouteName = args['preSelectedRoute'] as String?;
+
+      if (kDebugMode) {
+        print('🎯 StartTripScreen received arguments:');
+        print('   MasterTrip: ${_preSelectedMasterTrip?.tripName}');
+        print('   Vehicle: ${_preSelectedVehicle?.registrationNumber}');
+        print('   Route: $_preSelectedRouteName');
+      }
+    }
   }
 
   @override
@@ -150,8 +181,74 @@ class _StartTripScreenState extends State<StartTripScreen>
       }
     }
 
+    // Apply pre-selected values after data is loaded
+    _applyPreSelectedValues(provider);
+
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Apply pre-selected values from navigation arguments
+  void _applyPreSelectedValues(AppProvider provider) {
+    if (_preSelectedVehicle != null) {
+      // Find matching vehicle in loaded buses
+      try {
+        final matchingBus = provider.buses.firstWhere(
+          (bus) => bus.id == _preSelectedVehicle!.id || 
+                   bus.registrationNumber == _preSelectedVehicle!.registrationNumber,
+        );
+        _selectedVehicle = matchingBus.id;
+        if (kDebugMode) {
+          print('✅ Pre-selected vehicle applied: ${matchingBus.registrationNumber}');
+        }
+      } catch (e) {
+        // No matching bus found
+        if (kDebugMode) {
+          print('⚠️ Pre-selected vehicle not found in loaded buses');
+        }
+      }
+    }
+
+    if (_preSelectedRouteName != null) {
+      // Find matching route by name
+      try {
+        final matchingRoute = provider.routes.firstWhere(
+          (route) => route.name == _preSelectedRouteName,
+        );
+        _selectedRoute = matchingRoute.id;
+        if (kDebugMode) {
+          print('✅ Pre-selected route applied: ${matchingRoute.name}');
+        }
+      } catch (e) {
+        // No matching route found
+        if (kDebugMode) {
+          print('⚠️ Pre-selected route not found in loaded routes');
+        }
+      }
+    }
+
+    // If master trip has a numberPlate, try to match it
+    if (_preSelectedMasterTrip?.numberPlate != null && _selectedVehicle == null) {
+      try {
+        final matchingBus = provider.buses.firstWhere(
+          (bus) => bus.registrationNumber == _preSelectedMasterTrip!.numberPlate,
+        );
+        _selectedVehicle = matchingBus.id;
+        if (kDebugMode) {
+          print('✅ Vehicle matched from master trip numberPlate: ${matchingBus.registrationNumber}');
+        }
+      } catch (e) {
+        // No matching bus found
+        if (kDebugMode) {
+          print('⚠️ Vehicle from master trip numberPlate not found');
+        }
+      }
+    }
+
+    // Update current step based on selections
+    if (_selectedRoute != null) {
+      _currentStep = _selectedVehicle != null ? 2 : 1;
     }
   }
 
