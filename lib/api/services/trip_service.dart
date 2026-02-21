@@ -331,41 +331,53 @@ class TripService {
 
   /// Get master trips for a specific driver
   /// Uses getAllMasterTrips and filters by driver ID (createdBy field)
+  /// Skips buffer for faster initial load
   Future<List<MasterTrip>> getMasterTripsByDriver(String driverId) async {
-    return _buffer.withBuffer<List<MasterTrip>>(
-      apiCall: () async {
-        // Fetch all master trips and filter by driver ID
-        final response = await _apiClient.get(Endpoints.getAllMasterTrips);
+    try {
+      // Fetch all master trips directly (skip buffer for speed)
+      final response = await _apiClient.get(Endpoints.getAllMasterTrips);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> tripsData;
-        if (response is List) {
-          tripsData = response;
-        } else if (response is Map && response['data'] != null) {
-          tripsData = response['data'] as List;
-        } else {
-          tripsData = [];
-        }
+      // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+      List<dynamic> tripsData;
+      if (response is List) {
+        tripsData = response;
+      } else if (response is Map && response['data'] != null) {
+        tripsData = response['data'] as List;
+      } else {
+        tripsData = [];
+      }
 
-        // Filter trips by createdBy (driver ID) - exact match
-        final trips = tripsData
-            .map((trip) => MasterTrip.fromJson(trip))
-            .where((trip) => trip.createdBy == driverId)
-            .toList();
-        
-        if (kDebugMode) {
-          print('🔍 Found ${trips.length} trips for driver ID: $driverId');
-          for (final trip in trips) {
-            print('  - ${trip.tripName} (Route: ${trip.route})');
-          }
+      // Filter trips by createdBy (driver ID) - exact match
+      final trips = tripsData
+          .map((trip) => MasterTrip.fromJson(trip))
+          .where((trip) => trip.createdBy == driverId)
+          .toList();
+      
+      if (kDebugMode) {
+        print('🔍 Found ${trips.length} trips for driver ID: $driverId');
+        for (final trip in trips) {
+          print('  - ${trip.tripName} (Route: ${trip.route})');
         }
-        
-        return trips;
-      },
-      bufferKey: 'master_trips_driver_$driverId',
-      fallbackData: [],
-      cacheDuration: const Duration(minutes: 5),
-    );
+      }
+      
+      // Save to buffer for next time
+      await _buffer.saveBuffer(
+        key: 'master_trips_driver_$driverId',
+        data: trips,
+        expiration: const Duration(minutes: 5),
+      );
+      
+      return trips;
+    } catch (e) {
+      // On error, try to return cached data
+      if (kDebugMode) {
+        print('⚠️ Error fetching master trips: $e, trying cache...');
+      }
+      final cached = await _buffer.getBuffer<List<MasterTrip>>(
+        key: 'master_trips_driver_$driverId',
+      );
+      return cached ?? [];
+    }
   }
 
   /// Get all master trips

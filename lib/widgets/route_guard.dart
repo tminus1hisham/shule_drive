@@ -50,6 +50,29 @@ class RouteGuard extends StatelessWidget {
           );
         }
 
+        // Check if user needs to change password (first-time login)
+        // Only redirect if not already on change-password page
+        if (authProvider.needsPasswordChange) {
+          final currentRoute = ModalRoute.of(context)?.settings.name;
+          if (currentRoute != '/change-password') {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/change-password',
+                (route) => false,
+              );
+            });
+
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF6B9B5B),
+                ),
+              ),
+            );
+          }
+        }
+
         // Check role-based access if specified
         if (allowedRoles != null && !allowedRoles!.contains(authProvider.userRole)) {
           return _AccessDeniedScreen(

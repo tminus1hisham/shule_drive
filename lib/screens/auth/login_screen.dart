@@ -104,12 +104,26 @@ class _LoginScreenState extends State<LoginScreen>
       // Reset failed attempts on success
       _failedAttempts = 0;
       
-      // Navigate to home/landing screen
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/landing',
-        (route) => false,
-      );
+      // Check if user needs to change password (first-time login)
+      final needsPasswordChange = await authProvider.checkNeedsPasswordChange();
+      
+      if (!mounted) return;
+      
+      if (needsPasswordChange) {
+        // First-time login: redirect to change password screen
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/change-password',
+          (route) => false,
+        );
+      } else {
+        // Normal login: navigate to home/landing screen
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/landing',
+          (route) => false,
+        );
+      }
     } else {
       // Record failed attempt
       _failedAttempts++;

@@ -28,6 +28,7 @@ class TokenStorage {
   static const String _userAvatarKey = 'user_avatar';
   static const String _userSchoolIdKey = 'user_school_id';
   static const String _userSchoolNameKey = 'user_school_name';
+  static const String _needsPasswordChangeKey = 'needs_password_change';
 
   /// Initialize storage (call this before using other methods)
   Future<void> init() async {
@@ -228,6 +229,33 @@ class TokenStorage {
       await _prefs?.remove(_refreshTokenKey);
     } else {
       await _secureStorage.clearTokens();
+    }
+  }
+
+  /// Check if user needs to change password (first-time login)
+  Future<bool> getNeedsPasswordChange() async {
+    if (_isWeb) {
+      return _prefs?.getBool(_needsPasswordChangeKey) ?? false;
+    } else {
+      return await _secureStorage.getNeedsPasswordChange();
+    }
+  }
+
+  /// Set whether user needs to change password
+  Future<void> setNeedsPasswordChange(bool value) async {
+    if (_isWeb) {
+      await _prefs?.setBool(_needsPasswordChangeKey, value);
+    } else {
+      await _secureStorage.setNeedsPasswordChange(value);
+    }
+  }
+
+  /// Clear the password change requirement (called after password change)
+  Future<void> clearNeedsPasswordChange() async {
+    if (_isWeb) {
+      await _prefs?.remove(_needsPasswordChangeKey);
+    } else {
+      await _secureStorage.clearNeedsPasswordChange();
     }
   }
 }

@@ -73,6 +73,10 @@ class AuthProvider extends ChangeNotifier {
   bool get isDriver => _userRole == UserRole.driver;
   bool get isGuardian => _userRole == UserRole.guardian;
 
+  // First-time login / password change flag
+  bool _needsPasswordChange = false;
+  bool get needsPasswordChange => _needsPasswordChange;
+
   // Getters for user info
   String? get userId => _currentUser?.id;
   String? get userName => _currentUser?.name;
@@ -138,6 +142,10 @@ class AuthProvider extends ChangeNotifier {
         }
         _userRole = UserRole.fromString(role);
         _isAuthenticated = true;
+        
+        // Check if user needs to change password (first-time login)
+        _needsPasswordChange = await _tokenStorage.getNeedsPasswordChange();
+        
         notifyListeners(); // Show UI immediately with cached data
       }
 
@@ -334,6 +342,10 @@ class AuthProvider extends ChangeNotifier {
             print('💾 Saved user data with schoolId: ${response.user!.schoolId}');
           }
         }
+
+        // Note: Backend doesn't return needsPasswordChange field
+        // Password change requirement must be set manually (e.g., by admin)
+        // or detected through other means (e.g., temporary password pattern)
 
         // User authenticated successfully
         _currentUser = response.user;
@@ -768,5 +780,27 @@ class AuthProvider extends ChangeNotifier {
 
   void _clearError() {
     _errorMessage = null;
+  }
+
+  // ==================== PASSWORD CHANGE MANAGEMENT ====================
+  
+  /// Mark user as needing password change (first-time login)
+  Future<void> setNeedsPasswordChange(bool value) async {
+    _needsPasswordChange = value;
+    await _tokenStorage.setNeedsPasswordChange(value);
+    notifyListeners();
+  }
+  
+  /// Clear password change requirement (called after password change)
+  Future<void> clearNeedsPasswordChange() async {
+    _needsPasswordChange = false;
+    await _tokenStorage.clearNeedsPasswordChange();
+    notifyListeners();
+  }
+  
+  /// Check if user needs to change password
+  Future<bool> checkNeedsPasswordChange() async {
+    _needsPasswordChange = await _tokenStorage.getNeedsPasswordChange();
+    return _needsPasswordChange;
   }
 }

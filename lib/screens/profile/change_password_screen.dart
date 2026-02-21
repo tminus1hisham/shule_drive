@@ -23,6 +23,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
+  bool _isFirstTimeLogin = false;
 
   // Animation controller
   late AnimationController _animationController;
@@ -51,6 +52,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       curve: Curves.easeOutCubic,
     ));
     _animationController.forward();
+    
+    // Check if this is first-time login
+    _checkFirstTimeLogin();
+  }
+  
+  void _checkFirstTimeLogin() {
+    final authProvider = context.read<AuthProvider>();
+    setState(() {
+      _isFirstTimeLogin = authProvider.needsPasswordChange;
+    });
   }
 
   @override
@@ -64,7 +75,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
   Future<void> _changePassword() async {
     // Validate fields
-    if (_currentController.text.isEmpty) {
+    // For first-time login, current password is not required
+    if (!_isFirstTimeLogin && _currentController.text.isEmpty) {
       _showError('Please enter your current password');
       HapticFeedback.mediumImpact();
       return;
@@ -88,7 +100,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       return;
     }
 
-    if (_currentController.text == _newController.text) {
+    // Skip this check for first-time login
+    if (!_isFirstTimeLogin && _currentController.text == _newController.text) {
       _showError('New password must be different from current password');
       HapticFeedback.mediumImpact();
       return;
@@ -229,6 +242,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
     if (success) {
       if (kDebugMode) print('✅ SUCCESS: Showing success alert...');
+
+      // Clear the needs password change flag
+      if (_isFirstTimeLogin) {
+        final authProvider = context.read<AuthProvider>();
+        await authProvider.clearNeedsPasswordChange();
+        if (kDebugMode) print('✅ First-time login flag cleared');
+      }
 
       // Show success alert dialog - the dialog's OK button handles navigation
       await _showSuccessAlert();
@@ -373,11 +393,18 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                   onPressed: () {
                     // Close the dialog first
                     Navigator.of(ctx).pop();
-                    // Then navigate back to profile page using stored navigator
-                    // Use a small delay to ensure dialog is fully closed
+                    // Then navigate based on first-time login or normal flow
                     Future.delayed(const Duration(milliseconds: 50), () {
-                      if (_navigator != null && _navigator!.canPop()) {
-                        _navigator!.pop();
+                      if (_isFirstTimeLogin) {
+                        // First-time login: redirect to appropriate home page
+                        if (mounted) {
+                          _navigateToHome();
+                        }
+                      } else {
+                        // Normal flow: navigate back to profile page
+                        if (_navigator != null && _navigator!.canPop()) {
+                          _navigator!.pop();
+                        }
                       }
                     });
                   },
@@ -763,8 +790,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     final authProvider = context.watch<AuthProvider>();
 
     return MainScaffold(
-      title: 'Change Password',
-      showBackButton: !_isLoading && !authProvider.isLoading,
+      title: _isFirstTimeLogin ? 'Set Your Password' : 'Change Password',
+      showBackButton: !_isFirstTimeLogin && !_isLoading && !authProvider.isLoading,
       body: Stack(
         children: [
           // Background gradient
@@ -825,7 +852,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Create a strong password to protect your account',
+                      _isFirstTimeLogin
+                          ? 'Please create a password to secure your new account'
+                          : 'Create a strong password to protect your account',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
@@ -850,15 +879,18 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildPasswordField(
-                            'Current Password',
-                            _currentController,
-                            _obscureCurrent,
-                            () => setState(() => _obscureCurrent = !_obscureCurrent),
-                            provider,
-                            Icons.lock_outline,
-                          ),
-                          const SizedBox(height: 20),
+                          // Current password field - hidden for first-time login
+                          if (!_isFirstTimeLogin) ...[
+                            _buildPasswordField(
+                              'Current Password',
+                              _currentController,
+                              _obscureCurrent,
+                              () => setState(() => _obscureCurrent = !_obscureCurrent),
+                              provider,
+                              Icons.lock_outline,
+                            ),
+                            const SizedBox(height: 20),
+                          ],
                           _buildPasswordField(
                             'New Password',
                             _newController,
@@ -917,14 +949,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
-                            : const Row(
+                            : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.lock_reset, size: 22),
-                                  SizedBox(width: 10),
+                                  Icon(
+                                    _isFirstTimeLogin ? Icons.lock : Icons.lock_reset,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 10),
                                   Text(
-                                    'Change Password',
-                                    style: TextStyle(
+                                    _isFirstTimeLogin ? 'Set Password' : 'Change Password',
+                                    style: const TextStyle(
                                       fontSize: 17,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -955,7 +990,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Password must be at least 4 characters and different from your current password.',
+                              _isFirstTimeLogin
+                                  ? 'Password must be at least 4 characters to secure your account.'
+                                  : 'Password must be at least 4 characters and different from your current password.',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: provider.textMutedColor,
@@ -1054,5 +1091,24 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         ),
       ],
     );
+  }
+
+  /// Navigate to the appropriate home page based on user role
+  void _navigateToHome() {
+    final authProvider = context.read<AuthProvider>();
+    
+    if (kDebugMode) {
+      print('🏠 Navigating to home after first-time password change');
+      print('🏠 User role: ${authProvider.currentUser?.role}');
+      print('🏠 isDriver: ${authProvider.isDriver}');
+    }
+
+    if (authProvider.isDriver) {
+      // Driver: go to dashboard (which will check for master trips and redirect if needed)
+      Navigator.of(context).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    } else {
+      // Guardian: go to dashboard
+      Navigator.of(context).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    }
   }
 }

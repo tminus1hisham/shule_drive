@@ -32,6 +32,7 @@ class SecureTokenStorage {
   static const String _userSchoolIdKey = 'user_school_id';
   static const String _userSchoolNameKey = 'user_school_name';
   static const String _mqttSessionIdKey = 'mqtt_session_id';
+  static const String _needsPasswordChangeKey = 'needs_password_change';
 
   /// Save auth tokens securely
   Future<void> saveAuthTokens({
@@ -169,5 +170,24 @@ class SecureTokenStorage {
     await _secureStorage.delete(key: _accessTokenKey);
     await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _mqttSessionIdKey);
+  }
+
+  /// Check if user needs to change password (first-time login)
+  Future<bool> getNeedsPasswordChange() async {
+    final value = await _secureStorage.read(key: _needsPasswordChangeKey);
+    return value == 'true';
+  }
+
+  /// Set whether user needs to change password
+  Future<void> setNeedsPasswordChange(bool value) async {
+    await _secureStorage.write(
+      key: _needsPasswordChangeKey, 
+      value: value.toString(),
+    );
+  }
+
+  /// Clear the password change requirement (called after password change)
+  Future<void> clearNeedsPasswordChange() async {
+    await _secureStorage.delete(key: _needsPasswordChangeKey);
   }
 }

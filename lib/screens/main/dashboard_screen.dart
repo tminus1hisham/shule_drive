@@ -9,6 +9,7 @@ import '../../providers/trip_provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../models/master_trip.dart';
 
 /// Unified Dashboard - Single home screen that adapts based on role and trip status
 ///
@@ -46,105 +47,78 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Subscribe to app lifecycle
     WidgetsBinding.instance.addObserver(this);
     
-    // Check for master trips if driver - with slight delay to ensure auth is ready
+    // Check for master trips immediately after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _checkMasterTripsForDriver();
-        }
-      });
+      _checkMasterTripsForDriver();
     });
   }
 
   /// Check if driver has master trips and redirect accordingly
   Future<void> _checkMasterTripsForDriver() async {
-    if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
-      debugPrint('🔍 Master trip check already performed or in progress, skipping');
-      return;
-    }
-    
-    setState(() => _isCheckingMasterTrips = true);
+    if (_hasCheckedMasterTrips || _isCheckingMasterTrips) return;
     
     final authProvider = context.read<AuthProvider>();
-    
-    debugPrint('🔍 =========================================');
-    debugPrint('🔍 CHECKING MASTER TRIPS FOR DRIVER');
-    debugPrint('🔍 =========================================');
-    debugPrint('🔍 isDriver: ${authProvider.isDriver}');
-    debugPrint('🔍 User role: ${authProvider.userRole}');
-    debugPrint('🔍 User role from data: ${authProvider.userData['role']}');
-    debugPrint('🔍 Current user ID: ${authProvider.currentUser?.id}');
-    debugPrint('🔍 Current user name: ${authProvider.currentUser?.name}');
-    
-    // Only check for drivers
-    if (!authProvider.isDriver) {
-      debugPrint('🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check');
-      setState(() {
-        _hasCheckedMasterTrips = true;
-        _isCheckingMasterTrips = false;
-      });
-      return;
-    }
-    
-    // Check if there's an active trip - if so, skip master trip check
     final tripProvider = context.read<TripProvider>();
-    if (tripProvider.activeTrip != null) {
-      debugPrint('🔍 Active trip exists, skipping master trip check');
-      setState(() {
-        _hasCheckedMasterTrips = true;
-        _isCheckingMasterTrips = false;
-      });
+    
+    // Quick checks before showing any loading UI
+    if (!authProvider.isDriver) {
+      _hasCheckedMasterTrips = true;
       return;
     }
+    
+    if (tripProvider.activeTrip != null) {
+      _hasCheckedMasterTrips = true;
+      return;
+    }
+    
+    final driverId = authProvider.currentUser?.id;
+    if (driverId == null || driverId.isEmpty) {
+      _hasCheckedMasterTrips = true;
+      return;
+    }
+    
+    // Only show loading UI if check takes longer than 1.5 seconds
+    Timer? loadingTimer;
+    loadingTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && !_hasCheckedMasterTrips) {
+        setState(() => _isCheckingMasterTrips = true);
+      }
+    });
     
     try {
       final tripService = TripService();
-      final driverId = authProvider.currentUser?.id;
       
-      debugPrint('🔍 Driver ID: $driverId');
+      debugPrint('🔍 Checking master trips for driver: $driverId');
       
-      if (driverId == null || driverId.isEmpty) {
-        debugPrint('❌ Driver ID is null or empty');
-        setState(() {
-          _hasCheckedMasterTrips = true;
-          _isCheckingMasterTrips = false;
-        });
-        return;
-      }
+      // Add timeout to prevent hanging
+      final masterTrips = await tripService.getMasterTripsByDriver(driverId)
+          .timeout(const Duration(seconds: 8), onTimeout: () {
+        debugPrint('⚠️ Master trip check timed out');
+        return <MasterTrip>[];
+      });
       
-      debugPrint('🔍 Calling API: getMasterTripsByDriver($driverId)');
+      loadingTimer?.cancel();
       
-      final masterTrips = await tripService.getMasterTripsByDriver(driverId);
+      if (!mounted) return;
       
-      debugPrint('🔍 API returned ${masterTrips.length} master trips');
-      for (final trip in masterTrips) {
-        debugPrint('  - ${trip.tripName} (ID: ${trip.id}, Route: ${trip.route})');
-      }
-      
-      if (!mounted) {
-        debugPrint('🔍 Widget not mounted');
-        return;
-      }
+      _hasCheckedMasterTrips = true;
       
       if (masterTrips.isNotEmpty) {
-        debugPrint('✅ Redirecting to trip selection screen');
-        
-        // Redirect to trip selection screen
+        debugPrint('✅ Found ${masterTrips.length} trips, redirecting');
         Navigator.pushReplacementNamed(context, '/trip-selection');
       } else {
         debugPrint('ℹ️ No master trips found');
+        setState(() => _isCheckingMasterTrips = false);
+      }
+    } catch (e) {
+      loadingTimer?.cancel();
+      debugPrint('❌ Error checking master trips: $e');
+      if (mounted) {
         setState(() {
           _hasCheckedMasterTrips = true;
           _isCheckingMasterTrips = false;
         });
       }
-    } catch (e, stackTrace) {
-      debugPrint('❌ Error: $e');
-      debugPrint('❌ Stack: $stackTrace');
-      setState(() {
-        _hasCheckedMasterTrips = true;
-        _isCheckingMasterTrips = false;
-      });
     }
   }
 

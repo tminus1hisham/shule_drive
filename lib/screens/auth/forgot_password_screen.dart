@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/bus_illustration.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -14,13 +12,14 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _phoneController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
-  String _completePhoneNumber = '';
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  // Support contact details - update these with actual support details
+  final String _supportPhone = '+254712345678';
+  final String _supportEmail = 'support@shuledrive.com';
+  final String _supportWhatsApp = '+254712345678';
 
   @override
   void initState() {
@@ -45,32 +44,42 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
   @override
   void dispose() {
-    _phoneController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
-  Future<void> _sendOTP() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  Future<void> _launchPhone() async {
     HapticFeedback.lightImpact();
-
-    final authProvider = context.read<AuthProvider>();
-    
-    // Request password reset OTP
-    final success = await authProvider.requestPasswordReset(_completePhoneNumber);
-    
-    if (!mounted) return;
-
-    if (success) {
-      // Navigate to OTP verification for password reset
-      Navigator.pushNamed(
-        context,
-        '/verify-reset-otp',
-        arguments: {'phone': _completePhoneNumber},
-      );
+    final uri = Uri.parse('tel:$_supportPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
     } else {
-      _showError(authProvider.errorMessage ?? 'Failed to send OTP. Please try again.');
+      _showError('Could not open phone app');
+    }
+  }
+
+  Future<void> _launchEmail() async {
+    HapticFeedback.lightImpact();
+    final uri = Uri.parse(
+      'mailto:$_supportEmail?subject=Password Reset Request&body=Hello Support,%0A%0AI need help resetting my password for my ShuleDrive account.%0A%0AMy phone number: [Enter your phone number]%0A%0AThank you.',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showError('Could not open email app');
+    }
+  }
+
+  Future<void> _launchWhatsApp() async {
+    HapticFeedback.lightImpact();
+    final message = Uri.encodeComponent(
+      'Hello Support, I need help resetting my password for my ShuleDrive account.',
+    );
+    final uri = Uri.parse('https://wa.me/$_supportWhatsApp?text=$message');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _showError('Could not open WhatsApp');
     }
   }
 
@@ -95,9 +104,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
       appBar: AppBar(
@@ -114,20 +122,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             children: [
               // Welcome Text
               _buildHeader(),
-              
+
               const SizedBox(height: 20),
-              
+
               // Bus Illustration
               const BusIllustration(height: 160),
-              
+
               const SizedBox(height: 32),
-              
-              // Form
+
+              // Contact Options
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: _buildForm(authProvider),
+                  child: _buildContactOptions(),
                 ),
               ),
               const SizedBox(height: 24),
@@ -156,7 +164,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Enter your phone number and we\'ll send you an OTP to reset your password.',
+            'Contact our support team to reset your password. We\'re here to help!',
             style: TextStyle(
               fontSize: 16,
               color: isDark ? Colors.white70 : const Color(0xFF666666),
@@ -167,8 +175,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildForm(AuthProvider authProvider) {
+  Widget _buildContactOptions() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.all(24),
@@ -183,132 +192,209 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           ),
         ],
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Phone Field
-            _buildPhoneField(),
-            
-            const SizedBox(height: 24),
-            
-            // Send OTP Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _sendOTP,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
-                ),
-                child: authProvider.isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text(
-                        'Send OTP',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            'Contact Support',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose your preferred method to reach us:',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.white70 : const Color(0xFF666666),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Phone Option
+          _buildContactCard(
+            icon: Icons.phone_outlined,
+            iconColor: const Color(0xFF6B9B5B),
+            iconBgColor: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+            title: 'Call Us',
+            subtitle: _supportPhone,
+            onTap: _launchPhone,
+            isDark: isDark,
+          ),
+
+          const SizedBox(height: 16),
+
+          // WhatsApp Option
+          _buildContactCard(
+            icon: Icons.chat_outlined,
+            iconColor: const Color(0xFF25D366),
+            iconBgColor: const Color(0xFF25D366).withValues(alpha: 0.1),
+            title: 'WhatsApp',
+            subtitle: 'Chat with us',
+            onTap: _launchWhatsApp,
+            isDark: isDark,
+          ),
+
+          const SizedBox(height: 16),
+
+          // Email Option
+          _buildContactCard(
+            icon: Icons.email_outlined,
+            iconColor: const Color(0xFFEA4335),
+            iconBgColor: const Color(0xFFEA4335).withValues(alpha: 0.1),
+            title: 'Email Us',
+            subtitle: _supportEmail,
+            onTap: _launchEmail,
+            isDark: isDark,
+          ),
+
+          const SizedBox(height: 24),
+
+          // Divider
+          Divider(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          ),
+
+          const SizedBox(height: 24),
+
+          // Instructions
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: const Color(0xFF6B9B5B),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'What to expect',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                       ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // Back to Login
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Back to Login',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '• Our support team will verify your identity\n'
+                  '• You\'ll receive a temporary password via SMS\n'
+                  '• Login with the temporary password\n'
+                  '• Change it immediately after logging in',
                   style: TextStyle(
-                    color: Color(0xFF6B9B5B),
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    height: 1.6,
+                    color: isDark ? Colors.white70 : const Color(0xFF666666),
                   ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Back to Login
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Back to Login',
+                style: TextStyle(
+                  color: Color(0xFF6B9B5B),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPhoneField() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Phone Number',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+  Widget _buildContactCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBgColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8F8F8),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
           ),
         ),
-        const SizedBox(height: 8),
-        IntlPhoneField(
-          controller: _phoneController,
-          decoration: InputDecoration(
-            hintText: '712 345 678',
-            hintStyle: TextStyle(
-              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: iconBgColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: 24,
+              ),
             ),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white70 : const Color(0xFF666666),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: isDark ? Colors.white54 : Colors.grey.shade400,
             ),
-          ),
-          initialCountryCode: 'KE',
-          disableLengthCheck: true,
-          flagsButtonPadding: const EdgeInsets.only(left: 12),
-          dropdownIcon: Icon(
-            Icons.arrow_drop_down,
-            color: isDark ? Colors.white70 : const Color(0xFF666666),
-          ),
-          dropdownTextStyle: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          style: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          onChanged: (phone) {
-            _completePhoneNumber = phone.completeNumber;
-          },
-          validator: (phone) {
-            if (phone == null || phone.number.isEmpty) {
-              return 'Please enter your phone number';
-            }
-            if (phone.number.length < 9) {
-              return 'Please enter a valid phone number';
-            }
-            return null;
-          },
+          ],
         ),
-      ],
+      ),
     );
   }
 }
