@@ -141,7 +141,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             _showPhoneSearch = false;
           });
         }
-      }).catchError((e) {
+      }, onError: (e) {
         if (kDebugMode) {
           print('❌ Error loading students: $e');
         }
@@ -215,17 +215,18 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       
       debugPrint('👨‍🎓 FINAL: Loaded ${_allStudents.length} students total');
       
-      // Notify UI to update
+      // Notify UI to update only if still mounted
       if (mounted) {
         setState(() {});
       }
     } catch (e, stackTrace) {
       debugPrint('❌❌❌ ERROR in _loadAllStudents: $e');
       debugPrint('Stack trace: $stackTrace');
-      _allStudents = [];
-      _filteredStudents = [];
       
+      // Only update state if still mounted
       if (mounted) {
+        _allStudents = [];
+        _filteredStudents = [];
         setState(() {});
       }
     }

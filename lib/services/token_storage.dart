@@ -190,19 +190,19 @@ class TokenStorage {
   }
 
   /// Get all user data as a map (for fast cached access)
-  Future<Map<String, String>?> getUserData() async {
+  Future<Map<String, String?>?> getUserData() async {
     final userId = await getUserId();
     if (userId == null) return null;
 
     return {
       'userId': userId,
-      'name': await getUserName() ?? '',
-      'phone': await getUserPhone() ?? '',
+      'name': await getUserName(),
+      'phone': await getUserPhone(),
       'role': await getUserRole() ?? 'unknown',
-      'email': await getUserEmail() ?? '',
-      'avatar': await getUserAvatar() ?? '',
-      'schoolId': await getUserSchoolId() ?? '',
-      'schoolName': await getUserSchoolName() ?? '',
+      'email': await getUserEmail(),
+      'avatar': await getUserAvatar(),
+      'schoolId': await getUserSchoolId(),
+      'schoolName': await getUserSchoolName(),
     };
   }
 

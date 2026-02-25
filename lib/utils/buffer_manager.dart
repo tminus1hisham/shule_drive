@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api/api_exceptions.dart';
 
 /// Buffer Manager - Provides fallback data caching for API calls
 /// This ensures the app remains functional even when API is unavailable
@@ -268,6 +270,79 @@ class BufferManager {
       'memoryCacheKeys': _memoryCache.keys.toList(),
       'persistentCacheKeys': _prefs?.getKeys().where((k) => k.startsWith('buffer_')).toList(),
     };
+  }
+
+  /// Execute API call with automatic retry for temporary failures
+  /// Retries on ServerUnavailableException with exponential backoff
+  Future<T> withRetry<T>({
+    required Future<T> Function() apiCall,
+    required String operationName,
+    int maxRetries = 3,
+    Duration initialDelay = const Duration(seconds: 1),
+    Duration maxDelay = const Duration(seconds: 10),
+  }) async {
+    int attempt = 0;
+    Duration currentDelay = initialDelay;
+    
+    while (attempt < maxRetries) {
+      attempt++;
+      try {
+        if (kDebugMode && attempt > 1) {
+          debugPrint('Retry attempt $attempt/$maxRetries for $operationName');
+        }
+        return await apiCall();
+      } on ServerUnavailableException catch (e) {
+        if (attempt >= maxRetries) {
+          if (kDebugMode) {
+            debugPrint('Max retries ($maxRetries) reached for $operationName. Giving up.');
+          }
+          rethrow;
+        }
+        
+        // Add jitter to avoid thundering herd
+        final jitter = Duration(milliseconds: math.Random().nextInt(500));
+        final waitTime = currentDelay + jitter;
+        
+        if (kDebugMode) {
+          debugPrint('Server unavailable for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)');
+        }
+        
+        await Future.delayed(waitTime);
+        
+        // Exponential backoff with max cap
+        currentDelay = Duration(
+          milliseconds: math.min(
+            currentDelay.inMilliseconds * 2,
+            maxDelay.inMilliseconds,
+          ),
+        );
+      } on TimeoutException catch (e) {
+        if (attempt >= maxRetries) {
+          if (kDebugMode) {
+            debugPrint('Max retries ($maxRetries) reached for timeout on $operationName. Giving up.');
+          }
+          rethrow;
+        }
+        
+        final jitter = Duration(milliseconds: math.Random().nextInt(500));
+        final waitTime = currentDelay + jitter;
+        
+        if (kDebugMode) {
+          debugPrint('Request timeout for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)');
+        }
+        
+        await Future.delayed(waitTime);
+        currentDelay = Duration(
+          milliseconds: math.min(
+            currentDelay.inMilliseconds * 2,
+            maxDelay.inMilliseconds,
+          ),
+        );
+      }
+    }
+    
+    // Should never reach here
+    throw ApiException(message: 'Unexpected error in retry logic');
   }
 }
 

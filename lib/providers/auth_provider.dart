@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
 import '../api/services/user_service.dart';
@@ -128,8 +129,8 @@ class AuthProvider extends ChangeNotifier {
           role: role,
           email: cachedUser['email'],
           avatar: cachedUser['avatar'],
-          schoolId: cachedUser['schoolId'],
-          schoolName: cachedUser['schoolName'],
+          schoolId: cachedUser['schoolId'] ?? '',
+          schoolName: cachedUser['schoolName'] ?? '',
         );
         
         if (kDebugMode) {
@@ -138,7 +139,10 @@ class AuthProvider extends ChangeNotifier {
         }
         _userRole = UserRole.fromString(role);
         _isAuthenticated = true;
-        notifyListeners(); // Show UI immediately with cached data
+        // Defer notifyListeners to avoid build-phase errors
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          notifyListeners();
+        });
       }
 
       // Validate token and fetch fresh user data in background (non-blocking)
@@ -150,7 +154,10 @@ class AuthProvider extends ChangeNotifier {
       _initialized = true;
     } finally {
       _setLoading(false);
-      notifyListeners();
+      // Defer notifyListeners to avoid build-phase errors
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
     }
   }
 
@@ -199,7 +206,10 @@ class AuthProvider extends ChangeNotifier {
             _currentUser?.schoolId != user.schoolId) {
           _currentUser = user;
           _userRole = UserRole.fromString(user.role);
-          notifyListeners();
+          // Defer notifyListeners to avoid build-phase errors
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            notifyListeners();
+          });
           
           // Update cached data with new school info
           await _tokenStorage.saveUserData(
@@ -758,12 +768,18 @@ class AuthProvider extends ChangeNotifier {
   // Helper methods
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
+    // Defer notifyListeners to avoid build-phase errors
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   void _setError(String message) {
     _errorMessage = message;
-    notifyListeners();
+    // Defer notifyListeners to avoid build-phase errors
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   void _clearError() {

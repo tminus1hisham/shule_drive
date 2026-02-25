@@ -127,6 +127,13 @@ class ApiClient {
                 'Request failed';
     }
     
+    // Check if the response body contains a database timeout error
+    final responseBody = response.body.toLowerCase();
+    final bool isDbTimeout = responseBody.contains('taskcanceledexception') ||
+                             responseBody.contains('timeout') ||
+                             responseBody.contains('npgsql') ||
+                             responseBody.contains('a task was canceled');
+    
     // Throw appropriate exception
     switch (statusCode) {
       case HttpStatus.badRequest:
@@ -147,23 +154,37 @@ class ApiClient {
       case 429: // Too Many Requests
         throw ApiException(message: 'Too many requests. Please try again later.');
       case 500:
+        // Check if it's a database timeout error
+        if (isDbTimeout) {
+          throw ServerUnavailableException(
+            message: 'Server is temporarily unavailable due to high load. Please try again in a moment.',
+          );
+        }
+        throw ServerException(message: 'Server error. Please try again later.');
       case 502:
       case 503:
       case 504:
-        throw ServerException(message: 'Server error. Please try again later.');
+        throw ServerUnavailableException(message: 'Server is temporarily unavailable. Please try again later.');
       default:
         throw ApiException(message: message, statusCode: statusCode);
     }
   }
   
   /// Handle exceptions
-  Exception _handleException(dynamic error) {
+  Exception _handleException(dynamic error, {String? endpoint}) {
     if (error is SocketException) {
       return NetworkException();
     } else if (error is TimeoutException) {
+      // Client-side timeout (Flutter app timed out waiting for server)
       return TimeoutException();
     } else if (error is ApiException) {
       return error;
+    } else if (error is FormatException) {
+      // JSON parse error - usually happens when server returns HTML error page or garbage
+      debugPrint('⚠️ JSON Parse Error for $endpoint: $error');
+      return ServerUnavailableException(
+        message: 'Server returned an invalid response. Please try again later.',
+      );
     } else {
       return ApiException(
         message: error.toString(),
@@ -177,6 +198,7 @@ class ApiClient {
     String endpoint, {
     Map<String, String>? queryParams,
     bool requiresAuth = true,
+    Duration? timeout,
   }) async {
     try {
       var uri = Uri.parse('$baseUrl$endpoint');
@@ -192,7 +214,7 @@ class ApiClient {
       final response = await _client
           .get(uri, headers: headers)
           .timeout(
-            const Duration(milliseconds: ApiConstants.connectionTimeout),
+            timeout ?? const Duration(milliseconds: ApiConstants.connectionTimeout),
           );
       
       // Debug logging for response
@@ -206,7 +228,7 @@ class ApiClient {
       return _handleResponse(response);
     } catch (e) {
       debugPrint('❌ API Exception on GET $endpoint: $e');
-      throw _handleException(e);
+      throw _handleException(e, endpoint: endpoint);
     }
   }
   
@@ -239,7 +261,7 @@ class ApiClient {
       
       return _handleResponse(response);
     } catch (e) {
-      throw _handleException(e);
+      throw _handleException(e, endpoint: endpoint);
     }
   }
   
@@ -265,7 +287,7 @@ class ApiClient {
       
       return _handleResponse(response);
     } catch (e) {
-      throw _handleException(e);
+      throw _handleException(e, endpoint: endpoint);
     }
   }
   
@@ -322,7 +344,7 @@ class ApiClient {
       
       return _handleResponse(response);
     } catch (e) {
-      throw _handleException(e);
+      throw _handleException(e, endpoint: endpoint);
     }
   }
   
@@ -361,7 +383,7 @@ class ApiClient {
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } catch (e) {
-      throw _handleException(e);
+      throw _handleException(e, endpoint: endpoint);
     }
   }
 }

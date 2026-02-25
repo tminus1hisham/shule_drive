@@ -486,6 +486,9 @@ class Student {
   final String? route;
   final String? studentRegNumber;
   final String? transportOrg;
+  // Location fields
+  final double latitude;
+  final double longitude;
 
   Student({
     required this.id,
@@ -506,6 +509,8 @@ class Student {
     this.route,
     this.studentRegNumber,
     this.transportOrg,
+    this.latitude = 0.0,
+    this.longitude = 0.0,
   });
 
   factory Student.fromJson(Map<String, dynamic> json) {
@@ -544,6 +549,8 @@ class Student {
       route: json['route'],
       studentRegNumber: json['studentRegNumber'],
       transportOrg: json['transportOrg'],
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       isActive:
           json['isStudentActive'] ??
           json['is_active'] ??
@@ -575,7 +582,14 @@ class Student {
       'route': route,
       'studentRegNumber': studentRegNumber,
       'transportOrg': transportOrg,
+      'latitude': latitude,
+      'longitude': longitude,
     };
+  }
+
+  /// Returns true if the student has a valid location (not default 0,0)
+  bool hasValidLocation() {
+    return latitude != 0.0 && longitude != 0.0;
   }
 
   static DateTime? _parseDateTime(dynamic value) {

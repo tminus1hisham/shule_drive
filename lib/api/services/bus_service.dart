@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../api_client.dart';
+import '../api_exceptions.dart';
 import '../endpoints.dart';
 import '../../utils/buffer_manager.dart';
 
@@ -8,35 +10,59 @@ class BusService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
 
-  /// Get all buses with buffer fallback
+  /// Get all buses with buffer fallback and retry logic
   /// GET /api/buses/get/all
   Future<List<Bus>> getAllBuses() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
-        final response = await _apiClient.get(Endpoints.getAllBuses);
+        // Retry logic with shorter timeout
+        const maxRetries = 2;
+        const timeout = Duration(seconds: 15);
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (kDebugMode && attempt > 0) {
+              print('🔄 Buses retry attempt ${attempt + 1}/$maxRetries');
+            }
+            
+            final response = await _apiClient.get(
+              Endpoints.getAllBuses,
+              timeout: timeout,
+            );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> busesData;
-        if (response is List) {
-          busesData = response;
-        } else if (response is Map && response['data'] != null) {
-          busesData = response['data'] as List;
-        } else {
-          busesData = [];
-        }
+            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+            List<dynamic> busesData;
+            if (response is List) {
+              busesData = response;
+            } else if (response is Map && response['data'] != null) {
+              busesData = response['data'] as List;
+            } else {
+              busesData = [];
+            }
 
-        if (kDebugMode && busesData.isNotEmpty) {
-          final first = busesData.first as Map<String, dynamic>;
-          print('🚌 First bus raw data: $first');
-          print('🚌 Available fields: ${first.keys.toList()}');
-          // Print all field values for debugging
-          for (final key in first.keys) {
-            print('🚌 $key: ${first[key]}');
+            if (kDebugMode && busesData.isNotEmpty) {
+              final first = busesData.first as Map<String, dynamic>;
+              print('🚌 First bus raw data: $first');
+              print('🚌 Available fields: ${first.keys.toList()}');
+              // Print all field values for debugging
+              for (final key in first.keys) {
+                print('🚌 $key: ${first[key]}');
+              }
+            }
+
+            final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
+            return buses;
+          } on TimeoutException catch (e) {
+            if (attempt == maxRetries - 1) {
+              // Last attempt failed, rethrow
+              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+            }
+            // Wait before retrying
+            await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
-
-        final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
-        return buses;
+        
+        return [];
       },
       bufferKey: BufferKeys.buses,
       fallbackData: <Bus>[],
@@ -44,25 +70,49 @@ class BusService {
     );
   }
 
-  /// Get buses by user with buffer fallback
+  /// Get buses by user with buffer fallback and retry logic
   /// GET /api/buses/get/by/user
   Future<List<Bus>> getBusesByUser() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
-        final response = await _apiClient.get(Endpoints.getBusesByUser);
+        // Retry logic with shorter timeout
+        const maxRetries = 2;
+        const timeout = Duration(seconds: 15);
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (kDebugMode && attempt > 0) {
+              print('🔄 Buses by user retry attempt ${attempt + 1}/$maxRetries');
+            }
+            
+            final response = await _apiClient.get(
+              Endpoints.getBusesByUser,
+              timeout: timeout,
+            );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> busesData;
-        if (response is List) {
-          busesData = response;
-        } else if (response is Map && response['data'] != null) {
-          busesData = response['data'] as List;
-        } else {
-          busesData = [];
+            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+            List<dynamic> busesData;
+            if (response is List) {
+              busesData = response;
+            } else if (response is Map && response['data'] != null) {
+              busesData = response['data'] as List;
+            } else {
+              busesData = [];
+            }
+
+            final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
+            return buses;
+          } on TimeoutException catch (e) {
+            if (attempt == maxRetries - 1) {
+              // Last attempt failed, rethrow
+              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+            }
+            // Wait before retrying
+            await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          }
         }
-
-        final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
-        return buses;
+        
+        return [];
       },
       bufferKey: '${BufferKeys.buses}_by_user',
       fallbackData: <Bus>[],

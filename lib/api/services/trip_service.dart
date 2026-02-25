@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_constants.dart';
@@ -329,38 +330,62 @@ class TripService {
   // MASTER TRIPS ENDPOINTS
   // ============================================================================
 
-  /// Get master trips for a specific driver
+  /// Get master trips for a specific driver with retry logic
   /// Uses getAllMasterTrips and filters by driver ID (createdBy field)
   Future<List<MasterTrip>> getMasterTripsByDriver(String driverId) async {
     return _buffer.withBuffer<List<MasterTrip>>(
       apiCall: () async {
-        // Fetch all master trips and filter by driver ID
-        final response = await _apiClient.get(Endpoints.getAllMasterTrips);
-
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> tripsData;
-        if (response is List) {
-          tripsData = response;
-        } else if (response is Map && response['data'] != null) {
-          tripsData = response['data'] as List;
-        } else {
-          tripsData = [];
-        }
-
-        // Filter trips by createdBy (driver ID) - exact match
-        final trips = tripsData
-            .map((trip) => MasterTrip.fromJson(trip))
-            .where((trip) => trip.createdBy == driverId)
-            .toList();
+        // Retry logic with shorter timeout
+        const maxRetries = 2;
+        const timeout = Duration(seconds: 15);
         
-        if (kDebugMode) {
-          print('🔍 Found ${trips.length} trips for driver ID: $driverId');
-          for (final trip in trips) {
-            print('  - ${trip.tripName} (Route: ${trip.route})');
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (kDebugMode && attempt > 0) {
+              print('🔄 Master trips retry attempt ${attempt + 1}/$maxRetries');
+            }
+            
+            // Fetch all master trips and filter by driver ID
+            final response = await _apiClient.get(
+              Endpoints.getAllMasterTrips,
+              timeout: timeout,
+            );
+
+            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+            List<dynamic> tripsData;
+            if (response is List) {
+              tripsData = response;
+            } else if (response is Map && response['data'] != null) {
+              tripsData = response['data'] as List;
+            } else {
+              tripsData = [];
+            }
+
+            // Filter trips by createdBy (driver ID) - exact match
+            final trips = tripsData
+                .map((trip) => MasterTrip.fromJson(trip))
+                .where((trip) => trip.createdBy == driverId)
+                .toList();
+            
+            if (kDebugMode) {
+              print('🔍 Found ${trips.length} trips for driver ID: $driverId');
+              for (final trip in trips) {
+                print('  - ${trip.tripName} (Route: ${trip.route})');
+              }
+            }
+            
+            return trips;
+          } on TimeoutException catch (e) {
+            if (attempt == maxRetries - 1) {
+              // Last attempt failed, rethrow
+              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+            }
+            // Wait before retrying
+            await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
         
-        return trips;
+        return [];
       },
       bufferKey: 'master_trips_driver_$driverId',
       fallbackData: [],
@@ -368,27 +393,51 @@ class TripService {
     );
   }
 
-  /// Get all master trips
+  /// Get all master trips with retry logic
   /// GET /api/trips/get/all/master/trips
   Future<List<MasterTrip>> getAllMasterTrips() async {
     return _buffer.withBuffer<List<MasterTrip>>(
       apiCall: () async {
-        final response = await _apiClient.get(Endpoints.getAllMasterTrips);
+        // Retry logic with shorter timeout
+        const maxRetries = 2;
+        const timeout = Duration(seconds: 15);
+        
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (kDebugMode && attempt > 0) {
+              print('🔄 Master trips retry attempt ${attempt + 1}/$maxRetries');
+            }
+            
+            final response = await _apiClient.get(
+              Endpoints.getAllMasterTrips,
+              timeout: timeout,
+            );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> tripsData;
-        if (response is List) {
-          tripsData = response;
-        } else if (response is Map && response['data'] != null) {
-          tripsData = response['data'] as List;
-        } else {
-          tripsData = [];
+            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
+            List<dynamic> tripsData;
+            if (response is List) {
+              tripsData = response;
+            } else if (response is Map && response['data'] != null) {
+              tripsData = response['data'] as List;
+            } else {
+              tripsData = [];
+            }
+
+            final trips = tripsData
+                .map((trip) => MasterTrip.fromJson(trip))
+                .toList();
+            return trips;
+          } on TimeoutException catch (e) {
+            if (attempt == maxRetries - 1) {
+              // Last attempt failed, rethrow
+              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+            }
+            // Wait before retrying
+            await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          }
         }
-
-        final trips = tripsData
-            .map((trip) => MasterTrip.fromJson(trip))
-            .toList();
-        return trips;
+        
+        return [];
       },
       bufferKey: 'master_trips_all',
       fallbackData: [],

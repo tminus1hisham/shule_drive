@@ -74,6 +74,14 @@ class ServerException extends ApiException {
   );
 }
 
+/// Server Unavailable Exception - Server is overloaded or database timeout
+class ServerUnavailableException extends ApiException {
+  ServerUnavailableException({String message = 'Server is temporarily unavailable. Please try again later.'}) : super(
+    message: message,
+    statusCode: 503,
+  );
+}
+
 /// Bad Request Exception - 400
 class BadRequestException extends ApiException {
   BadRequestException({String message = 'Bad request'}) : super(

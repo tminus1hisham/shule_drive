@@ -416,7 +416,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ],
       ),
       floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 80),
+        margin: const EdgeInsets.only(bottom: 5),
         child: FloatingActionButton.extended(
           onPressed: () => Navigator.pushReplacementNamed(context, '/landing'),
           backgroundColor: const Color(0xFF6B9B5B),

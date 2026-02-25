@@ -15,6 +15,8 @@ import '../../providers/trip_provider.dart';
 import '../../models/map_models.dart';
 import '../../utils/mock_tracking_data.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../services/mapbox_service.dart';
+import '../../config/map_config.dart';
 
 /// Active Trip Screen - Shows live map tracking with complete trip button
 /// This is the main screen drivers see while on an active trip
@@ -166,8 +168,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     _locationSubscription = _mockGenerator.trackBus(_tripId ?? 'BUS001')
         .listen(_onLocationUpdate);
     
-    // Fetch route from OSRM
-    await _fetchRouteFromOSRM();
+    // Fetch route from Mapbox
+    await _fetchRouteFromMapbox();
     
     // Center map on first stop
     if (_stops.isNotEmpty) {
@@ -394,35 +396,57 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  Future<void> _fetchRouteFromOSRM() async {
+  Future<void> _fetchRouteFromMapbox() async {
     if (_stops.length < 2) return;
     
     try {
-      final coordinates = _stops.map((s) => 
-        '${s.position.longitude},${s.position.latitude}'
-      ).join(';');
+      final mapboxService = MapboxService();
       
-      final url = 'http://router.project-osrm.org/route/v1/driving/'
-          '$coordinates?overview=full&geometries=geojson';
+      // Convert stops to waypoints format expected by MapboxService
+      final waypoints = _stops.map((stop) => {
+        'lat': stop.position.latitude,
+        'lng': stop.position.longitude,
+      }).toList();
       
-      final response = await http.get(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
+      final result = await mapboxService.getRoute(waypoints);
       
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['routes'] != null && data['routes'].isNotEmpty) {
-          final geometry = data['routes'][0]['geometry']['coordinates'] as List;
-          if (mounted) {
-            setState(() {
-              _routePoints = geometry.map((coord) => 
-                latlong2.LatLng(coord[1] as double, coord[0] as double)
-              ).toList();
-            });
-          }
+      if (result.success && result.coordinates != null) {
+        if (mounted) {
+          setState(() {
+            // Mapbox returns coordinates as [longitude, latitude] pairs
+            _routePoints = result.coordinates!.map((pos) => 
+              latlong2.LatLng(pos.latitude, pos.longitude)
+            ).toList();
+          });
         }
+        
+        if (kDebugMode) {
+          print('✅ Mapbox route loaded: ${result.formattedDistance}, ${result.formattedDuration}');
+        }
+      } else {
+        debugPrint('❌ Mapbox routing failed: ${result.errorMessage}');
+        // Fallback to straight line between stops
+        _createStraightLineRoute();
       }
     } catch (e) {
-      debugPrint('OSRM routing error: $e');
+      debugPrint('❌ Mapbox routing error: $e');
+      // Fallback to straight line between stops
+      _createStraightLineRoute();
+    }
+  }
+  
+  /// Creates a straight line route between stops when Mapbox fails
+  void _createStraightLineRoute() {
+    if (_stops.length < 2) return;
+    
+    setState(() {
+      _routePoints = _stops.map((stop) => 
+        latlong2.LatLng(stop.position.latitude, stop.position.longitude)
+      ).toList();
+    });
+    
+    if (kDebugMode) {
+      print('⚠️ Using straight line fallback route');
     }
   }
 
@@ -531,7 +555,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       ],
       body: Stack(
         children: [
-          // OpenStreetMap
+          // Mapbox Map
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -544,12 +568,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               },
             ),
             children: [
-              // OpenStreetMap tile layer
+              // Mapbox tile layer
               TileLayer(
                 urlTemplate: isDarkMode
-                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c'],
+                    ? MapConfig.mapboxDarkTileUrl
+                    : MapConfig.mapboxTileUrl,
                 userAgentPackageName: 'com.shuledrive.app',
               ),
               
@@ -677,7 +700,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '© OpenStreetMap',
+                    '© Mapbox',
                     style: TextStyle(fontSize: 10, color: Colors.black54),
                   ),
                 ],

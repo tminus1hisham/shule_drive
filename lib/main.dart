@@ -53,7 +53,7 @@ import 'services/offline_sync_manager.dart';
 import 'widgets/route_guard.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// ============================================================================
+// ============================================================================ 
 // APP ENTRY POINT
 // ============================================================================
 
