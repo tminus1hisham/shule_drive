@@ -20,9 +20,9 @@ class TrackingService {
   // MQTT Service for real-time updates (null when not available)
   dynamic _mqttService;
   
-  // Mock data generator for testing without backend
+  // Mock data generator for testing without backend (disabled by default)
   final MockTrackingGenerator _mockGenerator = MockTrackingGenerator();
-  final bool _useMockData = true;
+  bool _useMockData = false; // Set to true only for testing without real GPS
   
   // Stream controllers
   final Map<String, StreamController<BusLocation>> _locationControllers = {};
