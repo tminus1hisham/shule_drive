@@ -12,6 +12,8 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../models/map_models.dart';
+import '../../models/preloaded_trip_data.dart';
+import '../../models/master_trip.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/map_config.dart';
@@ -59,6 +61,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   
   // ETA notification tracking - stores stop IDs that have had 2-min ETA notification sent
   final Set<String> _etaNotifiedStops = {};
+  
+  // Preloaded trip data
+  List<Map<String, dynamic>> _preloadedStudents = [];
 
   @override
   void initState() {
@@ -78,10 +83,29 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _initializeTrip() async {
     setState(() => _isLoading = true);
     
-    // Get trip ID from route arguments
+    // Get trip ID from route arguments (can be int or String)
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    _tripId = args?['tripId'] as String?;
+    final dynamic rawTripId = args?['tripId'];
+    _tripId = rawTripId?.toString();
     _busPlate = args?['busPlate'] as String? ?? 'BUS001';
+    
+    // Parse preloaded students from Map
+    final preloadedDataMap = args?['preloadedData'] as Map<String, dynamic>?;
+    if (preloadedDataMap != null) {
+      try {
+        final preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
+        _preloadedStudents = _convertTripStudentsToMap(preloadedData.students);
+        _totalCount = _preloadedStudents.length;
+        _pickedCount = _preloadedStudents.where((s) => s['status'] == 'picked').length;
+        if (kDebugMode) {
+          print('🚌 ActiveTripScreen: Loaded ${_preloadedStudents.length} preloaded students');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Failed to parse preloaded data: $e');
+        }
+      }
+    }
     
     if (kDebugMode) {
       print('🚌 ActiveTripScreen: Initializing with tripId: $_tripId');
@@ -1049,48 +1073,81 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               ),
             const SizedBox(height: 12),
             
-            // Complete trip button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: _isEndingTrip ? null : _completeTrip,
-                icon: _isEndingTrip
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            // View Students and Complete Trip buttons
+            Row(
+              children: [
+                // View Students button
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: _showStudentList,
+                      icon: const Icon(Icons.people),
+                      label: Text(
+                        'Students ($_pickedCount/$_totalCount)',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                      )
-                    : const Icon(Icons.check_circle),
-                label: Text(
-                  _isEndingTrip ? 'Completing...' : 'Complete Trip',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100],
+                        foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                const SizedBox(width: 12),
+                // Complete Trip button
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: _isEndingTrip ? null : _completeTrip,
+                      icon: _isEndingTrip
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.check_circle),
+                      label: Text(
+                        _isEndingTrip ? '...' : 'Complete',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B9B5B),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
                   ),
-                  elevation: 0,
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 8),
-            
-            // © Mapbox attribution
+            // T-minus1 branding
             Center(
               child: Text(
-                '© Mapbox',
+                'T-minus1',
                 style: TextStyle(
                   fontSize: 10,
-                  color: isDarkMode ? Colors.white38 : Colors.black38,
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode ? const Color(0x66FFFFFF) : const Color(0x66000000),
                 ),
               ),
             ),
@@ -1100,31 +1157,199 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
+  /// Show student list bottom sheet
+  void _showStudentList() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _StudentListBottomSheet(
+        students: _buildStudentListFromStops(),
+        pickedCount: _pickedCount,
+        totalCount: _totalCount,
+        onStudentTap: (student) {
+          Navigator.pop(context);
+          _showStudentDetails(student);
+        },
+        onChatWithGuardian: (student) {
+          _chatWithGuardian(student);
+        },
+        onMessageAll: () {
+          Navigator.pop(context);
+          _showMessageAllDialog();
+        },
+      ),
+    );
+  }
+
+  /// Show student details dialog
+  void _showStudentDetails(Map<String, dynamic> student) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(student['name'] ?? 'Student'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: ${student['status'] ?? 'Pending'}'),
+            if (student['stopName'] != null)
+              Text('Stop: ${student['stopName']}'),
+            if (student['guardianPhone'] != null)
+              Text('Guardian: ${student['guardianPhone']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Chat with student's guardian
+  void _chatWithGuardian(Map<String, dynamic> student) {
+    final guardianPhone = student['guardianPhone'] as String?;
+    final guardianId = student['guardianId'] as String?;
+    final studentName = student['name'] as String? ?? 'Student';
+    
+    if (guardianPhone == null && guardianId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No guardian contact available')),
+      );
+      return;
+    }
+    
+    Navigator.pushNamed(
+      context,
+      '/chat',
+      arguments: {
+        'receiverId': guardianId ?? guardianPhone,
+        'receiverName': student['guardianName'] ?? 'Guardian of $studentName',
+        'receiverPhone': guardianPhone,
+        'receiverAvatar': null,
+        'receiverRole': 'guardian',
+        'tripId': _tripId,
+        'isTripChat': true,
+      },
+    );
+  }
+
+  /// Show dialog to send message to all guardians
+  void _showMessageAllDialog() {
+    final TextEditingController messageController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.campaign, color: Color(0xFF6B9B5B)),
+            SizedBox(width: 8),
+            Text('Alert All Guardians'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Send a message to all guardians of students in this trip.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Type your alert message...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: [
+                _quickMessageChip('Running late', messageController),
+                _quickMessageChip('Traffic delay', messageController),
+                _quickMessageChip('Arriving soon', messageController),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              final message = messageController.text.trim();
+              if (message.isNotEmpty) {
+                _sendBulkMessage(message);
+                Navigator.pop(context);
+              }
+            },
+            icon: const Icon(Icons.send),
+            label: const Text('Send'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B9B5B),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickMessageChip(String message, TextEditingController controller) {
+    return ActionChip(
+      label: Text(message),
+      onPressed: () => controller.text = message,
+      backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+      labelStyle: const TextStyle(color: Color(0xFF6B9B5B)),
+    );
+  }
+
+  Future<void> _sendBulkMessage(String message) async {
+    final students = _buildStudentListFromStops();
+    final guardianContacts = <String>{};
+    
+    for (final student in students) {
+      final phone = student['guardianPhone'] as String?;
+      if (phone != null && phone.isNotEmpty) guardianContacts.add(phone);
+    }
+    
+    if (guardianContacts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No guardian contacts available')),
+      );
+      return;
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Alert sent to ${guardianContacts.length} guardians')),
+    );
+  }
+
   Future<void> _completeTrip() async {
     setState(() => _isEndingTrip = true);
     
     try {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Complete Trip?'),
-          content: const Text(
-            'Are you sure you want to complete this trip? This will notify all guardians that the trip has ended.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Complete'),
-            ),
-          ],
+        barrierDismissible: false,
+        builder: (context) => _CompleteTripDialog(
+          tripName: _activeTrip?.routeName ?? 'Trip',
+          totalStudents: _totalCount,
+          pickedCount: _pickedCount,
+          absentCount: _totalCount - _pickedCount,
         ),
       );
       
@@ -1151,6 +1376,648 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         setState(() => _isEndingTrip = false);
       }
     }
+  }
+
+  /// Convert preloaded TripStudent objects to map format for UI
+  List<Map<String, dynamic>> _convertTripStudentsToMap(List<TripStudent> students) {
+    return students.map((s) {
+      return {
+        'id': s.id.toString(),
+        'name': s.fullname,
+        'stopName': s.route,
+        'status': s.isStudentPicked 
+            ? 'picked' 
+            : s.isStudentDropped 
+                ? 'dropped' 
+                : 'pending',
+        'guardianPhone': s.guardianPhoneNumber,
+        'guardianId': s.guardianPhoneNumber,
+        'guardianName': s.guardianPhoneNumber,
+        'studentRegNumber': s.studentRegNumber,
+        'className': s.classname,
+      };
+    }).toList();
+  }
+
+  /// Build student list from stops data or use preloaded students
+  List<Map<String, dynamic>> _buildStudentListFromStops() {
+    // If we have preloaded students, use those
+    if (_preloadedStudents.isNotEmpty) {
+      return _preloadedStudents;
+    }
+    
+    final List<Map<String, dynamic>> students = [];
+    
+    for (final stop in _stops) {
+      if (stop.studentIds != null && stop.studentIds!.isNotEmpty) {
+        for (final studentId in stop.studentIds!) {
+          students.add({
+            'id': studentId,
+            'name': 'Student $studentId',
+            'stopName': stop.name,
+            'status': _processedStops.contains(stop.id) ? 'picked' : 'pending',
+            'guardianPhone': stop.guardianPhone,
+            'guardianId': null,
+            'guardianName': null,
+          });
+        }
+      } else {
+        students.add({
+          'id': stop.id,
+          'name': stop.name,
+          'stopName': 'Stop #${stop.order}',
+          'status': _processedStops.contains(stop.id) ? 'picked' : 'pending',
+          'guardianPhone': stop.guardianPhone,
+          'guardianId': null,
+          'guardianName': null,
+        });
+      }
+    }
+    
+    return students;
+  }
+}
+
+/// Student List Bottom Sheet
+class _StudentListBottomSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> students;
+  final int pickedCount;
+  final int totalCount;
+  final Function(Map<String, dynamic>) onStudentTap;
+  final Function(Map<String, dynamic>) onChatWithGuardian;
+  final VoidCallback onMessageAll;
+
+  const _StudentListBottomSheet({
+    required this.students,
+    required this.pickedCount,
+    required this.totalCount,
+    required this.onStudentTap,
+    required this.onChatWithGuardian,
+    required this.onMessageAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: (isDarkMode ? Colors.white : Colors.black).withValues(alpha: 0.24),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.people, color: Color(0xFF6B9B5B)),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Students',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      Text(
+                        '$pickedCount of $totalCount picked up',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: onMessageAll,
+                  icon: const Icon(Icons.campaign, color: Color(0xFF6B9B5B)),
+                  tooltip: 'Alert all guardians',
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          
+          // Progress bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: totalCount > 0 ? pickedCount / totalCount : 0,
+                backgroundColor: isDarkMode ? Colors.white12 : Colors.grey[200],
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                minHeight: 8,
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Message All button
+          if (students.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onMessageAll,
+                  icon: const Icon(Icons.campaign),
+                  label: Text('Alert All Guardians (${students.length})'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          
+          if (students.isNotEmpty)
+            const SizedBox(height: 16),
+          
+          // Student list
+          Expanded(
+            child: students.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_outline,
+                          size: 64,
+                          color: isDarkMode ? Colors.white30 : Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No students in this trip',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: students.length,
+                    itemBuilder: (context, index) {
+                      final student = students[index];
+                      final status = student['status'] ?? 'pending';
+                      final isPicked = status == 'picked';
+                      final isDropped = status == 'dropped';
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListTile(
+                          onTap: () => onStudentTap(student),
+                          leading: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: isPicked
+                                  ? const Color(0xFF6B9B5B)
+                                  : isDropped
+                                      ? Colors.blue
+                                      : isDarkMode
+                                          ? Colors.white12
+                                          : Colors.grey[200],
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isPicked ? Icons.check : isDropped ? Icons.logout : Icons.person,
+                              color: isPicked || isDropped ? Colors.white : isDarkMode ? Colors.white60 : Colors.grey[600],
+                            ),
+                          ),
+                          title: Text(
+                            student['name'] ?? 'Student ${index + 1}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          subtitle: Text(
+                            student['stopName'] ?? 'No stop assigned',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (student['guardianPhone'] != null || student['guardianId'] != null)
+                                IconButton(
+                                  onPressed: () => onChatWithGuardian(student),
+                                  icon: const Icon(Icons.chat_bubble_outline),
+                                  color: const Color(0xFF6B9B5B),
+                                ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isPicked
+                                      ? const Color(0xFF6B9B5B).withValues(alpha: 0.1)
+                                      : isDropped
+                                          ? Colors.blue.withValues(alpha: 0.1)
+                                          : Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  isPicked ? 'Picked' : isDropped ? 'Dropped' : 'Pending',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isPicked ? const Color(0xFF6B9B5B) : isDropped ? Colors.blue : Colors.orange,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Complete Trip Dialog - Professional confirmation dialog with trip summary
+class _CompleteTripDialog extends StatelessWidget {
+  final String tripName;
+  final int totalStudents;
+  final int pickedCount;
+  final int absentCount;
+
+  const _CompleteTripDialog({
+    required this.tripName,
+    required this.totalStudents,
+    required this.pickedCount,
+    required this.absentCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final completionRate = totalStudents > 0 ? pickedCount / totalStudents : 0.0;
+    final isComplete = completionRate >= 1.0;
+    
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header - Full Width
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isComplete
+                          ? [const Color(0xFF6B9B5B), const Color(0xFF4A7A3A)]
+                          : [const Color(0xFFFF9800), const Color(0xFFF57C00)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          isComplete ? Icons.check_circle : Icons.warning_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        isComplete ? 'Ready to Complete?' : 'Trip Not Complete',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tripName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stats Row
+                      Row(
+                        children: [
+                          _buildStatCard(
+                            value: totalStudents.toString(),
+                            label: 'Students',
+                            icon: Icons.people_outline,
+                            color: Colors.blue,
+                            isDarkMode: isDarkMode,
+                          ),
+                          const SizedBox(width: 10),
+                          _buildStatCard(
+                            value: pickedCount.toString(),
+                            label: 'Picked Up',
+                            icon: Icons.check_circle_outline,
+                            color: const Color(0xFF6B9B5B),
+                            isDarkMode: isDarkMode,
+                          ),
+                          const SizedBox(width: 10),
+                          _buildStatCard(
+                            value: absentCount.toString(),
+                            label: 'Absent',
+                            icon: Icons.person_off_outlined,
+                            color: Colors.orange,
+                            isDarkMode: isDarkMode,
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Circular Progress
+                      Center(
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: 90,
+                              height: 90,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  CircularProgressIndicator(
+                                    value: completionRate,
+                                    strokeWidth: 8,
+                                    backgroundColor: isDarkMode 
+                                        ? Colors.white.withValues(alpha: 0.1) 
+                                        : Colors.grey[200],
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      isComplete ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      '${(completionRate * 100).toInt()}%',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDarkMode ? Colors.white : Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Warning if not complete
+                      if (!isComplete)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: Colors.orange[700]),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$absentCount students still pending',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Info Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDarkMode 
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : const Color(0xFFF5F5F0),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDarkMode 
+                                ? Colors.white.withValues(alpha: 0.1) 
+                                : const Color(0xFFE0E0D5),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.notifications_active_outlined,
+                                color: Color(0xFF6B9B5B),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Guardian Notification',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDarkMode ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'All guardians will be notified that the trip has ended.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Buttons
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(context, true),
+                          icon: Icon(isComplete ? Icons.check_circle : Icons.warning, size: 20),
+                          label: Text(isComplete ? 'Complete Trip' : 'Complete Anyway'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isComplete ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Go Back'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: isDarkMode ? Colors.white60 : Colors.grey[600],
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildStatCard({
+    required String value,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool isDarkMode,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : color,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: isDarkMode ? Colors.white60 : color.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

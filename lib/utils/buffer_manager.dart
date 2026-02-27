@@ -104,7 +104,7 @@ class BufferManager {
             if (expiry != null) _cacheTimestamps[key] = expiry;
             return data as T?;
           }
-        } else {
+        } else if (T == List<dynamic>) {
           final jsonString = _prefs?.getString('buffer_$key');
           if (jsonString != null) {
             try {
@@ -116,6 +116,10 @@ class BufferManager {
               debugPrint('BufferManager: Failed to parse JSON for key: $key');
             }
           }
+        } else {
+          // For complex types (like List<Bus>), we can't deserialize from JSON
+          // Return null to trigger API call or fallback
+          debugPrint('BufferManager: Cannot deserialize complex type $T from JSON for key: $key');
         }
       } else {
         // Expired, clear from storage

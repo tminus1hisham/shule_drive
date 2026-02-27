@@ -38,7 +38,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(context, '/dashboard');
         }
       },
       body: RefreshIndicator(

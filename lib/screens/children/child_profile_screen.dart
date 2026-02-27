@@ -241,7 +241,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
         onBottomNavTap: (index) {
           setState(() => _currentIndex = index);
           if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/landing');
+            Navigator.pushReplacementNamed(context, '/dashboard');
           }
         },
         body: const Center(
@@ -260,7 +260,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(context, '/dashboard');
         }
       },
       body: RefreshIndicator(

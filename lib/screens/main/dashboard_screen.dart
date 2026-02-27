@@ -312,7 +312,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Loading overlay when checking master trips
       if (_isCheckingMasterTrips)
         Container(
-          color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.7),
+          color: (isDarkMode ? Colors.black : Colors.white).withValues(alpha: 0.7),
           child: const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -539,72 +539,149 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Container(
-        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+            colors: [Color(0xFF6B9B5B), Color(0xFF4A7A3A)],
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF6B9B5B).withAlpha(100),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: const Color(0xFF6B9B5B).withAlpha(120),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(30),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.add_circle_outline,
-                color: Colors.white,
-                size: 48,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Start New Trip',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Begin your route and ensure students get to school safely',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withAlpha(230),
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/start-trip'),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Start Trip'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF6B9B5B),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              // Background decoration
+              Positioned(
+                right: -40,
+                top: -40,
+                child: Container(
+                  width: 150,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(20),
+                    shape: BoxShape.circle,
                   ),
                 ),
               ),
-            ),
-          ],
+              Positioned(
+                left: -20,
+                bottom: -20,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(15),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(30),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withAlpha(50),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.directions_bus,
+                        color: Colors.white,
+                        size: 48,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Ready to Start?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Begin your route and ensure students arrive safely',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withAlpha(230),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        // Quick stats
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(25),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Column(
+                              children: [
+                                Icon(Icons.schedule, color: Colors.white70, size: 20),
+                                SizedBox(height: 4),
+                                Text(
+                                  'On Time',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Start button
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, '/start-trip'),
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text(
+                              'Start Trip',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF6B9B5B),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1207,102 +1284,190 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              if (isDriver)
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.settings,
-                    label: 'Manage Trips',
-                    color: const Color(0xFF6B9B5B),
-                    onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
-                    isDarkMode: isDarkMode,
-                  ),
-                )
-              else
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.child_care,
-                    label: 'My Children',
-                    color: const Color(0xFFE91E63),
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/manage-children'),
-                    isDarkMode: isDarkMode,
-                  ),
-                ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.map,
-                  label: 'Live Track',
-                  color: const Color(0xFFFF9800),
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    '/osm-tracking',
-                    arguments: {
-                      'tripId': 'TRIP_001',
-                      'busId': 'BUS001',
-                      'routeId': 'ROUTE_001',
-                    },
-                  ),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: isDriver ? Icons.history : Icons.local_shipping,
-                  label: isDriver ? 'History' : 'My Trips',
-                  color: const Color(0xFF9C27B0),
-                  onTap: () => Navigator.pushNamed(context, '/trips'),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-            ],
-          ),
+          
+          // Modern grid layout for quick actions
+          if (isDriver)
+            _buildDriverQuickActionsGrid(context, isDarkMode)
+          else
+            _buildGuardianQuickActionsGrid(context, isDarkMode),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActionCard({
+  /// Modern grid layout for driver quick actions (2x2 grid, no Live Track)
+  Widget _buildDriverQuickActionsGrid(BuildContext context, bool isDarkMode) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.add_circle_outline,
+                label: 'Start Trip',
+                subtitle: 'Begin new journey',
+                color: const Color(0xFF6B9B5B),
+                onTap: () => Navigator.pushNamed(context, '/start-trip'),
+                isDarkMode: isDarkMode,
+                isPrimary: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.settings,
+                label: 'Manage Trips',
+                subtitle: 'View schedules',
+                color: const Color(0xFF2196F3),
+                onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.history,
+                label: 'Trip History',
+                subtitle: 'Past journeys',
+                color: const Color(0xFF9C27B0),
+                onTap: () => Navigator.pushNamed(context, '/trips'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.chat_bubble_outline,
+                label: 'Messages',
+                subtitle: 'Chat with guardians',
+                color: const Color(0xFFFF9800),
+                onTap: () => Navigator.pushNamed(context, '/chat'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Modern grid layout for guardian quick actions (2x2 grid)
+  Widget _buildGuardianQuickActionsGrid(BuildContext context, bool isDarkMode) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.child_care,
+                label: 'My Children',
+                subtitle: 'Manage profiles',
+                color: const Color(0xFFE91E63),
+                onTap: () => Navigator.pushNamed(context, '/manage-children'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.local_shipping,
+                label: 'My Trips',
+                subtitle: 'Track journeys',
+                color: const Color(0xFF6B9B5B),
+                onTap: () => Navigator.pushNamed(context, '/trips'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.route_outlined,
+                label: 'Routes',
+                subtitle: 'View bus routes',
+                color: const Color(0xFF2196F3),
+                onTap: () => Navigator.pushNamed(context, '/routes'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.chat_bubble_outline,
+                label: 'Messages',
+                subtitle: 'Chat with driver',
+                color: const Color(0xFFFF9800),
+                onTap: () => Navigator.pushNamed(context, '/chat'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Modern quick action card with subtitle and better styling
+  Widget _buildModernQuickActionCard({
     required IconData icon,
     required String label,
+    required String subtitle,
     required Color color,
     required VoidCallback onTap,
     required bool isDarkMode,
+    bool isPrimary = false,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          border: isPrimary
+              ? Border.all(color: color.withAlpha(100), width: 2)
+              : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(isDarkMode ? 30 : 10),
-              blurRadius: 10,
+              color: Colors.black.withAlpha(isDarkMode ? 40 : 15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withAlpha(20),
+                color: color.withAlpha(25),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color, size: 22),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
                 color: isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDarkMode ? Colors.white60 : Colors.grey[600],
               ),
             ),
           ],

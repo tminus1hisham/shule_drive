@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
+import '../../models/preloaded_trip_data.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
@@ -25,6 +26,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
   String? _error;
   List<MasterTrip> _masterTrips = [];
   MasterTrip? _selectedTrip;
+  
+  // Pre-loaded trip data for instant navigation
+  PreloadedTripData? _preloadedData;
+  bool _isPreloading = false;
   
   late AnimationController _animationController;
 
@@ -91,6 +96,50 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     setState(() {
       _selectedTrip = trip;
     });
+    
+    // Pre-load trip data in background for instant navigation
+    _preloadTripData(trip);
+  }
+  
+  /// Pre-load all trip data in background
+  Future<void> _preloadTripData(MasterTrip trip) async {
+    if (_isPreloading) return;
+    
+    setState(() {
+      _isPreloading = true;
+    });
+    
+    try {
+      debugPrint('🚀 Pre-loading trip data for: ${trip.tripName}');
+      
+      final tripData = await _tripService.fetchCompleteTripData(
+        masterTrip: trip,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _preloadedData = PreloadedTripData(
+            masterTrip: tripData['masterTrip'],
+            students: tripData['students'],
+            vehicle: tripData['vehicle'],
+            routeId: tripData['routeId'],
+          );
+          _isPreloading = false;
+        });
+        
+        debugPrint('✅ Trip data pre-loaded:');
+        debugPrint('   📊 Students: ${_preloadedData!.students.length}');
+        debugPrint('   🚗 Vehicle: ${_preloadedData!.vehicle?.registrationNumber ?? 'Not selected'}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to pre-load trip data: $e');
+      if (mounted) {
+        setState(() {
+          _isPreloading = false;
+          _preloadedData = null;
+        });
+      }
+    }
   }
 
   void _onContinue() {
@@ -98,12 +147,13 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     
     HapticFeedback.mediumImpact();
     
-    // Navigate to vehicle selection with selected trip
+    // Navigate to vehicle selection with pre-loaded data (as Map for serialization)
     Navigator.pushNamed(
       context,
       '/vehicle-selection',
       arguments: {
         'masterTrip': _selectedTrip,
+        'preloadedData': _preloadedData?.toJson(),
       },
     );
   }
@@ -373,6 +423,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           final trip = _masterTrips[index];
           final isSelected = _selectedTrip?.id == trip.id;
           
+          final isPreloadingThisTrip = isSelected && _isPreloading;
+          
           return AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
@@ -387,14 +439,14 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 ),
               );
             },
-            child: _buildTripCard(trip, isSelected, isDarkMode),
+            child: _buildTripCard(trip, isSelected, isPreloadingThisTrip, isDarkMode),
           );
         },
       ),
     );
   }
 
-  Widget _buildTripCard(MasterTrip trip, bool isSelected, bool isDarkMode) {
+  Widget _buildTripCard(MasterTrip trip, bool isSelected, bool isPreloading, bool isDarkMode) {
     final dateFormat = DateFormat('EEE, MMM d');
     
     return GestureDetector(
@@ -447,11 +499,20 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   ),
                 ),
                 child: isSelected
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 16,
-                      )
+                    ? isPreloading
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 16,
+                          )
                     : null,
               ),
               const SizedBox(width: 16),

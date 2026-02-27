@@ -15,9 +15,9 @@ class BusService {
   Future<List<Bus>> getAllBuses() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
-        // Retry logic with shorter timeout
+        // Retry logic with longer timeout for staging API
         const maxRetries = 2;
-        const timeout = Duration(seconds: 15);
+        const timeout = Duration(seconds: 30);
         
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
@@ -65,7 +65,7 @@ class BusService {
         return [];
       },
       bufferKey: BufferKeys.buses,
-      fallbackData: <Bus>[],
+      fallbackData: [],
       cacheDuration: const Duration(minutes: 30),
     );
   }
@@ -75,9 +75,9 @@ class BusService {
   Future<List<Bus>> getBusesByUser() async {
     return _buffer.withBuffer<List<Bus>>(
       apiCall: () async {
-        // Retry logic with shorter timeout
+        // Retry logic with longer timeout for staging API
         const maxRetries = 2;
-        const timeout = Duration(seconds: 15);
+        const timeout = Duration(seconds: 30);
         
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
@@ -115,7 +115,7 @@ class BusService {
         return [];
       },
       bufferKey: '${BufferKeys.buses}_by_user',
-      fallbackData: <Bus>[],
+      fallbackData: [],
       cacheDuration: const Duration(minutes: 30),
     );
   }
@@ -134,7 +134,7 @@ class BusService {
         return buses;
       },
       bufferKey: '${BufferKeys.buses}_active',
-      fallbackData: <Bus>[],
+      fallbackData: [],
       cacheDuration: const Duration(
         minutes: 10,
       ), // Short cache for active buses
@@ -191,7 +191,7 @@ class BusService {
         return buses;
       },
       bufferKey: '${BufferKeys.buses}_school_$schoolId',
-      fallbackData: <Bus>[],
+      fallbackData: [],
       cacheDuration: const Duration(minutes: 15),
     );
   }

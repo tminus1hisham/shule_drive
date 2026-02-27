@@ -17,7 +17,6 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
-import 'screens/main/home_screen.dart';
 import 'screens/main/dashboard_screen.dart';
 import 'screens/main/start_trip_screen.dart';
 import 'screens/main/select_students_screen.dart';
@@ -477,7 +476,7 @@ Route _buildPageRoute(RouteSettings settings) {
       protected = true;
       break;
     case '/home':
-      page = const HomeScreen();
+      page = const DashboardScreen();  // Unified dashboard for all users
       protected = true;
       break;
     case '/start-trip':
@@ -585,7 +584,7 @@ Route _buildPageRoute(RouteSettings settings) {
         receiverName: args?['receiverName'] as String?,
         receiverAvatar: args?['receiverAvatar'] as String?,
         receiverRole: args?['receiverRole'] as String?,
-        tripId: args?['tripId'] as String?,
+        tripId: args?['tripId']?.toString(),
         isTripChat: args?['isTripChat'] as bool? ?? false,
       );
       protected = true;
@@ -593,7 +592,7 @@ Route _buildPageRoute(RouteSettings settings) {
     case '/live-tracking':
       final args = settings.arguments as Map<String, dynamic>?;
       page = LiveTrackingScreen(
-        tripId: args?['tripId'] as String?,
+        tripId: args?['tripId']?.toString(),
         busId: args?['busId'] as String?,
         routeId: args?['routeId'] as String?,
       );
@@ -602,7 +601,7 @@ Route _buildPageRoute(RouteSettings settings) {
     case '/osm-tracking':
       final args = settings.arguments as Map<String, dynamic>?;
       page = OsmTrackingScreen(
-        tripId: args?['tripId'] as String?,
+        tripId: args?['tripId']?.toString(),
         busId: args?['busId'] as String?,
         routeId: args?['routeId'] as String?,
       );

@@ -25,7 +25,7 @@ class _AboutScreenState extends State<AboutScreen> {
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(context, '/dashboard');
         }
       },
       body: SingleChildScrollView(

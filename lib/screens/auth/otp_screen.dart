@@ -158,7 +158,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       // Navigate to landing screen
       Navigator.pushNamedAndRemoveUntil(
         context,
-        '/landing',
+        '/dashboard',
         (route) => false,
       );
     } else {

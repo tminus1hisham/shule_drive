@@ -46,7 +46,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
 
   void _loadStudentsFromTrip() {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final tripId = args?['tripId'] as String?;
+    final tripId = args?['tripId']?.toString();
     
     final tripProvider = context.read<TripProvider>();
     
@@ -418,7 +418,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
       floatingActionButton: Container(
         margin: const EdgeInsets.only(bottom: 5),
         child: FloatingActionButton.extended(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/landing'),
+          onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'),
           backgroundColor: const Color(0xFF6B9B5B),
           icon: const Icon(Icons.check_circle_outline),
           label: const Text(

@@ -6,6 +6,7 @@ import '../api_exceptions.dart';
 import '../endpoints.dart';
 import '../../models/master_trip.dart';
 import '../../utils/buffer_manager.dart';
+import 'bus_service.dart';
 
 /// Trip Service - Handles trip-related API calls with fallback buffers
 class TripService {
@@ -753,6 +754,48 @@ class TripService {
       }
       throw ApiException(message: e.toString());
     }
+  }
+
+  /// Fetch complete trip data including students and guardians
+  /// This is used to pre-load all data for instant navigation
+  /// Returns a map with all trip data for the PreloadedTripData model
+  Future<Map<String, dynamic>> fetchCompleteTripData({
+    required MasterTrip masterTrip,
+    Bus? preselectedVehicle,
+  }) async {
+    if (kDebugMode) {
+      print('🚀 Fetching complete trip data for: ${masterTrip.tripName}');
+    }
+
+    final results = await Future.wait([
+      // Fetch students for this trip
+      getMasterTripStudents(masterTrip.id).catchError((e) {
+        if (kDebugMode) print('⚠️ Failed to load students: $e');
+        return <TripStudent>[];
+      }),
+      // Fetch guardians for this trip
+      getStudentsGuardiansInMasterTrips(masterTrip.id).catchError((e) {
+        if (kDebugMode) print('⚠️ Failed to load guardians: $e');
+        return <TripGuardian>[];
+      }),
+    ]);
+
+    final students = results[0] as List<TripStudent>;
+    final guardians = results[1] as List<TripGuardian>;
+
+    if (kDebugMode) {
+      print('✅ Complete trip data loaded:');
+      print('   📊 Students: ${students.length}');
+      print('   👨‍👩‍👧 Guardians: ${guardians.length}');
+    }
+
+    return {
+      'masterTrip': masterTrip,
+      'students': students,
+      'guardians': guardians,
+      'vehicle': preselectedVehicle,
+      'routeId': masterTrip.route,
+    };
   }
 }
 

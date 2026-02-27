@@ -103,7 +103,7 @@ class _TripsScreenState extends State<TripsScreen> {
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(context, '/dashboard');
         }
       },
       body: RefreshIndicator(

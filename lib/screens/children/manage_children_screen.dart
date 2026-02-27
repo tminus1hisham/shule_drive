@@ -61,7 +61,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     switch (index) {
       case 0:
         // Home/Landing
-        Navigator.pushReplacementNamed(context, '/landing');
+        Navigator.pushReplacementNamed(context, '/dashboard');
         break;
       case 1:
         // Chat

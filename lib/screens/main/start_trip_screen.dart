@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
+import '../../models/preloaded_trip_data.dart';
 import '../../api/services/bus_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -44,6 +45,7 @@ class _StartTripScreenState extends State<StartTripScreen>
   MasterTrip? _preSelectedMasterTrip;
   Bus? _preSelectedVehicle;
   String? _preSelectedRouteName;
+  PreloadedTripData? _preloadedData;
 
   bool _isLoading = false;
   int _currentStep = 0;
@@ -89,12 +91,18 @@ class _StartTripScreenState extends State<StartTripScreen>
       _preSelectedMasterTrip = args['masterTrip'] as MasterTrip?;
       _preSelectedVehicle = args['vehicle'] as Bus?;
       _preSelectedRouteName = args['preSelectedRoute'] as String?;
+      // Parse preloaded data from Map
+      final preloadedDataMap = args['preloadedData'] as Map<String, dynamic>?;
+      if (preloadedDataMap != null) {
+        _preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
+      }
 
       if (kDebugMode) {
         print('🎯 StartTripScreen received arguments:');
         print('   MasterTrip: ${_preSelectedMasterTrip?.tripName}');
         print('   Vehicle: ${_preSelectedVehicle?.registrationNumber}');
         print('   Route: $_preSelectedRouteName');
+        print('   Preloaded Students: ${_preloadedData?.students.length ?? 0}');
       }
     }
   }
@@ -184,8 +192,41 @@ class _StartTripScreenState extends State<StartTripScreen>
     // Apply pre-selected values after data is loaded
     _applyPreSelectedValues(provider);
 
+    // Auto-start trip if everything is pre-selected
+    await _tryAutoStartTrip();
+
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Try to auto-start trip if all required data is available
+  Future<void> _tryAutoStartTrip() async {
+    // Check if we have both trip and vehicle selected
+    if (_preSelectedMasterTrip != null && _selectedVehicle != null) {
+      if (kDebugMode) {
+        print('🚀 Auto-starting trip with pre-selected data...');
+        print('   Trip: ${_preSelectedMasterTrip!.tripName}');
+        print('   Vehicle: $_selectedVehicle');
+        print('   Preloaded Students: ${_preloadedData?.students.length ?? 0}');
+      }
+
+      // Small delay to let the UI render the loading state
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (mounted) {
+        // Skip this screen and go directly to active trip
+        Navigator.pushReplacementNamed(
+          context,
+          '/active-trip',
+          arguments: {
+            'tripId': _preSelectedMasterTrip!.id,
+            'vehicleId': _selectedVehicle,
+            'busPlate': _selectedVehicle,
+            'preloadedData': _preloadedData?.toJson(),
+          },
+        );
+      }
     }
   }
 

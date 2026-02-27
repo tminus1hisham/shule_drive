@@ -104,10 +104,10 @@ class _LoginScreenState extends State<LoginScreen>
       // Reset failed attempts on success
       _failedAttempts = 0;
       
-      // Navigate to home/landing screen
+      // Navigate to dashboard (skip landing redirect)
       Navigator.pushNamedAndRemoveUntil(
         context,
-        '/landing',
+        '/dashboard',
         (route) => false,
       );
     } else {

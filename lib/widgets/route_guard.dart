@@ -56,7 +56,7 @@ class RouteGuard extends StatelessWidget {
             onBack: () {
               Navigator.pushNamedAndRemoveUntil(
                 context,
-                '/landing',
+                '/dashboard',
                 (route) => false,
               );
             },

@@ -315,7 +315,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
       onBottomNavTap: (index) {
         setState(() => _currentIndex = index);
         if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(context, '/dashboard');
         } else if (index == 1) {
           Navigator.pushNamed(context, '/chat');
         } else if (index == 2) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
+import '../../models/preloaded_trip_data.dart';
 import '../../api/services/bus_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -27,8 +28,20 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
   String? _error;
   List<Bus> _vehicles = [];
   Bus? _selectedVehicle;
+  PreloadedTripData? _preloadedData;
   
   late AnimationController _animationController;
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Get preloaded data from route arguments (parse from Map)
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final preloadedDataMap = args?['preloadedData'] as Map<String, dynamic>?;
+    if (preloadedDataMap != null) {
+      _preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
+    }
+  }
 
   @override
   void initState() {
@@ -117,7 +130,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     
     HapticFeedback.mediumImpact();
     
-    // Navigate to start trip with pre-populated data
+    // Update preloaded data with selected vehicle
+    final updatedPreloadedData = _preloadedData?.copyWith(vehicle: _selectedVehicle);
+    
+    // Navigate to start trip with pre-populated data (as Map for serialization)
     Navigator.pushReplacementNamed(
       context,
       '/start-trip',
@@ -125,6 +141,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
         'masterTrip': widget.masterTrip,
         'vehicle': _selectedVehicle,
         'preSelectedRoute': widget.masterTrip?.route,
+        'preloadedData': updatedPreloadedData?.toJson(),
       },
     );
   }
@@ -375,17 +392,71 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               ),
             ),
             const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _goBack,
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Go Back'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loadVehicles,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: _goBack,
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Go Back'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: isDarkMode ? Colors.white70 : const Color(0xFF666666),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'If the problem persists, please contact your administrator.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDarkMode ? const Color(0x66FFFFFF) : const Color(0xFF999999),
+              ),
+            ),
+            // Hidden button for development/testing - long press to add mock vehicle
+            GestureDetector(
+              onLongPress: () {
+                debugPrint('🚗 Adding mock vehicle for testing...');
+                setState(() {
+                  _vehicles = [
+                    Bus(
+                      id: 'mock-bus-001',
+                      registrationNumber: 'KXX 123X',
+                      model: 'Toyota Coaster',
+                      capacity: '30',
+                      schoolId: 'test-school',
+                      isActive: true,
+                      createdAt: DateTime.now(),
+                    ),
+                  ];
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Mock vehicle added for testing'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: Container(
+                width: 100,
+                height: 50,
+                color: Colors.transparent,
               ),
             ),
           ],

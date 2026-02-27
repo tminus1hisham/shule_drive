@@ -543,72 +543,194 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              if (isDriver)
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.add_circle_outline,
-                    label: 'Start Trip',
-                    color: const Color(0xFF6B9B5B),
-                    onTap: () => Navigator.pushNamed(context, '/start-trip'),
-                    isDarkMode: isDarkMode,
-                  ),
-                )
-              else
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.child_care,
-                    label: 'My Children',
-                    color: const Color(0xFF2196F3),
-                    onTap: () => Navigator.pushNamed(context, '/manage-children'),
-                    isDarkMode: isDarkMode,
-                  ),
-                ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  icon: Icons.map,
-                  label: 'Live Track',
-                  color: const Color(0xFFFF9800),
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    '/osm-tracking',
-                    arguments: {
-                      'tripId': 'TRIP_001',
-                      'busId': 'BUS001',
-                      'routeId': 'ROUTE_001',
-                    },
-                  ),
-                  isDarkMode: isDarkMode,
-                ),
-              ),
-              if (isDriver) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.history,
-                    label: 'History',
-                    color: const Color(0xFF2196F3),
-                    onTap: () => Navigator.pushNamed(context, '/trips'),
-                    isDarkMode: isDarkMode,
-                  ),
-                ),
-              ] else ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionCard(
-                    icon: Icons.local_shipping,
-                    label: 'My Trips',
-                    color: const Color(0xFF2196F3),
-                    onTap: () => Navigator.pushNamed(context, '/trips'),
-                    isDarkMode: isDarkMode,
-                  ),
-                ),
-              ],
-            ],
-          ),
+          
+          // Modern 2x2 grid layout - no Live Track
+          if (isDriver)
+            _buildDriverQuickActionsGrid(context, isDarkMode)
+          else
+            _buildGuardianQuickActionsGrid(context, isDarkMode),
         ],
+      ),
+    );
+  }
+
+  /// Modern grid layout for driver quick actions (2x2 grid)
+  Widget _buildDriverQuickActionsGrid(BuildContext context, bool isDarkMode) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.add_circle_outline,
+                label: 'Start Trip',
+                subtitle: 'Begin new journey',
+                color: const Color(0xFF6B9B5B),
+                onTap: () => Navigator.pushNamed(context, '/start-trip'),
+                isDarkMode: isDarkMode,
+                isPrimary: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.people_outline,
+                label: 'Students',
+                subtitle: 'View all students',
+                color: const Color(0xFF2196F3),
+                onTap: () => Navigator.pushNamed(context, '/students-list'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.history,
+                label: 'Trip History',
+                subtitle: 'Past journeys',
+                color: const Color(0xFF9C27B0),
+                onTap: () => Navigator.pushNamed(context, '/trips'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.chat_bubble_outline,
+                label: 'Messages',
+                subtitle: 'Chat with guardians',
+                color: const Color(0xFFFF9800),
+                onTap: () => Navigator.pushNamed(context, '/chat'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Modern grid layout for guardian quick actions
+  Widget _buildGuardianQuickActionsGrid(BuildContext context, bool isDarkMode) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.child_care,
+                label: 'My Children',
+                subtitle: 'Manage profiles',
+                color: const Color(0xFFE91E63),
+                onTap: () => Navigator.pushNamed(context, '/manage-children'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.local_shipping,
+                label: 'My Trips',
+                subtitle: 'Track journeys',
+                color: const Color(0xFF6B9B5B),
+                onTap: () => Navigator.pushNamed(context, '/trips'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.route_outlined,
+                label: 'Routes',
+                subtitle: 'View bus routes',
+                color: const Color(0xFF2196F3),
+                onTap: () => Navigator.pushNamed(context, '/routes'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildModernQuickActionCard(
+                icon: Icons.chat_bubble_outline,
+                label: 'Messages',
+                subtitle: 'Chat with driver',
+                color: const Color(0xFFFF9800),
+                onTap: () => Navigator.pushNamed(context, '/chat'),
+                isDarkMode: isDarkMode,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Modern quick action card with subtitle
+  Widget _buildModernQuickActionCard({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDarkMode,
+    bool isPrimary = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: isPrimary
+              ? Border.all(color: color.withAlpha(100), width: 2)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(isDarkMode ? 40 : 15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withAlpha(25),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDarkMode ? Colors.white60 : Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
