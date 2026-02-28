@@ -1178,33 +1178,67 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           Navigator.pop(context);
           _showMessageAllDialog();
         },
+        onUpdateStatus: (studentId, newStatus) {
+          _updateStudentStatus(studentId, newStatus);
+        },
       ),
     );
   }
 
-  /// Show student details dialog
+  /// Show student action dialog - Modern UI with Pick/Absent/Drop actions
   void _showStudentDetails(Map<String, dynamic> student) {
+    final status = student['status'] ?? 'pending';
+    final isPicked = status == 'picked';
+    final isDropped = status == 'dropped';
+    final isAbsent = status == 'absent';
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(student['name'] ?? 'Student'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Status: ${student['status'] ?? 'Pending'}'),
-            if (student['stopName'] != null)
-              Text('Stop: ${student['stopName']}'),
-            if (student['guardianPhone'] != null)
-              Text('Guardian: ${student['guardianPhone']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      builder: (context) => _StudentActionDialog(
+        student: student,
+        isPicked: isPicked,
+        isDropped: isDropped,
+        isAbsent: isAbsent,
+        onPick: () => _updateStudentStatus(student['id'], 'picked'),
+        onAbsent: () => _updateStudentStatus(student['id'], 'absent'),
+        onDrop: () => _updateStudentStatus(student['id'], 'dropped'),
+        onChat: () {
+          Navigator.pop(context);
+          _chatWithGuardian(student);
+        },
+      ),
+    );
+  }
+
+  /// Update student status locally and refresh UI
+  void _updateStudentStatus(String studentId, String newStatus) {
+    setState(() {
+      // Update in preloaded students list
+      for (var student in _preloadedStudents) {
+        if (student['id'] == studentId) {
+          student['status'] = newStatus;
+          break;
+        }
+      }
+      
+      // Recalculate counts
+      _pickedCount = _preloadedStudents.where((s) => s['status'] == 'picked').length;
+    });
+    
+    Navigator.pop(context);
+    
+    // Show confirmation
+    final statusText = newStatus == 'picked' 
+        ? 'Picked up' 
+        : newStatus == 'absent' 
+            ? 'Marked absent' 
+            : 'Dropped off';
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$statusText successfully'),
+        backgroundColor: const Color(0xFF6B9B5B),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -1237,83 +1271,17 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
-  /// Show dialog to send message to all guardians
+  /// Show modern dialog to send message to all guardians
   void _showMessageAllDialog() {
-    final TextEditingController messageController = TextEditingController();
-    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.campaign, color: Color(0xFF6B9B5B)),
-            SizedBox(width: 8),
-            Text('Alert All Guardians'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Send a message to all guardians of students in this trip.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: messageController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Type your alert message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                _quickMessageChip('Running late', messageController),
-                _quickMessageChip('Traffic delay', messageController),
-                _quickMessageChip('Arriving soon', messageController),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              final message = messageController.text.trim();
-              if (message.isNotEmpty) {
-                _sendBulkMessage(message);
-                Navigator.pop(context);
-              }
-            },
-            icon: const Icon(Icons.send),
-            label: const Text('Send'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
+      barrierDismissible: true,
+      builder: (context) => _AlertAllDialog(
+        studentCount: _totalCount,
+        onSend: (message) {
+          _sendBulkMessage(message);
+        },
       ),
-    );
-  }
-
-  Widget _quickMessageChip(String message, TextEditingController controller) {
-    return ActionChip(
-      label: Text(message),
-      onPressed: () => controller.text = message,
-      backgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
-      labelStyle: const TextStyle(color: Color(0xFF6B9B5B)),
     );
   }
 
@@ -1446,6 +1414,7 @@ class _StudentListBottomSheet extends StatelessWidget {
   final Function(Map<String, dynamic>) onStudentTap;
   final Function(Map<String, dynamic>) onChatWithGuardian;
   final VoidCallback onMessageAll;
+  final Function(String, String) onUpdateStatus;
 
   const _StudentListBottomSheet({
     required this.students,
@@ -1454,6 +1423,7 @@ class _StudentListBottomSheet extends StatelessWidget {
     required this.onStudentTap,
     required this.onChatWithGuardian,
     required this.onMessageAll,
+    required this.onUpdateStatus,
   });
 
   @override
@@ -1600,6 +1570,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                       final status = student['status'] ?? 'pending';
                       final isPicked = status == 'picked';
                       final isDropped = status == 'dropped';
+                      final isAbsent = status == 'absent';
+                      final isPending = status == 'pending';
                       
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -1641,36 +1613,55 @@ class _StudentListBottomSheet extends StatelessWidget {
                               color: isDarkMode ? Colors.white60 : Colors.grey[600],
                             ),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (student['guardianPhone'] != null || student['guardianId'] != null)
-                                IconButton(
-                                  onPressed: () => onChatWithGuardian(student),
-                                  icon: const Icon(Icons.chat_bubble_outline),
-                                  color: const Color(0xFF6B9B5B),
+                          trailing: isPending
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Pick button
+                                    _buildMiniActionButton(
+                                      icon: Icons.check,
+                                      color: const Color(0xFF6B9B5B),
+                                      onTap: () => onUpdateStatus(student['id'], 'picked'),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Absent button
+                                    _buildMiniActionButton(
+                                      icon: Icons.person_off,
+                                      color: Colors.orange,
+                                      onTap: () => onUpdateStatus(student['id'], 'absent'),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (student['guardianPhone'] != null || student['guardianId'] != null)
+                                      IconButton(
+                                        onPressed: () => onChatWithGuardian(student),
+                                        icon: const Icon(Icons.chat_bubble_outline),
+                                        color: const Color(0xFF6B9B5B),
+                                      ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isPicked
+                                            ? const Color(0xFF6B9B5B).withValues(alpha: 0.1)
+                                            : isDropped
+                                                ? Colors.blue.withValues(alpha: 0.1)
+                                                : Colors.orange.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        isPicked ? 'Picked' : isDropped ? 'Dropped' : 'Absent',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isPicked ? const Color(0xFF6B9B5B) : isDropped ? Colors.blue : Colors.orange,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isPicked
-                                      ? const Color(0xFF6B9B5B).withValues(alpha: 0.1)
-                                      : isDropped
-                                          ? Colors.blue.withValues(alpha: 0.1)
-                                          : Colors.orange.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  isPicked ? 'Picked' : isDropped ? 'Dropped' : 'Pending',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isPicked ? const Color(0xFF6B9B5B) : isDropped ? Colors.blue : Colors.orange,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       );
                     },
@@ -1678,6 +1669,656 @@ class _StudentListBottomSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+  
+  Widget _buildMiniActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+    );
+  }
+}
+
+/// Modern Student Action Dialog - Shows Pick/Absent/Drop actions
+class _StudentActionDialog extends StatelessWidget {
+  final Map<String, dynamic> student;
+  final bool isPicked;
+  final bool isDropped;
+  final bool isAbsent;
+  final VoidCallback onPick;
+  final VoidCallback onAbsent;
+  final VoidCallback onDrop;
+  final VoidCallback onChat;
+
+  const _StudentActionDialog({
+    required this.student,
+    required this.isPicked,
+    required this.isDropped,
+    required this.isAbsent,
+    required this.onPick,
+    required this.onAbsent,
+    required this.onDrop,
+    required this.onChat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final studentName = student['name'] ?? 'Student';
+    final stopName = student['stopName'] as String?;
+    final guardianPhone = student['guardianPhone'] as String?;
+    final studentClass = student['class'] ?? student['className'] ?? '';
+    
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with avatar
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _getHeaderGradient(),
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Close button
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                  // Avatar
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 3),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _getInitials(studentName),
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    studentName,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (studentClass.isNotEmpty)
+                    Text(
+                      studentClass,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  _buildStatusBadge(),
+                ],
+              ),
+            ),
+            
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Stop info
+                  if (stopName != null)
+                    _buildInfoRow(Icons.location_on_outlined, 'Stop', stopName),
+                  if (guardianPhone != null)
+                    _buildInfoRow(Icons.phone_outlined, 'Guardian', guardianPhone),
+                  const SizedBox(height: 20),
+                  
+                  // Actions
+                  Text(
+                    'Actions',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Action buttons row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildActionButton(
+                          icon: Icons.check_circle,
+                          label: 'Pick',
+                          color: const Color(0xFF6B9B5B),
+                          isActive: isPicked,
+                          onTap: isPicked ? null : onPick,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildActionButton(
+                          icon: Icons.person_off,
+                          label: 'Absent',
+                          color: Colors.orange,
+                          isActive: isAbsent,
+                          onTap: isAbsent ? null : onAbsent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildActionButton(
+                          icon: Icons.logout,
+                          label: 'Drop',
+                          color: Colors.blue,
+                          isActive: isDropped,
+                          onTap: isDropped ? null : onDrop,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Chat button
+                  if (guardianPhone != null)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: onChat,
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        label: const Text('Chat with Guardian'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDarkMode ? const Color(0xFF3C3C3C) : Colors.grey[100],
+                          foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  List<Color> _getHeaderGradient() {
+    if (isPicked) return [const Color(0xFF6B9B5B), const Color(0xFF5A8A4A)];
+    if (isAbsent) return [Colors.orange, Colors.deepOrange];
+    if (isDropped) return [Colors.blue, Colors.blueAccent];
+    return [const Color(0xFF6B9B5B), const Color(0xFF4A7A3A)];
+  }
+  
+  Widget _buildStatusBadge() {
+    String label;
+    Color color;
+    IconData icon;
+    
+    if (isPicked) {
+      label = 'Picked Up';
+      color = Colors.white;
+      icon = Icons.check_circle;
+    } else if (isAbsent) {
+      label = 'Absent';
+      color = Colors.white;
+      icon = Icons.person_off;
+    } else if (isDropped) {
+      label = 'Dropped Off';
+      color = Colors.white;
+      icon = Icons.logout;
+    } else {
+      label = 'Pending Pickup';
+      color = Colors.white;
+      icon = Icons.schedule;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey[500]),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[500],
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isActive,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isActive ? color : color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isActive ? color : color.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: isActive ? Colors.white : color, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  String _getInitials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    if (parts.isNotEmpty && parts[0].isNotEmpty) {
+      return parts[0][0].toUpperCase();
+    }
+    return 'S';
+  }
+}
+
+/// Modern Alert All Guardians Dialog
+class _AlertAllDialog extends StatefulWidget {
+  final int studentCount;
+  final Function(String) onSend;
+
+  const _AlertAllDialog({
+    required this.studentCount,
+    required this.onSend,
+  });
+
+  @override
+  State<_AlertAllDialog> createState() => _AlertAllDialogState();
+}
+
+class _AlertAllDialogState extends State<_AlertAllDialog> {
+  final TextEditingController _messageController = TextEditingController();
+  bool _isSending = false;
+  
+  final List<Map<String, dynamic>> _quickMessages = [
+    {'icon': Icons.schedule, 'text': 'Running late', 'color': Colors.orange},
+    {'icon': Icons.traffic, 'text': 'Traffic delay', 'color': Colors.red},
+    {'icon': Icons.access_time_filled, 'text': 'Arriving soon', 'color': const Color(0xFF6B9B5B)},
+    {'icon': Icons.location_on, 'text': 'At the stop', 'color': Colors.blue},
+  ];
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 600),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with animated icon
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  children: [
+                    // Close button
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close, color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  // Animated broadcast icon
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 3),
+                    ),
+                    child: const Icon(Icons.campaign, color: Colors.white, size: 36),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Alert All Guardians',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Message will be sent to ${widget.studentCount} guardians',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Quick message chips
+                  Text(
+                    'Quick Messages',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _quickMessages.map((msg) {
+                      return GestureDetector(
+                        onTap: () => setState(() => _messageController.text = msg['text']),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: (msg['color'] as Color).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: (msg['color'] as Color).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(msg['icon'] as IconData, size: 16, color: msg['color'] as Color),
+                              const SizedBox(width: 6),
+                              Text(
+                                msg['text'] as String,
+                                style: TextStyle(
+                                  color: msg['color'] as Color,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Message input
+                  Text(
+                    'Custom Message',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _messageController,
+                    maxLines: 3,
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Type your alert message...',
+                      hintStyle: TextStyle(
+                        color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                      ),
+                      filled: true,
+                      fillColor: isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFF6B9B5B), width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.all(16),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Character count
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${_messageController.text.length} chars',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSending || _messageController.text.trim().isEmpty
+                              ? null
+                              : () async {
+                                  setState(() => _isSending = true);
+                                  widget.onSend(_messageController.text.trim());
+                                  await Future.delayed(const Duration(milliseconds: 500));
+                                  if (mounted) Navigator.pop(context);
+                                },
+                          icon: _isSending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.send, size: 18),
+                          label: Text(_isSending ? 'Sending...' : 'Send Alert'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6B9B5B),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
     );
   }
 }

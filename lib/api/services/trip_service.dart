@@ -756,6 +756,61 @@ class TripService {
     }
   }
 
+  /// Get master trips with cache-first pattern
+  /// Shows cached data immediately, then refreshes in background
+  /// Returns cached trips immediately if available, then updates with fresh data via callback
+  Future<List<MasterTrip>> getMasterTripsByDriverCached(
+    String driverId, {
+    required Function(List<MasterTrip>) onRefresh,
+  }) async {
+    final bufferKey = 'master_trips_driver_$driverId';
+    
+    // Try to get cached data first (as List<MasterTrip> since that's what we store)
+    final cachedTrips = await _buffer.getBuffer<List<MasterTrip>>(key: bufferKey);
+    
+    // Fetch fresh data in background
+    Future<void> fetchFresh() async {
+      try {
+        final freshTrips = await getMasterTripsByDriver(driverId);
+        // Save to cache
+        await _buffer.saveBuffer(
+          key: bufferKey,
+          data: freshTrips,
+          expiration: const Duration(minutes: 30),
+        );
+        // Notify with fresh data
+        onRefresh(freshTrips);
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Background refresh failed: $e');
+        }
+      }
+    }
+    
+    // Start background fetch
+    fetchFresh();
+    
+    // Return cached data immediately if available
+    if (cachedTrips != null && cachedTrips.isNotEmpty) {
+      if (kDebugMode) {
+        print('📦 Returning cached trips: ${cachedTrips.length} items');
+      }
+      return cachedTrips;
+    }
+    
+    // No cache, wait for fresh data
+    if (kDebugMode) {
+      print('📡 No cache available, fetching fresh data...');
+    }
+    final trips = await getMasterTripsByDriver(driverId);
+    await _buffer.saveBuffer(
+      key: bufferKey,
+      data: trips,
+      expiration: const Duration(minutes: 30),
+    );
+    return trips;
+  }
+
   /// Fetch complete trip data including students and guardians
   /// This is used to pre-load all data for instant navigation
   /// Returns a map with all trip data for the PreloadedTripData model

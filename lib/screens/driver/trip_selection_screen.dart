@@ -68,9 +68,30 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
 
       debugPrint('🚌 TripSelection: Loading trips for driver ID: $driverId');
 
-      final trips = await _tripService.getMasterTripsByDriver(driverId);
+      // Use cache-first pattern: show cached data immediately, refresh in background
+      final trips = await _tripService.getMasterTripsByDriverCached(
+        driverId,
+        onRefresh: (freshTrips) {
+          // Background refresh callback - update UI with fresh data
+          if (mounted && freshTrips.isNotEmpty) {
+            debugPrint('🔄 TripSelection: Background refresh with ${freshTrips.length} trips');
+            setState(() {
+              _masterTrips = freshTrips;
+            });
+            // Show subtle indicator that data was updated
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Trips updated'),
+                duration: Duration(seconds: 1),
+                behavior: SnackBarBehavior.floating,
+                width: 120,
+              ),
+            );
+          }
+        },
+      );
       
-      debugPrint('🚌 TripSelection: Loaded ${trips.length} trips');
+      debugPrint('🚌 TripSelection: Loaded ${trips.length} trips (from cache or API)');
       
       if (mounted) {
         setState(() {

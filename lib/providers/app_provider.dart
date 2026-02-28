@@ -258,20 +258,40 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   List<api.Bus> _buses = [];
   List<api.Bus> get buses => _buses;
 
-  /// Fetch all buses from API
-  Future<void> fetchBuses() async {
+  /// Fetch all buses from API with cache-first pattern
+  /// Shows cached data immediately, then refreshes in background
+  Future<void> fetchBuses({bool useCache = true}) async {
     _setLoading(true);
     _clearError();
 
     try {
       if (kDebugMode) {
-        print('🚌 AppProvider: Fetching all buses...');
+        print('🚌 AppProvider: Fetching buses (cache-first: $useCache)...');
       }
-      _buses = await _busService.getAllBuses();
+      
+      if (useCache) {
+        // Use cache-first pattern
+        final buses = await _busService.getAllBusesCached(
+          onRefresh: (freshBuses) {
+            // Background refresh callback
+            if (kDebugMode) {
+              print('🔄 AppProvider: Background refresh with ${freshBuses.length} buses');
+            }
+            _buses = freshBuses;
+            notifyListeners();
+          },
+        );
+        _buses = buses;
+        notifyListeners();
+      } else {
+        // Direct API call (no cache)
+        _buses = await _busService.getAllBuses();
+        notifyListeners();
+      }
+      
       if (kDebugMode) {
         print('✅ AppProvider: Fetched ${_buses.length} buses');
       }
-      notifyListeners();
     } on api.NotFoundException catch (e) {
       if (kDebugMode) {
         print('⚠️ AppProvider: Buses endpoint not found (404)');

@@ -74,7 +74,7 @@ class MapSelector extends StatelessWidget {
                   child: Text(
                     MapConfig.hasAccessToken
                         ? 'Mapbox is configured and ready to use.'
-                        : 'Mapbox token not found. Please configure ACCESS_TOKEN.',
+                        : 'Mapbox token not found. Add to .env file or use --dart-define.',
                     style: TextStyle(
                       fontSize: 12,
                       color: MapConfig.hasAccessToken 

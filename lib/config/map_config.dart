@@ -1,13 +1,19 @@
+import '../services/app_config.dart';
+
 /// Map Configuration - Mapbox Only
 /// 
-/// Mapbox Access Token is passed via --dart-define in .vscode/launch.json
-/// ACCESS_TOKEN=pk.eyJ1Ijoic2h1bGVkcml2ZSIsImEiOiJjbWx0azl0c2gwMTBrM2NzaDVmMnV4a2Q2In0.4nKQxxM4e2DcmF110KhyyA
+/// Mapbox Access Token is loaded from multiple sources (priority order):
+/// 1. --dart-define ACCESS_TOKEN=pk.your_token (production builds)
+/// 2. --dart-define MAPBOX_ACCESS_TOKEN=pk.your_token (alternative)
+/// 3. .env file MAPBOX_ACCESS_TOKEN=pk.your_token (development)
+///
+/// Setup:
+/// 1. Copy .env.example to .env and add your token
+/// 2. Or pass via dart-define during build
 class MapConfig {
-  /// Mapbox Access Token from dart-define
-  static const String mapboxAccessToken = String.fromEnvironment(
-    'ACCESS_TOKEN',
-    defaultValue: '',
-  );
+  /// Mapbox Access Token - Now uses AppConfig for flexible configuration
+  /// Priority: dart-define > .env file > empty string
+  static String get mapboxAccessToken => AppConfig().mapboxAccessToken;
 
   /// Check if access token is available
   static bool get hasAccessToken => mapboxAccessToken.isNotEmpty;

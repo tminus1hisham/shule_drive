@@ -120,11 +120,20 @@ class _StartTripScreenState extends State<StartTripScreen>
     final authProvider = context.read<AuthProvider>();
     final tripProvider = context.read<TripProvider>();
 
-    // Fetch active trip for both drivers and guardians
-    final hasPhone =
-        authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
-    final guardianPhone = hasPhone ? authProvider.userPhone : null;
-    await tripProvider.fetchActiveTrip(guardianPhone: guardianPhone);
+    // Fetch active trip - role-specific
+    if (authProvider.isGuardian) {
+      // Guardians: Check if their children are on active trips
+      final hasPhone = authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+      if (hasPhone) {
+        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+      }
+    } else if (authProvider.isDriver) {
+      // Drivers: Skip guardian endpoint - they just selected a trip to start
+      // The active trip check happens via preloaded data or will be created when they start
+      if (kDebugMode) {
+        print('🚀 Driver starting trip - skipping guardian active trip check');
+      }
+    }
 
     // Only drivers need to load routes and buses
     if (authProvider.isDriver) {

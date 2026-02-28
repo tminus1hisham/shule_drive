@@ -154,6 +154,60 @@ class BusService {
     );
   }
 
+  /// Get all buses with cache-first pattern
+  /// Shows cached data immediately, then refreshes in background
+  /// Returns cached buses immediately if available, then updates with fresh data via callback
+  Future<List<Bus>> getAllBusesCached({
+    required Function(List<Bus>) onRefresh,
+  }) async {
+    const bufferKey = BufferKeys.buses;
+    
+    // Try to get cached data first (as List<Bus> since that's what we store)
+    final cachedBuses = await _buffer.getBuffer<List<Bus>>(key: bufferKey);
+    
+    // Fetch fresh data in background
+    Future<void> fetchFresh() async {
+      try {
+        final freshBuses = await getAllBuses();
+        // Save to cache
+        await _buffer.saveBuffer(
+          key: bufferKey,
+          data: freshBuses,
+          expiration: const Duration(minutes: 30),
+        );
+        // Notify with fresh data
+        onRefresh(freshBuses);
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Background bus refresh failed: $e');
+        }
+      }
+    }
+    
+    // Start background fetch
+    fetchFresh();
+    
+    // Return cached data immediately if available
+    if (cachedBuses != null && cachedBuses.isNotEmpty) {
+      if (kDebugMode) {
+        print('📦 Returning cached buses: ${cachedBuses.length} items');
+      }
+      return cachedBuses;
+    }
+    
+    // No cache, wait for fresh data
+    if (kDebugMode) {
+      print('📡 No cache available, fetching fresh bus data...');
+    }
+    final buses = await getAllBuses();
+    await _buffer.saveBuffer(
+      key: bufferKey,
+      data: buses,
+      expiration: const Duration(minutes: 30),
+    );
+    return buses;
+  }
+
   /// Refresh buses cache in background
   Future<void> refreshBusesCache() async {
     await _buffer.refreshBuffer<List<Bus>>(

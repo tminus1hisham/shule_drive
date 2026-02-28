@@ -49,6 +49,7 @@ import 'services/token_storage.dart';
 import 'services/local_database_service.dart';
 import 'services/notification_service.dart';
 import 'services/offline_sync_manager.dart';
+import 'services/app_config.dart';
 import 'widgets/route_guard.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -56,13 +57,17 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // APP ENTRY POINT
 // ============================================================================
 
-void main() {
+Future<void> main() async {
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
   
   // Allow bad SSL certificates for staging environment (avatars, etc.)
   // TODO: Remove this for production builds
   HttpOverrides.global = _DevHttpOverrides();
+  
+  // Initialize AppConfig (loads .env, dart-define, etc.)
+  // This must happen before runApp()
+  await AppConfig().initialize();
   
   // Render a frame immediately with the splash background color
   // This prevents the blank screen between native splash and Flutter UI

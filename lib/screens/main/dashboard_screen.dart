@@ -7,6 +7,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../api/services/trip_service.dart';
+import '../../models/master_trip.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/bus_illustration.dart';
 
@@ -112,11 +113,30 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
       
-      debugPrint('🔍 Calling API: getMasterTripsByDriver($driverId)');
+      debugPrint('🔍 Calling API: getMasterTripsByDriverCached($driverId)');
       
-      final masterTrips = await tripService.getMasterTripsByDriver(driverId);
+      // Use cache-first pattern - shows cached trips immediately while fetching fresh data
+      MasterTrip? firstTrip;
+      final masterTrips = await tripService.getMasterTripsByDriverCached(
+        driverId,
+        onRefresh: (freshTrips) {
+          debugPrint('🔄 Background refresh: ${freshTrips.length} trips');
+          if (freshTrips.isNotEmpty && mounted) {
+            // If fresh data has trips and we're still on dashboard, redirect
+            if (firstTrip == null) {
+              debugPrint('✅ Fresh data available, redirecting to trip selection');
+              Navigator.pushReplacementNamed(context, '/trip-selection');
+            }
+          }
+        },
+      );
       
-      debugPrint('🔍 API returned ${masterTrips.length} master trips');
+      // Save first trip for comparison
+      if (masterTrips.isNotEmpty) {
+        firstTrip = masterTrips.first;
+      }
+      
+      debugPrint('🔍 Loaded ${masterTrips.length} master trips (from cache or API)');
       for (final trip in masterTrips) {
         debugPrint('  - ${trip.tripName} (ID: ${trip.id}, Route: ${trip.route})');
       }
