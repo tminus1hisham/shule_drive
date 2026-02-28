@@ -40,13 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
   //     ctx,
   //     initialProvider: MapProvider.openStreetMap,
   //   );
-  //   
+  //
   //   if (provider == null) return;
   //   if (!mounted) return;
-  //   
+  //
   //   if (provider == MapProvider.google) {
   //     Navigator.pushNamed(
-  //       context, 
+  //       context,
   //       '/live-tracking',
   //       arguments: {
   //         'tripId': 'TRIP_001',
@@ -83,36 +83,36 @@ class _HomeScreenState extends State<HomeScreen> {
         child: CustomScrollView(
           slivers: [
             // Header
-            SliverToBoxAdapter(
-              child: _buildHeader(userData, isDarkMode),
-            ),
-            
+            SliverToBoxAdapter(child: _buildHeader(userData, isDarkMode)),
+
             // Greeting
             SliverToBoxAdapter(
               child: _buildGreeting(userData, isGuardian, isDarkMode),
             ),
-            
+
             // Stats Cards
-            SliverToBoxAdapter(
-              child: _buildStatsRow(provider, isDarkMode),
-            ),
-            
+            SliverToBoxAdapter(child: _buildStatsRow(provider, isDarkMode)),
+
             // Active Trip Card
             SliverToBoxAdapter(
               child: _buildActiveTripCard(context, isDarkMode),
             ),
-            
+
             // Quick Actions
             SliverToBoxAdapter(
-              child: _buildQuickActions(context, isDarkMode, authProvider.isDriver),
+              child: _buildQuickActions(
+                context,
+                isDarkMode,
+                authProvider.isDriver,
+              ),
             ),
-            
+
             // Recent Activity - Only for drivers
             if (authProvider.isDriver)
               SliverToBoxAdapter(
                 child: _buildRecentActivity(context, provider, isDarkMode),
               ),
-            
+
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
         ),
@@ -187,7 +187,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildGreeting(Map<String, dynamic> userData, bool isGuardian, bool isDarkMode) {
+  Widget _buildGreeting(
+    Map<String, dynamic> userData,
+    bool isGuardian,
+    bool isDarkMode,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -197,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isDarkMode 
+              color: isDarkMode
                   ? Colors.white.withValues(alpha: 0.1)
                   : const Color(0xFF2196F3).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
@@ -206,7 +210,9 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  isGuardian ? Icons.family_restroom : Icons.local_shipping_outlined,
+                  isGuardian
+                      ? Icons.family_restroom
+                      : Icons.local_shipping_outlined,
                   size: 14,
                   color: isDarkMode ? Colors.white70 : const Color(0xFF2196F3),
                 ),
@@ -216,7 +222,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white70 : const Color(0xFF2196F3),
+                    color: isDarkMode
+                        ? Colors.white70
+                        : const Color(0xFF2196F3),
                   ),
                 ),
               ],
@@ -234,9 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            isGuardian 
-              ? 'Track your children\'s journey safely.'
-              : 'Ready for today\'s trip?',
+            isGuardian
+                ? 'Track your children\'s journey safely.'
+                : 'Ready for today\'s trip?',
             style: TextStyle(
               fontSize: 16,
               color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
@@ -396,7 +404,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
@@ -463,7 +474,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: LinearProgressIndicator(
                       value: 5 / 18,
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.white,
+                      ),
                       minHeight: 8,
                     ),
                   ),
@@ -474,7 +487,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: _buildActionChip(
                           icon: Icons.people_outline,
                           label: 'Students',
-                          onTap: () => Navigator.pushNamed(context, '/students-list'),
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/students-list'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -528,7 +542,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, bool isDarkMode, bool isDriver) {
+  Widget _buildQuickActions(
+    BuildContext context,
+    bool isDarkMode,
+    bool isDriver,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -543,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Modern 2x2 grid layout - no Live Track
           if (isDriver)
             _buildDriverQuickActionsGrid(context, isDarkMode)
@@ -648,17 +666,6 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Expanded(
               child: _buildModernQuickActionCard(
-                icon: Icons.route_outlined,
-                label: 'Routes',
-                subtitle: 'View bus routes',
-                color: const Color(0xFF2196F3),
-                onTap: () => Navigator.pushNamed(context, '/routes'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildModernQuickActionCard(
                 icon: Icons.chat_bubble_outline,
                 label: 'Messages',
                 subtitle: 'Chat with driver',
@@ -667,6 +674,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 isDarkMode: isDarkMode,
               ),
             ),
+            const SizedBox(width: 12),
+            const Spacer(),
           ],
         ),
       ],
@@ -782,7 +791,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRecentActivity(BuildContext context, AppProvider provider, bool isDarkMode) {
+  Widget _buildRecentActivity(
+    BuildContext context,
+    AppProvider provider,
+    bool isDarkMode,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -875,7 +888,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   '${trip.date} • ${trip.time}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                    color: isDarkMode
+                        ? Colors.white60
+                        : const Color(0xFF666666),
                   ),
                 ),
               ],

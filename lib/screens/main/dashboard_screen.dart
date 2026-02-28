@@ -46,7 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _startPeriodicRefresh();
     // Subscribe to app lifecycle
     WidgetsBinding.instance.addObserver(this);
-    
+
     // Check for master trips if driver - with slight delay to ensure auth is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -60,14 +60,16 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Check if driver has master trips and redirect accordingly
   Future<void> _checkMasterTripsForDriver() async {
     if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
-      debugPrint('🔍 Master trip check already performed or in progress, skipping');
+      debugPrint(
+        '🔍 Master trip check already performed or in progress, skipping',
+      );
       return;
     }
-    
+
     setState(() => _isCheckingMasterTrips = true);
-    
+
     final authProvider = context.read<AuthProvider>();
-    
+
     debugPrint('🔍 =========================================');
     debugPrint('🔍 CHECKING MASTER TRIPS FOR DRIVER');
     debugPrint('🔍 =========================================');
@@ -76,17 +78,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     debugPrint('🔍 User role from data: ${authProvider.userData['role']}');
     debugPrint('🔍 Current user ID: ${authProvider.currentUser?.id}');
     debugPrint('🔍 Current user name: ${authProvider.currentUser?.name}');
-    
+
     // Only check for drivers
     if (!authProvider.isDriver) {
-      debugPrint('🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check');
+      debugPrint(
+        '🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check',
+      );
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
       });
       return;
     }
-    
+
     // Check if there's an active trip - if so, skip master trip check
     final tripProvider = context.read<TripProvider>();
     if (tripProvider.activeTrip != null) {
@@ -97,13 +101,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
       return;
     }
-    
+
     try {
       final tripService = TripService();
       final driverId = authProvider.currentUser?.id;
-      
+
       debugPrint('🔍 Driver ID: $driverId');
-      
+
       if (driverId == null || driverId.isEmpty) {
         debugPrint('❌ Driver ID is null or empty');
         setState(() {
@@ -112,9 +116,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
         return;
       }
-      
+
       debugPrint('🔍 Calling API: getMasterTripsByDriverCached($driverId)');
-      
+
       // Use cache-first pattern - shows cached trips immediately while fetching fresh data
       MasterTrip? firstTrip;
       final masterTrips = await tripService.getMasterTripsByDriverCached(
@@ -124,31 +128,37 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (freshTrips.isNotEmpty && mounted) {
             // If fresh data has trips and we're still on dashboard, redirect
             if (firstTrip == null) {
-              debugPrint('✅ Fresh data available, redirecting to trip selection');
+              debugPrint(
+                '✅ Fresh data available, redirecting to trip selection',
+              );
               Navigator.pushReplacementNamed(context, '/trip-selection');
             }
           }
         },
       );
-      
+
       // Save first trip for comparison
       if (masterTrips.isNotEmpty) {
         firstTrip = masterTrips.first;
       }
-      
-      debugPrint('🔍 Loaded ${masterTrips.length} master trips (from cache or API)');
+
+      debugPrint(
+        '🔍 Loaded ${masterTrips.length} master trips (from cache or API)',
+      );
       for (final trip in masterTrips) {
-        debugPrint('  - ${trip.tripName} (ID: ${trip.id}, Route: ${trip.route})');
+        debugPrint(
+          '  - ${trip.tripName} (ID: ${trip.id}, Route: ${trip.route})',
+        );
       }
-      
+
       if (!mounted) {
         debugPrint('🔍 Widget not mounted');
         return;
       }
-      
+
       if (masterTrips.isNotEmpty) {
         debugPrint('✅ Redirecting to trip selection screen');
-        
+
         // Redirect to trip selection screen
         Navigator.pushReplacementNamed(context, '/trip-selection');
       } else {
@@ -230,7 +240,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       final hasPhone =
           authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
       if (hasPhone) {
-        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+        await tripProvider.fetchActiveTrip(
+          guardianPhone: authProvider.userPhone,
+        );
       }
     }
     // For drivers, we don't fetch active trip on dashboard
@@ -253,7 +265,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       final hasPhone =
           authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
       if (hasPhone) {
-        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+        await tripProvider.fetchActiveTrip(
+          guardianPhone: authProvider.userPhone,
+        );
       }
     }
     // For drivers, skip active trip fetch
@@ -292,68 +306,72 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
 
-              // Main content based on role and trip status
-              if (isDriver)
-                SliverToBoxAdapter(
-                  child: hasActiveTrip
-                      ? _buildDriverActiveTrip(
-                          context,
-                          tripProvider,
-                          isDarkMode,
-                        )
-                      : _buildDriverStartTrip(context, isDarkMode),
-                )
-              else if (isGuardian)
-                SliverToBoxAdapter(
-                  child: hasActiveTrip
-                      ? _buildGuardianActiveTrip(
-                          context,
-                          tripProvider,
-                          isDarkMode,
-                        )
-                      : _buildGuardianIdle(context, isDarkMode),
-                ),
+                  // Main content based on role and trip status
+                  if (isDriver)
+                    SliverToBoxAdapter(
+                      child: hasActiveTrip
+                          ? _buildDriverActiveTrip(
+                              context,
+                              tripProvider,
+                              isDarkMode,
+                            )
+                          : _buildDriverStartTrip(context, isDarkMode),
+                    )
+                  else if (isGuardian)
+                    SliverToBoxAdapter(
+                      child: hasActiveTrip
+                          ? _buildGuardianActiveTrip(
+                              context,
+                              tripProvider,
+                              isDarkMode,
+                            )
+                          : _buildGuardianIdle(context, isDarkMode),
+                    ),
 
-              // Quick actions section
-              SliverToBoxAdapter(
-                child: _buildQuickActions(
-                  context,
-                  isDriver,
-                  hasActiveTrip,
-                  isDarkMode,
-                ),
-              ),
-
-              const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-            ],
-          ),
-        ),
-      ),
-      // Loading overlay when checking master trips
-      if (_isCheckingMasterTrips)
-        Container(
-          color: (isDarkMode ? Colors.black : Colors.white).withValues(alpha: 0.7),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Checking for scheduled trips...',
-                  style: TextStyle(
-                    color: Color(0xFF6B9B5B),
-                    fontWeight: FontWeight.w500,
+                  // Quick actions section
+                  SliverToBoxAdapter(
+                    child: _buildQuickActions(
+                      context,
+                      isDriver,
+                      hasActiveTrip,
+                      isDarkMode,
+                    ),
                   ),
-                ),
-              ],
+
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+                ],
+              ),
             ),
           ),
-        ),
-    ],
-    ),
+          // Loading overlay when checking master trips
+          if (_isCheckingMasterTrips)
+            Container(
+              color: (isDarkMode ? Colors.black : Colors.white).withValues(
+                alpha: 0.7,
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6B9B5B),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Checking for scheduled trips...',
+                      style: TextStyle(
+                        color: Color(0xFF6B9B5B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -403,7 +421,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     child: Icon(
                       Icons.menu,
-                      color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                      color: isDarkMode
+                          ? Colors.white
+                          : const Color(0xFF1A1A1A),
                       size: 24,
                     ),
                   ),
@@ -656,7 +676,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             child: const Column(
                               children: [
-                                Icon(Icons.schedule, color: Colors.white70, size: 20),
+                                Icon(
+                                  Icons.schedule,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
                                 SizedBox(height: 4),
                                 Text(
                                   'On Time',
@@ -675,7 +699,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                         Expanded(
                           flex: 2,
                           child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/start-trip'),
+                            onPressed: () =>
+                                Navigator.pushNamed(context, '/start-trip'),
                             icon: const Icon(Icons.play_arrow_rounded),
                             label: const Text(
                               'Start Trip',
@@ -1049,81 +1074,81 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildLiveStat(
+                        icon: Icons.access_time,
+                        value: '15 min', // TODO: Calculate from trip data
+                        label: 'ETA',
+                      ),
+                      _buildLiveStat(
+                        icon: Icons.speed,
+                        value: '32 km/h',
+                        label: 'Speed',
+                      ),
+                      _buildLiveStat(
+                        icon: Icons.location_on,
+                        value: '2.4 km',
+                        label: 'Distance',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pushNamed(
+                            context,
+                            '/osm-tracking',
+                            arguments: {
+                              'tripId': trip.id,
+                              'busId': trip.vehicleId,
+                              'routeId': trip.routeId,
+                            },
+                          ),
+                          icon: const Icon(Icons.map),
+                          label: const Text('Track'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF6B9B5B),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildLiveStat(
-                      icon: Icons.access_time,
-                      value: '15 min', // TODO: Calculate from trip data
-                      label: 'ETA',
-                    ),
-                    _buildLiveStat(
-                      icon: Icons.speed,
-                      value: '32 km/h',
-                      label: 'Speed',
-                    ),
-                    _buildLiveStat(
-                      icon: Icons.location_on,
-                      value: '2.4 km',
-                      label: 'Distance',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.pushNamed(
-                          context,
-                          '/osm-tracking',
-                          arguments: {
-                            'tripId': trip.id,
-                            'busId': trip.vehicleId,
-                            'routeId': trip.routeId,
-                          },
                         ),
-                        icon: const Icon(Icons.map),
-                        label: const Text('Track'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF6B9B5B),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _openTripChat(context, trip),
+                          icon: const Icon(Icons.chat),
+                          label: const Text('Chat'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withAlpha(30),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _openTripChat(context, trip),
-                        icon: const Icon(Icons.chat),
-                        label: const Text('Chat'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withAlpha(30),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
 
           const SizedBox(height: 20),
@@ -1304,7 +1329,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Modern grid layout for quick actions
           if (isDriver)
             _buildDriverQuickActionsGrid(context, isDarkMode)
@@ -1339,7 +1364,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 label: 'Manage Trips',
                 subtitle: 'View schedules',
                 color: const Color(0xFF2196F3),
-                onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
+                onTap: () =>
+                    Navigator.pushNamed(context, '/manage-master-trips'),
                 isDarkMode: isDarkMode,
               ),
             ),
@@ -1409,17 +1435,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Expanded(
               child: _buildModernQuickActionCard(
-                icon: Icons.route_outlined,
-                label: 'Routes',
-                subtitle: 'View bus routes',
-                color: const Color(0xFF2196F3),
-                onTap: () => Navigator.pushNamed(context, '/routes'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildModernQuickActionCard(
                 icon: Icons.chat_bubble_outline,
                 label: 'Messages',
                 subtitle: 'Chat with driver',
@@ -1428,6 +1443,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 isDarkMode: isDarkMode,
               ),
             ),
+            const SizedBox(width: 12),
+            const Spacer(),
           ],
         ),
       ],

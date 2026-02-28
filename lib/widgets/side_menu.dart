@@ -26,13 +26,13 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(-0.3, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(-0.3, 0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _animationController.forward();
   }
 
@@ -87,12 +87,13 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                       ),
 
                       // Manage Trips - For admins/drivers to create/edit trips
-                      _buildMenuItem(
-                        Icons.edit_note,
-                        'Manage Trips',
-                        () => _navigateTo(context, '/manage-master-trips'),
-                        isDarkMode: isDarkMode,
-                      ),
+                      if (isDriver)
+                        _buildMenuItem(
+                          Icons.edit_note,
+                          'Manage Trips',
+                          () => _navigateTo(context, '/manage-master-trips'),
+                          isDarkMode: isDarkMode,
+                        ),
 
                       // About Us
                       _buildMenuItem(
@@ -198,10 +199,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeOutBack,
       builder: (context, value, child) {
-        return Transform.scale(
-          scale: 0.95 + (0.05 * value),
-          child: child,
-        );
+        return Transform.scale(scale: 0.95 + (0.05 * value), child: child);
       },
       child: GestureDetector(
         onTap: onTap,
@@ -224,11 +222,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: const Color(0xFF6B9B5B),
-                  size: 20,
-                ),
+                child: Icon(icon, color: const Color(0xFF6B9B5B), size: 20),
               ),
               const SizedBox(width: 16),
               Text(
@@ -287,16 +281,20 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
 
   Widget _buildThemeToggle(AppProvider provider, bool isDarkMode) {
     final isSystemDefault = provider.manualDarkMode == null;
-    
+
     // Determine display label and icon
     final String themeLabel;
     final IconData themeIcon;
     if (isSystemDefault) {
       themeLabel = 'System (${isDarkMode ? 'Dark' : 'Light'})';
-      themeIcon = isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined;
+      themeIcon = isDarkMode
+          ? Icons.dark_mode_outlined
+          : Icons.light_mode_outlined;
     } else {
       themeLabel = isDarkMode ? 'Dark Mode' : 'Light Mode';
-      themeIcon = isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined;
+      themeIcon = isDarkMode
+          ? Icons.dark_mode_outlined
+          : Icons.light_mode_outlined;
     }
 
     return Container(
@@ -327,7 +325,9 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   themeLabel,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDarkMode ? Colors.white54 : const Color(0xFF999999),
+                    color: isDarkMode
+                        ? Colors.white54
+                        : const Color(0xFF999999),
                   ),
                 ),
               ],
@@ -368,9 +368,13 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   Icon(
                     isDarkMode ? Icons.nights_stay : Icons.wb_sunny,
                     size: 16,
-                    color: isDarkMode 
-                        ? (isSystemDefault ? Colors.white70 : const Color(0xFF6B9B5B))
-                        : (isSystemDefault ? const Color(0xFF666666) : const Color(0xFF6B9B5B)),
+                    color: isDarkMode
+                        ? (isSystemDefault
+                              ? Colors.white70
+                              : const Color(0xFF6B9B5B))
+                        : (isSystemDefault
+                              ? const Color(0xFF666666)
+                              : const Color(0xFF6B9B5B)),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -378,9 +382,13 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isDarkMode 
-                          ? (isSystemDefault ? Colors.white70 : const Color(0xFF6B9B5B))
-                          : (isSystemDefault ? const Color(0xFF666666) : const Color(0xFF6B9B5B)),
+                      color: isDarkMode
+                          ? (isSystemDefault
+                                ? Colors.white70
+                                : const Color(0xFF6B9B5B))
+                          : (isSystemDefault
+                                ? const Color(0xFF666666)
+                                : const Color(0xFF6B9B5B)),
                     ),
                   ),
                 ],
@@ -426,10 +434,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
           duration: Duration(milliseconds: 400 + (index * 100)),
           curve: Curves.easeOutBack,
           builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: child,
-            );
+            return Transform.scale(scale: value, child: child);
           },
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -445,11 +450,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(50),
                   ),
-                  child: Icon(
-                    link.icon,
-                    color: link.color,
-                    size: 20,
-                  ),
+                  child: Icon(link.icon, color: link.color, size: 20),
                 ),
               ),
             ),
@@ -467,10 +468,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
         builder: (context, value, child) {
-          return Transform.scale(
-            scale: value,
-            child: child,
-          );
+          return Transform.scale(scale: value, child: child);
         },
         child: GestureDetector(
           onTap: () => _showLogoutConfirmation(context),
@@ -479,10 +477,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               color: const Color(0xFFFFEBEE),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: const Color(0xFFFFCDD2),
-                width: 1,
-              ),
+              border: Border.all(color: const Color(0xFFFFCDD2), width: 1),
             ),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -574,9 +569,5 @@ class _SocialLink {
   final Color color;
   final String url;
 
-  _SocialLink({
-    required this.icon,
-    required this.color,
-    required this.url,
-  });
+  _SocialLink({required this.icon, required this.color, required this.url});
 }
