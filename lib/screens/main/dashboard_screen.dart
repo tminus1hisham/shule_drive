@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart';
 import '../../providers/app_provider.dart';
@@ -32,6 +33,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Timer for periodic refresh
   Timer? _refreshTimer;
 
+  // Trip duration timer
+  Timer? _durationTimer;
+  Duration _tripDuration = Duration.zero;
+
+  // Next scheduled master trip (for idle dashboard)
+  MasterTrip? _nextMasterTrip;
+
   // Refresh interval (30 seconds)
   static const Duration _refreshInterval = Duration(seconds: 30);
 
@@ -39,9 +47,29 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _hasCheckedMasterTrips = false;
   bool _isCheckingMasterTrips = false;
 
+  // Flag: came from trip end (skip auto-redirect to trip selection)
+  bool _fromTripEnd = false;
+
+  // Upcoming trip prompt
+  Timer? _upcomingTripTimer;
+  final Set<int> _promptedTripIds = {};
+  bool _isShowingUpcomingPrompt = false;
+
   @override
   void initState() {
     super.initState();
+
+    // Check if we arrived from trip end
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map && args['fromTripEnd'] == true) {
+        _fromTripEnd = true;
+        debugPrint(
+          '📍 Dashboard: Arrived from trip end, skipping auto-redirect',
+        );
+      }
+    });
+
     _loadData();
     _startPeriodicRefresh();
     // Subscribe to app lifecycle
@@ -52,6 +80,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           _checkMasterTripsForDriver();
+          // Start upcoming trip checker
+          _startUpcomingTripChecker();
         }
       });
     });
@@ -156,13 +186,17 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
 
-      if (masterTrips.isNotEmpty) {
+      if (masterTrips.isNotEmpty && !_fromTripEnd) {
         debugPrint('✅ Redirecting to trip selection screen');
 
         // Redirect to trip selection screen
         Navigator.pushReplacementNamed(context, '/trip-selection');
       } else {
-        debugPrint('ℹ️ No master trips found');
+        if (_fromTripEnd) {
+          debugPrint('📍 Skipping auto-redirect (came from trip end)');
+        } else {
+          debugPrint('ℹ️ No master trips found');
+        }
         setState(() {
           _hasCheckedMasterTrips = true;
           _isCheckingMasterTrips = false;
@@ -185,10 +219,343 @@ class _DashboardScreenState extends State<DashboardScreen>
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
+  // ==================== UPCOMING TRIP PROMPT ====================
+
+  /// Start periodic check for upcoming trips (every 30 seconds)
+  void _startUpcomingTripChecker() {
+    final authProvider = context.read<AuthProvider>();
+    if (!authProvider.isDriver) return;
+
+    // Check immediately
+    _checkUpcomingTrips();
+
+    // Then check every 30 seconds
+    _upcomingTripTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _checkUpcomingTrips(),
+    );
+  }
+
+  /// Check if any master trip is starting within the next 5 minutes
+  Future<void> _checkUpcomingTrips() async {
+    if (!mounted || _isShowingUpcomingPrompt) return;
+
+    final authProvider = context.read<AuthProvider>();
+    if (!authProvider.isDriver) return;
+
+    final driverId = authProvider.currentUser?.id;
+    if (driverId == null || driverId.isEmpty) return;
+
+    try {
+      final tripService = TripService();
+      final masterTrips = await tripService.getMasterTripsByDriverCached(
+        driverId,
+        onRefresh: (_) {},
+      );
+
+      final now = DateTime.now();
+
+      for (final trip in masterTrips) {
+        // Skip already-prompted trips
+        if (_promptedTripIds.contains(trip.id)) continue;
+
+        final tripDateTime = _parseTripTime(trip.tripTime);
+        if (tripDateTime == null) continue;
+
+        final diff = tripDateTime.difference(now);
+
+        // Trip starts within 5 minutes (but not in the past by more than 2 min)
+        if (diff.inMinutes <= 5 && diff.inMinutes >= -2) {
+          _promptedTripIds.add(trip.id);
+          if (mounted) {
+            _showUpcomingTripPrompt(trip, tripDateTime);
+          }
+          break; // Only show one prompt at a time
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Upcoming trip check error: $e');
+    }
+  }
+
+  /// Parse tripTime string (e.g. "07:30 AM") to DateTime for today
+  DateTime? _parseTripTime(String tripTime) {
+    try {
+      final cleaned = tripTime.trim().toUpperCase();
+      final isPM = cleaned.contains('PM');
+      final isAM = cleaned.contains('AM');
+      final timePart = cleaned.replaceAll(RegExp(r'[APM\s]'), '').trim();
+      final parts = timePart.split(':');
+
+      if (parts.length < 2) return null;
+
+      var hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+
+      if (isPM && hour != 12) hour += 12;
+      if (isAM && hour == 12) hour = 0;
+
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day, hour, minute);
+    } catch (e) {
+      debugPrint('⚠️ Failed to parse trip time "$tripTime": $e');
+      return null;
+    }
+  }
+
+  /// Show a premium bottom sheet prompting the driver to start an upcoming trip
+  void _showUpcomingTripPrompt(MasterTrip trip, DateTime scheduledTime) {
+    if (!mounted) return;
+    _isShowingUpcomingPrompt = true;
+
+    final now = DateTime.now();
+    final diff = scheduledTime.difference(now);
+    final minutesAway = diff.inMinutes;
+    final isDark = context.read<AppProvider>().isDarkMode;
+
+    HapticFeedback.mediumImpact();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (ctx) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6B9B5B).withAlpha(40),
+                blurRadius: 30,
+                offset: const Offset(0, -10),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Pulsing icon
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.8, end: 1.0),
+                  duration: const Duration(milliseconds: 1000),
+                  curve: Curves.easeInOut,
+                  builder: (context, value, child) {
+                    return Transform.scale(scale: value, child: child);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6B9B5B).withAlpha(80),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.access_time_filled,
+                      color: Colors.white,
+                      size: 36,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Title
+                Text(
+                  minutesAway > 0
+                      ? 'Trip starting in $minutesAway min'
+                      : 'Trip starting now!',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Trip details
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withAlpha(10)
+                        : const Color(0xFFF8F9FA),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6B9B5B).withAlpha(20),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.directions_bus,
+                          color: Color(0xFF6B9B5B),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              trip.tripName,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${trip.route} • ${trip.tripTime}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? Colors.white60
+                                    : Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Start Now button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _isShowingUpcomingPrompt = false;
+                      // Navigate to trip selection with pre-selected trip
+                      Navigator.pushNamed(
+                        context,
+                        '/trip-selection',
+                        arguments: {'autoSelectTripId': trip.id},
+                      );
+                    },
+                    icon: const Icon(Icons.play_arrow_rounded, size: 26),
+                    label: const Text(
+                      'Start Now',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6B9B5B),
+                      foregroundColor: Colors.white,
+                      elevation: 4,
+                      shadowColor: const Color(0xFF6B9B5B).withAlpha(100),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // View All Trips button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _isShowingUpcomingPrompt = false;
+                      Navigator.pushNamed(context, '/trip-selection');
+                    },
+                    icon: const Icon(Icons.list_alt, size: 20),
+                    label: const Text(
+                      'View All Trips',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF6B9B5B),
+                      side: const BorderSide(
+                        color: Color(0xFF6B9B5B),
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Dismiss
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _isShowingUpcomingPrompt = false;
+                  },
+                  child: Text(
+                    'Dismiss',
+                    style: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.grey.shade500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() {
+      _isShowingUpcomingPrompt = false;
+    });
+  }
+
   @override
   void dispose() {
-    // Stop timer and unsubscribe
+    // Stop timers and unsubscribe
     _refreshTimer?.cancel();
+    _durationTimer?.cancel();
+    _upcomingTripTimer?.cancel();
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -245,8 +612,65 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
       }
     }
-    // For drivers, we don't fetch active trip on dashboard
-    // They use the StartTripScreen to see/manage their active trip
+
+    // For drivers: start duration timer if active trip, load next scheduled trip
+    if (authProvider.isDriver) {
+      if (tripProvider.activeTrip != null) {
+        _startDurationTimer(tripProvider);
+      }
+      _loadNextScheduledTrip(authProvider);
+    }
+  }
+
+  /// Start a timer that ticks every second to update trip duration
+  void _startDurationTimer(TripProvider tripProvider) {
+    _durationTimer?.cancel();
+    final activeTrip = tripProvider.activeTrip;
+    if (activeTrip == null) return;
+
+    // Calculate initial duration from trip start
+    _tripDuration = DateTime.now().difference(activeTrip.startTime);
+
+    _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _tripDuration += const Duration(seconds: 1);
+        });
+      }
+    });
+  }
+
+  /// Load next scheduled master trip for the idle dashboard
+  Future<void> _loadNextScheduledTrip(AuthProvider authProvider) async {
+    try {
+      final driverId = authProvider.currentUser?.id;
+      if (driverId == null || driverId.isEmpty) return;
+
+      final tripService = TripService();
+      final trips = await tripService.getMasterTripsByDriverCached(
+        driverId,
+        onRefresh: (_) {},
+      );
+
+      if (mounted && trips.isNotEmpty) {
+        setState(() {
+          _nextMasterTrip = trips.first;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('Failed to load next trip: $e');
+    }
+  }
+
+  /// Format duration as HH:MM or MM:SS
+  String _formatDuration(Duration d) {
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Future<void> _refresh() async {
@@ -664,63 +1088,79 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        // Quick stats
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withAlpha(25),
-                              borderRadius: BorderRadius.circular(12),
+                    // Next scheduled trip info or Start button
+                    if (_nextMasterTrip != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(20),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.schedule,
+                              color: Colors.white70,
+                              size: 18,
                             ),
-                            child: const Column(
-                              children: [
-                                Icon(
-                                  Icons.schedule,
-                                  color: Colors.white70,
-                                  size: 20,
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'On Time',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Next: ${_nextMasterTrip!.tripName}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Start button
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: () =>
-                                Navigator.pushNamed(context, '/start-trip'),
-                            icon: const Icon(Icons.play_arrow_rounded),
-                            label: const Text(
-                              'Start Trip',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                                  Text(
+                                    '${_nextMasterTrip!.route} • ${_nextMasterTrip!.tripTime}',
+                                    style: TextStyle(
+                                      color: Colors.white.withAlpha(180),
+                                      fontSize: 11,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF6B9B5B),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
-                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/start-trip'),
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text(
+                          'Start Trip',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF6B9B5B),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -741,6 +1181,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     final pickedCount = trip.students.where((s) => s.status == 'picked').length;
     final totalCount = trip.students.length;
     final progress = totalCount > 0 ? pickedCount / totalCount : 0.0;
+
+    // Ensure duration timer is running
+    if (_durationTimer == null || !_durationTimer!.isActive) {
+      _startDurationTimer(tripProvider);
+    }
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -788,12 +1233,25 @@ class _DashboardScreenState extends State<DashboardScreen>
                               color: isDarkMode ? Colors.white : Colors.black,
                             ),
                           ),
-                          Text(
-                            'Trip #${trip.id}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDarkMode ? Colors.white60 : Colors.grey,
-                            ),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.timer_outlined,
+                                size: 14,
+                                color: isDarkMode
+                                    ? Colors.white60
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _formatDuration(_tripDuration),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF6B9B5B),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -832,7 +1290,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
                     value: progress,
-                    backgroundColor: Colors.grey.shade200,
+                    backgroundColor: isDarkMode
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade200,
                     valueColor: const AlwaysStoppedAnimation(Color(0xFF6B9B5B)),
                     minHeight: 10,
                   ),
@@ -861,31 +1321,72 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 const SizedBox(height: 20),
 
-                // Action buttons
+                // PRIMARY: Resume live map button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      Navigator.pushNamed(context, '/active-trip');
+                    },
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text(
+                      'View Live Map',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6B9B5B),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // SECONDARY: Students + End trip row
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: OutlinedButton.icon(
                         onPressed: () =>
                             Navigator.pushNamed(context, '/students-list'),
-                        icon: const Icon(Icons.people_outline),
-                        label: const Text('View Students'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6B9B5B),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        icon: Icon(
+                          Icons.people_outline,
+                          size: 20,
+                          color: isDarkMode ? Colors.white70 : Colors.black87,
+                        ),
+                        label: Text(
+                          'Students',
+                          style: TextStyle(
+                            color: isDarkMode ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: isDarkMode
+                                ? Colors.white24
+                                : Colors.grey.shade300,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _showEndTripDialog(context),
                         icon: const Icon(
                           Icons.stop_circle_outlined,
+                          size: 20,
                           color: Colors.red,
                         ),
                         label: const Text(
@@ -894,7 +1395,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -1545,7 +2046,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _endTrip() async {
     final tripProvider = context.read<TripProvider>();
     // TODO: Implement actual end trip API call
-    await tripProvider.fetchActiveTrip(); // Refresh to update status
+    // Note: Don't call fetchActiveTrip() - that's the guardian endpoint
   }
 
   void _openTripChat(BuildContext context, Trip trip) {

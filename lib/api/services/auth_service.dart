@@ -125,10 +125,10 @@ class AuthService {
   }
 
   /// Logout
-  /// POST /api/auth/logout
+  /// Clears local auth token (no API endpoint exists on backend currently)
   Future<void> logout() async {
     try {
-      await _apiClient.post(Endpoints.logout);
+      // await _apiClient.post(Endpoints.logout); // Endpoint does not exist
       await _apiClient.clearAuthToken();
     } on ApiException {
       rethrow;
@@ -350,7 +350,7 @@ class AuthService {
       final file = File(imagePath);
       final bytes = await file.readAsBytes();
       final base64Image = base64Encode(bytes);
-      
+
       if (kDebugMode) {
         print('  File size: ${bytes.length} bytes');
         print('  Base64 length: ${base64Image.length}');
@@ -364,26 +364,23 @@ class AuthService {
           print('📤 Trying endpoint: ${Endpoints.uploadAvatar}');
           print('📤 UserId: $userId');
         }
-        
+
         response = await _apiClient.post(
           Endpoints.uploadAvatar,
-          body: {
-            'userId': userId,
-            'image': base64Image,
-          },
+          body: {'userId': userId, 'image': base64Image},
         );
       } on ApiException catch (e) {
         // If uploadAvatar fails, try updateProfilePicture endpoint
         if (kDebugMode) {
           print('⚠️ uploadAvatar failed: ${e.message}');
-          print('📤 Falling back to endpoint: ${Endpoints.updateProfilePicture}');
+          print(
+            '📤 Falling back to endpoint: ${Endpoints.updateProfilePicture}',
+          );
         }
-        
+
         response = await _apiClient.post(
           Endpoints.updateProfilePicture,
-          body: {
-            'image': base64Image,
-          },
+          body: {'image': base64Image},
         );
       }
 
@@ -393,16 +390,16 @@ class AuthService {
 
       // Handle various response formats
       String? imageUrl;
-      
+
       // Case 1: Response is a direct string URL
       if (response is String && response.isNotEmpty) {
         imageUrl = response;
         if (kDebugMode) print('🖼️ Response is direct string URL');
-      } 
+      }
       // Case 2: Response is a map with data
       else if (response is Map) {
         final data = response['data'] ?? response;
-        
+
         if (data is String && data.isNotEmpty) {
           imageUrl = data;
           if (kDebugMode) print('🖼️ Response data is string URL');
@@ -475,12 +472,16 @@ class ChangePasswordResponse {
     // 2. Success message in response
     // 3. No errors present
     final message = json['message'] ?? json['msg'];
-    final hasSuccessMessage = message != null && 
-        message.toString().toLowerCase().contains('success');
-    final hasErrors = json['errors'] != null && (json['errors'] as List).isNotEmpty;
-    
+    final hasSuccessMessage =
+        message != null && message.toString().toLowerCase().contains('success');
+    final hasErrors =
+        json['errors'] != null && (json['errors'] as List).isNotEmpty;
+
     return ChangePasswordResponse(
-      success: json['success'] ?? json['isSuccess'] ?? hasSuccessMessage || !hasErrors,
+      success:
+          json['success'] ??
+          json['isSuccess'] ??
+          hasSuccessMessage || !hasErrors,
       message: message,
       errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
     );
@@ -574,10 +575,20 @@ class LoginResponse {
         role: extractedRole ?? 'unknown',
         licenseNumber: json['licenseImage'] ?? json['license_number'],
         vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
-        schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'] ?? json['schoolID'],
-        schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'] ?? json['school'],
+        schoolId:
+            json['school_id'] ??
+            json['schoolId'] ??
+            json['companyOrgId'] ??
+            json['schoolID'],
+        schoolName:
+            json['school_name'] ??
+            json['schoolName'] ??
+            json['companyOrgName'] ??
+            json['school'],
       );
-      debugPrint('Created user with role: ${user.role}, school: ${user.schoolId}');
+      debugPrint(
+        'Created user with role: ${user.role}, school: ${user.schoolId}',
+      );
     }
 
     return LoginResponse(
@@ -746,8 +757,16 @@ class User {
       role: role,
       licenseNumber: json['licenseImage'] ?? json['license_number'],
       vehicleNumber: json['vehicleNumber'] ?? json['vehicle_number'],
-      schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'] ?? json['schoolID'],
-      schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'] ?? json['school'],
+      schoolId:
+          json['school_id'] ??
+          json['schoolId'] ??
+          json['companyOrgId'] ??
+          json['schoolID'],
+      schoolName:
+          json['school_name'] ??
+          json['schoolName'] ??
+          json['companyOrgName'] ??
+          json['school'],
     );
   }
 

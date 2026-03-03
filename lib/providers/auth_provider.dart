@@ -5,6 +5,7 @@ import '../api/services/auth_service.dart';
 import '../api/services/user_service.dart';
 import '../api/services/bus_service.dart';
 import '../services/token_storage.dart';
+import '../utils/buffer_manager.dart';
 
 /// User Roles
 enum UserRole {
@@ -57,7 +58,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-  
+
   // Tracks if initialize() has been called (prevents redundant calls)
   bool _initialized = false;
 
@@ -100,7 +101,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> initialize() async {
     // Skip if already initialized (prevents redundant calls from splash + AuthWrapper)
     if (_initialized) return;
-    
+
     _setLoading(true);
     try {
       // Fast check - just verify token exists locally (no API call)
@@ -132,7 +133,7 @@ class AuthProvider extends ChangeNotifier {
           schoolId: cachedUser['schoolId'] ?? '',
           schoolName: cachedUser['schoolName'] ?? '',
         );
-        
+
         if (kDebugMode) {
           print('  schoolId from cache: "${cachedUser['schoolId']}"');
           print('  schoolName from cache: "${cachedUser['schoolName']}"');
@@ -168,7 +169,7 @@ class AuthProvider extends ChangeNotifier {
       if (user != null) {
         String? schoolId = user.schoolId;
         String? schoolName = user.schoolName;
-        
+
         // For drivers, fetch school ID from bus endpoint if not available
         // The driver's assigned bus contains companyOrgId which is the school ID
         final isDriverRole = UserRole.fromString(user.role) == UserRole.driver;
@@ -184,7 +185,7 @@ class AuthProvider extends ChangeNotifier {
             }
           }
         }
-        
+
         // Update user with school info
         user = api.User(
           id: user.id,
@@ -198,7 +199,7 @@ class AuthProvider extends ChangeNotifier {
           schoolId: schoolId,
           schoolName: schoolName,
         );
-        
+
         // Only update if different from cached data
         if (_currentUser?.id != user.id ||
             _currentUser?.name != user.name ||
@@ -210,7 +211,7 @@ class AuthProvider extends ChangeNotifier {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             notifyListeners();
           });
-          
+
           // Update cached data with new school info
           await _tokenStorage.saveUserData(
             userId: user.id,
@@ -242,31 +243,31 @@ class AuthProvider extends ChangeNotifier {
       if (kDebugMode) {
         print('🔄 Refreshing user data...');
       }
-      
+
       var user = await _authService.getCurrentUser();
       if (user != null) {
         String? schoolId = user.schoolId;
         String? schoolName = user.schoolName;
-        
+
         // For drivers, fetch school ID from bus endpoint if not available
         // The driver's assigned bus contains companyOrgId which is the school ID
         if (isDriver && (schoolId == null || schoolId.isEmpty)) {
           if (kDebugMode) {
             print('🚗 Driver detected, fetching bus details...');
           }
-          
+
           final busService = BusService();
           final buses = await busService.getBusesByUser();
           if (buses.isNotEmpty) {
             schoolId = buses.first.schoolId;
-            
+
             if (kDebugMode) {
               print('🚌 Found driver bus: ${buses.first.registrationNumber}');
               print('✅ School ID from bus: $schoolId');
             }
           }
         }
-        
+
         // Update user with school info
         user = api.User(
           id: user.id,
@@ -280,10 +281,10 @@ class AuthProvider extends ChangeNotifier {
           schoolId: schoolId,
           schoolName: schoolName,
         );
-        
+
         _currentUser = user;
         _userRole = UserRole.fromString(user.role);
-        
+
         // Save updated data to storage
         await _tokenStorage.saveUserData(
           userId: user.id,
@@ -295,9 +296,9 @@ class AuthProvider extends ChangeNotifier {
           schoolId: schoolId,
           schoolName: schoolName,
         );
-        
+
         notifyListeners();
-        
+
         if (kDebugMode) {
           print('✅ User data refreshed. School ID: $schoolId');
         }
@@ -339,9 +340,11 @@ class AuthProvider extends ChangeNotifier {
             schoolId: response.user!.schoolId,
             schoolName: response.user!.schoolName,
           );
-          
+
           if (kDebugMode) {
-            print('💾 Saved user data with schoolId: ${response.user!.schoolId}');
+            print(
+              '💾 Saved user data with schoolId: ${response.user!.schoolId}',
+            );
           }
         }
 
@@ -433,7 +436,10 @@ class AuthProvider extends ChangeNotifier {
     // 2. Clear from TokenStorage (persistent storage)
     await _tokenStorage.clearAll();
 
-    // 3. Reset all local state
+    // 3. Clear buffers
+    await BufferManager().clearAllBuffers();
+
+    // 4. Reset all local state
     _currentUser = null;
     _userRole = UserRole.unknown;
     _isAuthenticated = false;
@@ -701,7 +707,7 @@ class AuthProvider extends ChangeNotifier {
   Future<String?> updateUserAvatar(String imagePath) async {
     debugPrint('🔄 AuthProvider.updateUserAvatar called');
     debugPrint('   Image path: $imagePath');
-    
+
     if (_currentUser == null) {
       debugPrint('   ERROR: _currentUser is null');
       return null;

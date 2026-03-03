@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' show sin, cos, sqrt, atan2, pi;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart' as geolocator;
 import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import 'package:latlong2/latlong.dart' as latlong2;
@@ -33,7 +35,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   final MapController _mapController = MapController();
   final NotificationService _notificationService = NotificationService();
   final MqttService _mqttService = MqttService();
-  
+
   // State
   BusLocation? _currentLocation;
   List<RouteStop> _stops = [];
@@ -45,23 +47,23 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   int _pickedCount = 0;
   int _totalCount = 0;
   bool _hasLocationPermission = false;
-  
+
   // Trip data
   api.Trip? _activeTrip;
   String? _tripId;
   String? _busPlate;
-  
+
   // Stream subscriptions
   StreamSubscription<geolocator.Position>? _locationSubscription;
   Timer? _refreshTimer;
-  
+
   // Geofence tracking - stores stop IDs that have shown pickup dialog
   final Set<String> _processedStops = {};
   bool _isShowingPickupDialog = false;
-  
+
   // ETA notification tracking - stores stop IDs that have had 2-min ETA notification sent
   final Set<String> _etaNotifiedStops = {};
-  
+
   // Preloaded trip data
   List<Map<String, dynamic>> _preloadedStudents = [];
 
@@ -82,13 +84,14 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   Future<void> _initializeTrip() async {
     setState(() => _isLoading = true);
-    
+
     // Get trip ID from route arguments (can be int or String)
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final dynamic rawTripId = args?['tripId'];
     _tripId = rawTripId?.toString();
     _busPlate = args?['busPlate'] as String? ?? 'BUS001';
-    
+
     // Parse preloaded students from Map
     final preloadedDataMap = args?['preloadedData'] as Map<String, dynamic>?;
     if (preloadedDataMap != null) {
@@ -96,9 +99,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         final preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
         _preloadedStudents = _convertTripStudentsToMap(preloadedData.students);
         _totalCount = _preloadedStudents.length;
-        _pickedCount = _preloadedStudents.where((s) => s['status'] == 'picked').length;
+        _pickedCount = _preloadedStudents
+            .where((s) => s['status'] == 'picked')
+            .length;
         if (kDebugMode) {
-          print('🚌 ActiveTripScreen: Loaded ${_preloadedStudents.length} preloaded students');
+          print(
+            '🚌 ActiveTripScreen: Loaded ${_preloadedStudents.length} preloaded students',
+          );
         }
       } catch (e) {
         if (kDebugMode) {
@@ -106,20 +113,20 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         }
       }
     }
-    
+
     if (kDebugMode) {
       print('🚌 ActiveTripScreen: Initializing with tripId: $_tripId');
     }
-    
+
     // Load active trip data
     await _loadActiveTrip();
-    
+
     // Initialize location tracking
     await _initializeLocationTracking();
-    
+
     // Start periodic refresh
     _startPeriodicRefresh();
-    
+
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -128,7 +135,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _loadActiveTrip() async {
     try {
       final tripProvider = context.read<TripProvider>();
-      
+
       // If we have a trip ID, try to get trip details
       if (_tripId != null) {
         // Get from existing trips
@@ -138,16 +145,16 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           _activeTrip = null;
         }
       }
-      
+
       // Fallback to active trip from provider
       _activeTrip ??= tripProvider.activeTrip;
-      
+
       if (_activeTrip != null) {
         setState(() {
           _totalCount = _activeTrip!.students.length;
           _pickedCount = _activeTrip!.pickedCount;
         });
-        
+
         if (kDebugMode) {
           print('🚌 Active trip loaded: ${_activeTrip!.routeName}');
           print('   Students: $_pickedCount/$_totalCount picked');
@@ -167,13 +174,16 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         return RouteStop(
           id: stop.id,
           name: stop.name,
-          position: LatLng(stop.latitude ?? 0.0, stop.longitude ?? 0.0),  // Uses google_maps_flutter LatLng
+          position: LatLng(
+            stop.latitude ?? 0.0,
+            stop.longitude ?? 0.0,
+          ), // Uses google_maps_flutter LatLng
           address: stop.address,
           order: stop.order,
           type: stop.type == 'dropoff' ? StopType.dropoff : StopType.pickup,
         );
       }).toList();
-      
+
       if (kDebugMode) {
         print('🚌 Using actual trip stops: ${_stops.length} stops');
       }
@@ -184,26 +194,32 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         print('🚌 No stops available for this trip');
       }
     }
-    
+
     // Request location permission and start tracking
     await _checkLocationPermission();
-    
+
     if (_hasLocationPermission) {
       await _startRealTimeTracking();
     }
-    
+
     // Fetch route from Mapbox
     await _fetchRouteFromMapbox();
-    
+
     // Center map on first stop or default location
     if (_stops.isNotEmpty) {
       _mapController.move(
-        latlong2.LatLng(_stops.first.position.latitude, _stops.first.position.longitude),
+        latlong2.LatLng(
+          _stops.first.position.latitude,
+          _stops.first.position.longitude,
+        ),
         13,
       );
     } else {
       _mapController.move(
-        const latlong2.LatLng(MapConfig.defaultLatitude, MapConfig.defaultLongitude),
+        const latlong2.LatLng(
+          MapConfig.defaultLatitude,
+          MapConfig.defaultLongitude,
+        ),
         13,
       );
     }
@@ -211,7 +227,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   Future<void> _checkLocationPermission() async {
     try {
-      bool serviceEnabled = await geolocator.Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled =
+          await geolocator.Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
           _hasLocationPermission = false;
@@ -219,7 +236,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         return;
       }
 
-      geolocator.LocationPermission permission = await geolocator.Geolocator.checkPermission();
+      geolocator.LocationPermission permission =
+          await geolocator.Geolocator.checkPermission();
       if (permission == geolocator.LocationPermission.denied) {
         permission = await geolocator.Geolocator.requestPermission();
         if (permission == geolocator.LocationPermission.denied) {
@@ -255,22 +273,23 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       // Get initial position
       final initialPosition = await geolocator.Geolocator.getCurrentPosition();
       _updateBusLocation(initialPosition);
-      
+
       // Start listening to location updates
-      _locationSubscription = geolocator.Geolocator.getPositionStream(
-        locationSettings: const geolocator.LocationSettings(
-          accuracy: geolocator.LocationAccuracy.high,
-          distanceFilter: 10, // Update every 10 meters
-        ),
-      ).listen(
-        _onPositionUpdate,
-        onError: (error) {
-          if (kDebugMode) {
-            print('❌ Location stream error: $error');
-          }
-        },
-      );
-      
+      _locationSubscription =
+          geolocator.Geolocator.getPositionStream(
+            locationSettings: const geolocator.LocationSettings(
+              accuracy: geolocator.LocationAccuracy.high,
+              distanceFilter: 10, // Update every 10 meters
+            ),
+          ).listen(
+            _onPositionUpdate,
+            onError: (error) {
+              if (kDebugMode) {
+                print('❌ Location stream error: $error');
+              }
+            },
+          );
+
       if (kDebugMode) {
         print('🚌 Real-time GPS tracking started');
       }
@@ -283,41 +302,44 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   void _onPositionUpdate(geolocator.Position position) {
     _updateBusLocation(position);
-    
+
     // Publish location to MQTT
     _publishLocationToMqtt(position);
   }
 
   void _updateBusLocation(geolocator.Position position) {
     if (!mounted) return;
-    
+
     final busLocation = BusLocation(
       busId: _busPlate ?? 'BUS001',
       busNumber: _busPlate ?? 'BUS001',
-      position: LatLng(position.latitude, position.longitude),  // Uses google_maps_flutter LatLng
+      position: LatLng(
+        position.latitude,
+        position.longitude,
+      ), // Uses google_maps_flutter LatLng
       heading: position.heading,
       speed: position.speed * 3.6, // Convert m/s to km/h
       timestamp: DateTime.now(),
     );
-    
+
     setState(() {
       _currentLocation = busLocation;
     });
-    
+
     if (_followBus) {
       _mapController.move(
         latlong2.LatLng(position.latitude, position.longitude),
         _mapController.camera.zoom,
       );
     }
-    
+
     // Check for geofence alerts
     _checkGeofences(busLocation);
   }
 
   void _publishLocationToMqtt(geolocator.Position position) {
     if (!_mqttService.isConnected) return;
-    
+
     final topic = 'driver/$_busPlate/location';
     final payload = {
       'busId': _busPlate ?? 'BUS001',
@@ -328,35 +350,41 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       'timestamp': DateTime.now().toIso8601String(),
       'tripId': _tripId,
     };
-    
+
     _mqttService.publishJson(topic, payload);
   }
 
   Future<void> _fetchRouteFromMapbox() async {
     if (_stops.length < 2) return;
-    
+
     try {
       final mapboxService = MapboxService();
-      
+
       // Convert stops to waypoints
-      final waypoints = _stops.map((stop) => {
-        'lat': stop.position.latitude,
-        'lng': stop.position.longitude,
-      }).toList();
-      
+      final waypoints = _stops
+          .map(
+            (stop) => {
+              'lat': stop.position.latitude,
+              'lng': stop.position.longitude,
+            },
+          )
+          .toList();
+
       final result = await mapboxService.getRoute(waypoints);
-      
+
       if (result.success && result.coordinates != null) {
         if (mounted) {
           setState(() {
-            _routePoints = result.coordinates!.map((pos) => 
-              latlong2.LatLng(pos.latitude, pos.longitude)
-            ).toList();
+            _routePoints = result.coordinates!
+                .map((pos) => latlong2.LatLng(pos.latitude, pos.longitude))
+                .toList();
           });
         }
-        
+
         if (kDebugMode) {
-          print('✅ Mapbox route loaded: ${result.formattedDistance}, ${result.formattedDuration}');
+          print(
+            '✅ Mapbox route loaded: ${result.formattedDistance}, ${result.formattedDuration}',
+          );
         }
       }
     } catch (e) {
@@ -378,8 +406,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _refreshTripData() async {
     try {
       final tripProvider = context.read<TripProvider>();
-      await tripProvider.fetchActiveTrip();
-      
+      // Note: Don't call fetchActiveTrip() here — that's the guardian endpoint.
+      // Driver trips are managed locally via the trip data passed to this screen.
+
       if (tripProvider.activeTrip != null && mounted) {
         setState(() {
           _activeTrip = tripProvider.activeTrip;
@@ -397,21 +426,24 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void _checkGeofences(BusLocation location) {
     for (final stop in _stops) {
       final distance = _calculateDistance(
-        latlong2.LatLng(location.position.latitude, location.position.longitude),
+        latlong2.LatLng(
+          location.position.latitude,
+          location.position.longitude,
+        ),
         latlong2.LatLng(stop.position.latitude, stop.position.longitude),
       );
-      
+
       // Calculate ETA in minutes (using actual speed or default 30 km/h)
       final speed = location.speed > 0 ? location.speed / 3.6 : 8.33; // m/s
       final etaSeconds = speed > 0 ? (distance / speed).round() : 999;
       final etaMinutes = (etaSeconds / 60).ceil();
-      
+
       GeofenceType? alertType;
       if (distance <= 100) {
         alertType = GeofenceType.arrived;
-        
+
         // Show student pickup dialog when within 100m and not already processed
-        if (!_processedStops.contains(stop.id) && 
+        if (!_processedStops.contains(stop.id) &&
             !_isShowingPickupDialog &&
             _activeTrip != null) {
           _showStudentPickupDialog(stop, location);
@@ -421,15 +453,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       } else if (distance <= 2000) {
         alertType = GeofenceType.approaching;
       }
-      
+
       // Send 2-minute ETA notification to guardians
-      if (etaMinutes <= 2 && 
-          etaMinutes > 0 && 
+      if (etaMinutes <= 2 &&
+          etaMinutes > 0 &&
           !_etaNotifiedStops.contains(stop.id) &&
           _activeTrip != null) {
         _sendEtaNotification(stop, etaMinutes);
       }
-      
+
       if (alertType != null) {
         final alert = GeofenceAlert(
           id: '${DateTime.now().millisecondsSinceEpoch}_${stop.id}',
@@ -441,7 +473,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           etaSeconds: etaSeconds,
           timestamp: DateTime.now(),
         );
-        
+
         if (mounted) {
           setState(() {
             _alerts.insert(0, alert);
@@ -458,26 +490,26 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final lat2Rad = p2.latitude * pi / 180;
     final deltaLat = (p2.latitude - p1.latitude) * pi / 180;
     final deltaLng = (p2.longitude - p1.longitude) * pi / 180;
-    
-    final a = sin(deltaLat / 2) * sin(deltaLat / 2) +
-              cos(lat1Rad) * cos(lat2Rad) *
-              sin(deltaLng / 2) * sin(deltaLng / 2);
+
+    final a =
+        sin(deltaLat / 2) * sin(deltaLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(deltaLng / 2) * sin(deltaLng / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    
+
     return earthRadius * c;
   }
 
   Future<void> _sendEtaNotification(RouteStop stop, int etaMinutes) async {
     if (_activeTrip == null) return;
-    
+
     try {
       final tripProvider = context.read<TripProvider>();
-      
+
       // Get students at this stop
       final studentsAtStop = _activeTrip!.students
           .where((s) => s.status == 'pending')
           .toList();
-      
+
       // Send notification for each student
       for (final student in studentsAtStop) {
         await tripProvider.sendEtaNotification(
@@ -488,17 +520,17 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           etaMinutes: etaMinutes,
         );
       }
-      
+
       // Mark stop as notified
       _etaNotifiedStops.add(stop.id);
-      
+
       // Show local notification
       await _notificationService.showLocalNotification(
         title: '📍 Approaching ${stop.name}',
         body: 'Arriving in $etaMinutes min',
         channelId: 'geofence_alerts',
       );
-      
+
       if (kDebugMode) {
         print('✅ ETA notification sent for stop: ${stop.name}');
       }
@@ -509,20 +541,23 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  Future<void> _showStudentPickupDialog(RouteStop stop, BusLocation busLocation) async {
+  Future<void> _showStudentPickupDialog(
+    RouteStop stop,
+    BusLocation busLocation,
+  ) async {
     if (!mounted || _activeTrip == null) return;
-    
+
     final pendingStudents = _activeTrip!.students
         .where((s) => s.status == 'pending')
         .toList();
-    
+
     if (pendingStudents.isEmpty) {
       _processedStops.add(stop.id);
       return;
     }
-    
+
     setState(() => _isShowingPickupDialog = true);
-    
+
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isDismissible: false,
@@ -534,15 +569,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         busLocation: busLocation,
       ),
     );
-    
+
     setState(() => _isShowingPickupDialog = false);
     _processedStops.add(stop.id);
-    
+
     if (result != null && mounted) {
       // Handle pickup results
       final pickedStudentIds = result['picked'] as List<String>? ?? [];
       final absentStudentIds = result['absent'] as List<String>? ?? [];
-      
+
       // Update student statuses
       // TODO: Implement student pick/absent API calls
       // final tripService = api.TripService();
@@ -552,7 +587,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       // for (final studentId in absentStudentIds) {
       //   await tripService.markStudentAbsent(studentId);
       // }
-      
+
       // Refresh trip data
       await _refreshTripData();
     }
@@ -623,9 +658,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             Text('Emergency'),
           ],
         ),
-        content: const Text(
-          'Are you sure you want to make an emergency call?',
-        ),
+        content: const Text('Are you sure you want to make an emergency call?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -687,7 +720,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     : MapConfig.mapboxTileUrl,
                 userAgentPackageName: 'com.shuledrive.app',
               ),
-              
+
               // Route polyline
               if (_routePoints.isNotEmpty)
                 PolylineLayer(
@@ -699,17 +732,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     ),
                   ],
                 ),
-              
+
               // Stop markers
-              MarkerLayer(
-                markers: _buildStopMarkers(),
-              ),
-              
+              MarkerLayer(markers: _buildStopMarkers()),
+
               // Bus marker
               if (_currentLocation != null)
-                MarkerLayer(
-                  markers: [_buildBusMarker()],
-                ),
+                MarkerLayer(markers: [_buildBusMarker()]),
             ],
           ),
 
@@ -718,9 +747,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF6B9B5B),
-                ),
+                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
               ),
             ),
 
@@ -810,6 +837,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 8),
+                // Navigate to next stop button
+                _buildMapButton(
+                  icon: Icons.navigation_outlined,
+                  onPressed: _navigateToNextStop,
+                ),
               ],
             ),
           ),
@@ -869,10 +902,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 3),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 8,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
             ],
           ),
           child: const Icon(
@@ -889,10 +919,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     required IconData icon,
     required VoidCallback onPressed,
   }) {
+    final isDark = context.read<AppProvider>().isDarkMode;
     return FloatingActionButton.small(
       onPressed: onPressed,
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black87,
+      backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+      foregroundColor: isDark ? Colors.white : Colors.black87,
       child: Icon(icon),
     );
   }
@@ -904,10 +935,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
         ],
       ),
       child: Row(
@@ -943,11 +971,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.circle,
-                  color: Color(0xFF6B9B5B),
-                  size: 8,
-                ),
+                const Icon(Icons.circle, color: Color(0xFF6B9B5B), size: 8),
                 const SizedBox(width: 6),
                 Text(
                   'LIVE',
@@ -975,10 +999,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
             ],
           ),
           child: Row(
@@ -1027,10 +1048,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 16,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 16),
         ],
       ),
       child: SafeArea(
@@ -1072,7 +1090,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 ],
               ),
             const SizedBox(height: 12),
-            
+
             // View Students and Complete Trip buttons
             Row(
               children: [
@@ -1092,8 +1110,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100],
-                        foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+                        backgroundColor: isDarkMode
+                            ? const Color(0xFF2C2C2C)
+                            : Colors.grey[100],
+                        foregroundColor: isDarkMode
+                            ? Colors.white
+                            : Colors.black87,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -1116,7 +1138,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             )
                           : const Icon(Icons.check_circle),
@@ -1147,7 +1171,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: isDarkMode ? const Color(0x66FFFFFF) : const Color(0x66000000),
+                  color: isDarkMode
+                      ? const Color(0x66FFFFFF)
+                      : const Color(0x66000000),
                 ),
               ),
             ),
@@ -1191,7 +1217,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final isPicked = status == 'picked';
     final isDropped = status == 'dropped';
     final isAbsent = status == 'absent';
-    
+
     showDialog(
       context: context,
       builder: (context) => _StudentActionDialog(
@@ -1220,25 +1246,48 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           break;
         }
       }
-      
+
       // Recalculate counts
-      _pickedCount = _preloadedStudents.where((s) => s['status'] == 'picked').length;
+      _pickedCount = _preloadedStudents
+          .where((s) => s['status'] == 'picked')
+          .length;
     });
-    
+
     Navigator.pop(context);
-    
+
+    // Enhanced haptic feedback based on action
+    if (newStatus == 'picked') {
+      HapticFeedback.mediumImpact();
+    } else if (newStatus == 'absent') {
+      HapticFeedback.heavyImpact();
+    } else {
+      HapticFeedback.lightImpact();
+    }
+
     // Show confirmation
-    final statusText = newStatus == 'picked' 
-        ? 'Picked up' 
-        : newStatus == 'absent' 
-            ? 'Marked absent' 
-            : 'Dropped off';
-    
+    final statusText = newStatus == 'picked'
+        ? '✅ Picked up'
+        : newStatus == 'absent'
+        ? '⚠️ Marked absent'
+        : '🏠 Dropped off';
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$statusText successfully'),
-        backgroundColor: const Color(0xFF6B9B5B),
+        content: Row(
+          children: [
+            Text(
+              statusText,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        backgroundColor: newStatus == 'absent'
+            ? Colors.orange
+            : const Color(0xFF6B9B5B),
         duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
     );
   }
@@ -1248,14 +1297,14 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final guardianPhone = student['guardianPhone'] as String?;
     final guardianId = student['guardianId'] as String?;
     final studentName = student['name'] as String? ?? 'Student';
-    
+
     if (guardianPhone == null && guardianId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No guardian contact available')),
       );
       return;
     }
-    
+
     Navigator.pushNamed(
       context,
       '/chat',
@@ -1288,27 +1337,29 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _sendBulkMessage(String message) async {
     final students = _buildStudentListFromStops();
     final guardianContacts = <String>{};
-    
+
     for (final student in students) {
       final phone = student['guardianPhone'] as String?;
       if (phone != null && phone.isNotEmpty) guardianContacts.add(phone);
     }
-    
+
     if (guardianContacts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No guardian contacts available')),
       );
       return;
     }
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Alert sent to ${guardianContacts.length} guardians')),
+      SnackBar(
+        content: Text('Alert sent to ${guardianContacts.length} guardians'),
+      ),
     );
   }
 
   Future<void> _completeTrip() async {
     setState(() => _isEndingTrip = true);
-    
+
     try {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -1320,14 +1371,19 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           absentCount: _totalCount - _pickedCount,
         ),
       );
-      
+
       if (confirmed == true && mounted) {
-        // TODO: Implement complete trip API call
-        // final tripService = api.TripService();
-        // await tripService.completeTrip(_activeTrip?.id ?? '');
-        
+        HapticFeedback.heavyImpact();
+
+        // Show trip summary before navigating away
+        await _showTripSummary();
+
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/landing');
+          Navigator.pushReplacementNamed(
+            context,
+            '/dashboard',
+            arguments: {'fromTripEnd': true},
+          );
         }
       }
     } catch (e) {
@@ -1335,9 +1391,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         print('❌ Error completing trip: $e');
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to complete trip: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to complete trip: $e')));
       }
     } finally {
       if (mounted) {
@@ -1346,18 +1402,197 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
+  /// Navigate to next unprocessed stop using external maps
+  Future<void> _navigateToNextStop() async {
+    // Find next unprocessed stop
+    RouteStop? nextStop;
+    for (final stop in _stops) {
+      if (!_processedStops.contains(stop.id)) {
+        nextStop = stop;
+        break;
+      }
+    }
+
+    if (nextStop == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All stops have been processed!'),
+          backgroundColor: Color(0xFF6B9B5B),
+        ),
+      );
+      return;
+    }
+
+    final lat = nextStop.position.latitude;
+    final lng = nextStop.position.longitude;
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+
+    try {
+      if (await canLaunchUrl(url)) {
+        HapticFeedback.mediumImpact();
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cannot open maps application')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error opening navigation: $e')));
+      }
+    }
+  }
+
+  /// Show trip summary after completing a trip
+  Future<void> _showTripSummary() async {
+    final absentCount = _preloadedStudents
+        .where((s) => s['status'] == 'absent')
+        .length;
+    final droppedCount = _preloadedStudents
+        .where((s) => s['status'] == 'dropped')
+        .length;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.check_circle, color: Color(0xFF6B9B5B)),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Trip Complete!',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSummaryRow(
+                'Route',
+                _activeTrip?.routeName ?? '-',
+                isDarkMode,
+              ),
+              _buildSummaryRow('Students Picked', '$_pickedCount', isDarkMode),
+              _buildSummaryRow('Students Absent', '$absentCount', isDarkMode),
+              if (droppedCount > 0)
+                _buildSummaryRow(
+                  'Students Dropped',
+                  '$droppedCount',
+                  isDarkMode,
+                ),
+              _buildSummaryRow('Total Students', '$_totalCount', isDarkMode),
+              const SizedBox(height: 8),
+              // Progress bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: _totalCount > 0 ? _pickedCount / _totalCount : 0,
+                  backgroundColor: isDarkMode
+                      ? Colors.grey.shade800
+                      : Colors.grey.shade200,
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF6B9B5B)),
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_totalCount > 0 ? (_pickedCount / _totalCount * 100).toInt() : 0}% pickup rate',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDarkMode ? Colors.white54 : Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B9B5B),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isDarkMode ? Colors.white : Colors.black,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Convert preloaded TripStudent objects to map format for UI
-  List<Map<String, dynamic>> _convertTripStudentsToMap(List<TripStudent> students) {
+  List<Map<String, dynamic>> _convertTripStudentsToMap(
+    List<TripStudent> students,
+  ) {
     return students.map((s) {
       return {
         'id': s.id.toString(),
         'name': s.fullname,
         'stopName': s.route,
-        'status': s.isStudentPicked 
-            ? 'picked' 
-            : s.isStudentDropped 
-                ? 'dropped' 
-                : 'pending',
+        'status': s.isStudentPicked
+            ? 'picked'
+            : s.isStudentDropped
+            ? 'dropped'
+            : 'pending',
         'guardianPhone': s.guardianPhoneNumber,
         'guardianId': s.guardianPhoneNumber,
         'guardianName': s.guardianPhoneNumber,
@@ -1373,9 +1608,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     if (_preloadedStudents.isNotEmpty) {
       return _preloadedStudents;
     }
-    
+
     final List<Map<String, dynamic>> students = [];
-    
+
     for (final stop in _stops) {
       if (stop.studentIds != null && stop.studentIds!.isNotEmpty) {
         for (final studentId in stop.studentIds!) {
@@ -1401,7 +1636,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         });
       }
     }
-    
+
     return students;
   }
 }
@@ -1429,7 +1664,7 @@ class _StudentListBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
@@ -1444,11 +1679,13 @@ class _StudentListBottomSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: (isDarkMode ? Colors.white : Colors.black).withValues(alpha: 0.24),
+              color: (isDarkMode ? Colors.white : Colors.black).withValues(
+                alpha: 0.24,
+              ),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Header
           Padding(
             padding: const EdgeInsets.all(20),
@@ -1497,7 +1734,7 @@ class _StudentListBottomSheet extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Progress bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1506,14 +1743,16 @@ class _StudentListBottomSheet extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: totalCount > 0 ? pickedCount / totalCount : 0,
                 backgroundColor: isDarkMode ? Colors.white12 : Colors.grey[200],
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF6B9B5B),
+                ),
                 minHeight: 8,
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Message All button
           if (students.isNotEmpty)
             Padding(
@@ -1535,10 +1774,9 @@ class _StudentListBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-          
-          if (students.isNotEmpty)
-            const SizedBox(height: 16),
-          
+
+          if (students.isNotEmpty) const SizedBox(height: 16),
+
           // Student list
           Expanded(
             child: students.isEmpty
@@ -1556,7 +1794,9 @@ class _StudentListBottomSheet extends StatelessWidget {
                           'No students in this trip',
                           style: TextStyle(
                             fontSize: 16,
-                            color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                            color: isDarkMode
+                                ? Colors.white60
+                                : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -1572,11 +1812,13 @@ class _StudentListBottomSheet extends StatelessWidget {
                       final isDropped = status == 'dropped';
                       final isAbsent = status == 'absent';
                       final isPending = status == 'pending';
-                      
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[50],
+                          color: isDarkMode
+                              ? const Color(0xFF2C2C2C)
+                              : Colors.grey[50],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ListTile(
@@ -1588,15 +1830,23 @@ class _StudentListBottomSheet extends StatelessWidget {
                               color: isPicked
                                   ? const Color(0xFF6B9B5B)
                                   : isDropped
-                                      ? Colors.blue
-                                      : isDarkMode
-                                          ? Colors.white12
-                                          : Colors.grey[200],
+                                  ? Colors.blue
+                                  : isDarkMode
+                                  ? Colors.white12
+                                  : Colors.grey[200],
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              isPicked ? Icons.check : isDropped ? Icons.logout : Icons.person,
-                              color: isPicked || isDropped ? Colors.white : isDarkMode ? Colors.white60 : Colors.grey[600],
+                              isPicked
+                                  ? Icons.check
+                                  : isDropped
+                                  ? Icons.logout
+                                  : Icons.person,
+                              color: isPicked || isDropped
+                                  ? Colors.white
+                                  : isDarkMode
+                                  ? Colors.white60
+                                  : Colors.grey[600],
                             ),
                           ),
                           title: Text(
@@ -1610,7 +1860,9 @@ class _StudentListBottomSheet extends StatelessWidget {
                             student['stopName'] ?? 'No stop assigned',
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                              color: isDarkMode
+                                  ? Colors.white60
+                                  : Colors.grey[600],
                             ),
                           ),
                           trailing: isPending
@@ -1621,42 +1873,67 @@ class _StudentListBottomSheet extends StatelessWidget {
                                     _buildMiniActionButton(
                                       icon: Icons.check,
                                       color: const Color(0xFF6B9B5B),
-                                      onTap: () => onUpdateStatus(student['id'], 'picked'),
+                                      onTap: () => onUpdateStatus(
+                                        student['id'],
+                                        'picked',
+                                      ),
                                     ),
                                     const SizedBox(width: 6),
                                     // Absent button
                                     _buildMiniActionButton(
                                       icon: Icons.person_off,
                                       color: Colors.orange,
-                                      onTap: () => onUpdateStatus(student['id'], 'absent'),
+                                      onTap: () => onUpdateStatus(
+                                        student['id'],
+                                        'absent',
+                                      ),
                                     ),
                                   ],
                                 )
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (student['guardianPhone'] != null || student['guardianId'] != null)
+                                    if (student['guardianPhone'] != null ||
+                                        student['guardianId'] != null)
                                       IconButton(
-                                        onPressed: () => onChatWithGuardian(student),
-                                        icon: const Icon(Icons.chat_bubble_outline),
+                                        onPressed: () =>
+                                            onChatWithGuardian(student),
+                                        icon: const Icon(
+                                          Icons.chat_bubble_outline,
+                                        ),
                                         color: const Color(0xFF6B9B5B),
                                       ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: isPicked
-                                            ? const Color(0xFF6B9B5B).withValues(alpha: 0.1)
+                                            ? const Color(
+                                                0xFF6B9B5B,
+                                              ).withValues(alpha: 0.1)
                                             : isDropped
-                                                ? Colors.blue.withValues(alpha: 0.1)
-                                                : Colors.orange.withValues(alpha: 0.1),
+                                            ? Colors.blue.withValues(alpha: 0.1)
+                                            : Colors.orange.withValues(
+                                                alpha: 0.1,
+                                              ),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
-                                        isPicked ? 'Picked' : isDropped ? 'Dropped' : 'Absent',
+                                        isPicked
+                                            ? 'Picked'
+                                            : isDropped
+                                            ? 'Dropped'
+                                            : 'Absent',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
-                                          color: isPicked ? const Color(0xFF6B9B5B) : isDropped ? Colors.blue : Colors.orange,
+                                          color: isPicked
+                                              ? const Color(0xFF6B9B5B)
+                                              : isDropped
+                                              ? Colors.blue
+                                              : Colors.orange,
                                         ),
                                       ),
                                     ),
@@ -1671,7 +1948,7 @@ class _StudentListBottomSheet extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildMiniActionButton({
     required IconData icon,
     required Color color,
@@ -1722,7 +1999,7 @@ class _StudentActionDialog extends StatelessWidget {
     final stopName = student['stopName'] as String?;
     final guardianPhone = student['guardianPhone'] as String?;
     final studentClass = student['class'] ?? student['className'] ?? '';
-    
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -1752,7 +2029,9 @@ class _StudentActionDialog extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: Column(
                 children: [
@@ -1767,7 +2046,11 @@ class _StudentActionDialog extends StatelessWidget {
                           color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -1778,7 +2061,10 @@ class _StudentActionDialog extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 3),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                        width: 3,
+                      ),
                     ),
                     child: Center(
                       child: Text(
@@ -1813,7 +2099,7 @@ class _StudentActionDialog extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Content
             Padding(
               padding: const EdgeInsets.all(20),
@@ -1824,9 +2110,13 @@ class _StudentActionDialog extends StatelessWidget {
                   if (stopName != null)
                     _buildInfoRow(Icons.location_on_outlined, 'Stop', stopName),
                   if (guardianPhone != null)
-                    _buildInfoRow(Icons.phone_outlined, 'Guardian', guardianPhone),
+                    _buildInfoRow(
+                      Icons.phone_outlined,
+                      'Guardian',
+                      guardianPhone,
+                    ),
                   const SizedBox(height: 20),
-                  
+
                   // Actions
                   Text(
                     'Actions',
@@ -1837,7 +2127,7 @@ class _StudentActionDialog extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Action buttons row
                   Row(
                     children: [
@@ -1872,9 +2162,9 @@ class _StudentActionDialog extends StatelessWidget {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Chat button
                   if (guardianPhone != null)
                     SizedBox(
@@ -1884,8 +2174,12 @@ class _StudentActionDialog extends StatelessWidget {
                         icon: const Icon(Icons.chat_bubble_outline),
                         label: const Text('Chat with Guardian'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isDarkMode ? const Color(0xFF3C3C3C) : Colors.grey[100],
-                          foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+                          backgroundColor: isDarkMode
+                              ? const Color(0xFF3C3C3C)
+                              : Colors.grey[100],
+                          foregroundColor: isDarkMode
+                              ? Colors.white
+                              : Colors.black87,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1902,19 +2196,19 @@ class _StudentActionDialog extends StatelessWidget {
       ),
     );
   }
-  
+
   List<Color> _getHeaderGradient() {
     if (isPicked) return [const Color(0xFF6B9B5B), const Color(0xFF5A8A4A)];
     if (isAbsent) return [Colors.orange, Colors.deepOrange];
     if (isDropped) return [Colors.blue, Colors.blueAccent];
     return [const Color(0xFF6B9B5B), const Color(0xFF4A7A3A)];
   }
-  
+
   Widget _buildStatusBadge() {
     String label;
     Color color;
     IconData icon;
-    
+
     if (isPicked) {
       label = 'Picked Up';
       color = Colors.white;
@@ -1932,7 +2226,7 @@ class _StudentActionDialog extends StatelessWidget {
       color = Colors.white;
       icon = Icons.schedule;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -1957,7 +2251,7 @@ class _StudentActionDialog extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1967,25 +2261,19 @@ class _StudentActionDialog extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[500],
-            ),
+            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -2021,7 +2309,7 @@ class _StudentActionDialog extends StatelessWidget {
       ),
     );
   }
-  
+
   String _getInitials(String name) {
     final parts = name.trim().split(' ');
     if (parts.length >= 2) {
@@ -2039,10 +2327,7 @@ class _AlertAllDialog extends StatefulWidget {
   final int studentCount;
   final Function(String) onSend;
 
-  const _AlertAllDialog({
-    required this.studentCount,
-    required this.onSend,
-  });
+  const _AlertAllDialog({required this.studentCount, required this.onSend});
 
   @override
   State<_AlertAllDialog> createState() => _AlertAllDialogState();
@@ -2051,11 +2336,15 @@ class _AlertAllDialog extends StatefulWidget {
 class _AlertAllDialogState extends State<_AlertAllDialog> {
   final TextEditingController _messageController = TextEditingController();
   bool _isSending = false;
-  
+
   final List<Map<String, dynamic>> _quickMessages = [
     {'icon': Icons.schedule, 'text': 'Running late', 'color': Colors.orange},
     {'icon': Icons.traffic, 'text': 'Traffic delay', 'color': Colors.red},
-    {'icon': Icons.access_time_filled, 'text': 'Arriving soon', 'color': const Color(0xFF6B9B5B)},
+    {
+      'icon': Icons.access_time_filled,
+      'text': 'Arriving soon',
+      'color': const Color(0xFF6B9B5B),
+    },
     {'icon': Icons.location_on, 'text': 'At the stop', 'color': Colors.blue},
   ];
 
@@ -2068,7 +2357,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -2100,7 +2389,9 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -2115,210 +2406,251 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                             color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.close, color: Colors.white, size: 20),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
-                  const SizedBox(height: 8),
-                  // Animated broadcast icon
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 3),
+                    const SizedBox(height: 8),
+                    // Animated broadcast icon
+                    Container(
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          width: 3,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.campaign,
+                        color: Colors.white,
+                        size: 36,
+                      ),
                     ),
-                    child: const Icon(Icons.campaign, color: Colors.white, size: 36),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Alert All Guardians',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Alert All Guardians',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Message will be sent to ${widget.studentCount} guardians',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.9),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Message will be sent to ${widget.studentCount} guardians',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Quick message chips
-                  Text(
-                    'Quick Messages',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Quick message chips
+                    Text(
+                      'Quick Messages',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _quickMessages.map((msg) {
-                      return GestureDetector(
-                        onTap: () => setState(() => _messageController.text = msg['text']),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: (msg['color'] as Color).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: (msg['color'] as Color).withValues(alpha: 0.3),
-                            ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _quickMessages.map((msg) {
+                        return GestureDetector(
+                          onTap: () => setState(
+                            () => _messageController.text = msg['text'],
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(msg['icon'] as IconData, size: 16, color: msg['color'] as Color),
-                              const SizedBox(width: 6),
-                              Text(
-                                msg['text'] as String,
-                                style: TextStyle(
-                                  color: msg['color'] as Color,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 13,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (msg['color'] as Color).withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: (msg['color'] as Color).withValues(
+                                  alpha: 0.3,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Message input
-                  Text(
-                    'Custom Message',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _messageController,
-                    maxLines: 3,
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.white : Colors.black87,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Type your alert message...',
-                      hintStyle: TextStyle(
-                        color: isDarkMode ? Colors.white38 : Colors.grey[400],
-                      ),
-                      filled: true,
-                      fillColor: isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F0),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: Color(0xFF6B9B5B), width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.all(16),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 8),
-                  
-                  // Character count
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      '${_messageController.text.length} chars',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDarkMode ? Colors.white38 : Colors.grey[400],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: isDarkMode ? Colors.white60 : Colors.grey[600],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSending || _messageController.text.trim().isEmpty
-                              ? null
-                              : () async {
-                                  setState(() => _isSending = true);
-                                  widget.onSend(_messageController.text.trim());
-                                  await Future.delayed(const Duration(milliseconds: 500));
-                                  if (mounted) Navigator.pop(context);
-                                },
-                          icon: _isSending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  msg['icon'] as IconData,
+                                  size: 16,
+                                  color: msg['color'] as Color,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  msg['text'] as String,
+                                  style: TextStyle(
+                                    color: msg['color'] as Color,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 13,
                                   ),
-                                )
-                              : const Icon(Icons.send, size: 18),
-                          label: Text(_isSending ? 'Sending...' : 'Send Alert'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6B9B5B),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                                ),
+                              ],
                             ),
-                            elevation: 0,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Message input
+                    Text(
+                      'Custom Message',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _messageController,
+                      maxLines: 3,
+                      style: TextStyle(
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Type your alert message...',
+                        hintStyle: TextStyle(
+                          color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                        ),
+                        filled: true,
+                        fillColor: isDarkMode
+                            ? const Color(0xFF1E1E1E)
+                            : const Color(0xFFF5F5F0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6B9B5B),
+                            width: 2,
                           ),
                         ),
+                        contentPadding: const EdgeInsets.all(16),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Character count
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${_messageController.text.length} chars',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: isDarkMode
+                                    ? Colors.white60
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                _isSending ||
+                                    _messageController.text.trim().isEmpty
+                                ? null
+                                : () async {
+                                    setState(() => _isSending = true);
+                                    widget.onSend(
+                                      _messageController.text.trim(),
+                                    );
+                                    await Future.delayed(
+                                      const Duration(milliseconds: 500),
+                                    );
+                                    if (mounted) Navigator.pop(context);
+                                  },
+                            icon: _isSending
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(Icons.send, size: 18),
+                            label: Text(
+                              _isSending ? 'Sending...' : 'Send Alert',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF6B9B5B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -2340,9 +2672,11 @@ class _CompleteTripDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final completionRate = totalStudents > 0 ? pickedCount / totalStudents : 0.0;
+    final completionRate = totalStudents > 0
+        ? pickedCount / totalStudents
+        : 0.0;
     final isComplete = completionRate >= 1.0;
-    
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -2384,7 +2718,9 @@ class _CompleteTripDialog extends StatelessWidget {
                           ),
                         ),
                         child: Icon(
-                          isComplete ? Icons.check_circle : Icons.warning_rounded,
+                          isComplete
+                              ? Icons.check_circle
+                              : Icons.warning_rounded,
                           color: Colors.white,
                           size: 36,
                         ),
@@ -2411,7 +2747,7 @@ class _CompleteTripDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Content
                 Padding(
                   padding: const EdgeInsets.all(20),
@@ -2446,9 +2782,9 @@ class _CompleteTripDialog extends StatelessWidget {
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 20),
-                      
+
                       // Circular Progress
                       Center(
                         child: Column(
@@ -2462,11 +2798,13 @@ class _CompleteTripDialog extends StatelessWidget {
                                   CircularProgressIndicator(
                                     value: completionRate,
                                     strokeWidth: 8,
-                                    backgroundColor: isDarkMode 
-                                        ? Colors.white.withValues(alpha: 0.1) 
+                                    backgroundColor: isDarkMode
+                                        ? Colors.white.withValues(alpha: 0.1)
                                         : Colors.grey[200],
                                     valueColor: AlwaysStoppedAnimation<Color>(
-                                      isComplete ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
+                                      isComplete
+                                          ? const Color(0xFF6B9B5B)
+                                          : const Color(0xFFFF9800),
                                     ),
                                   ),
                                   Center(
@@ -2475,7 +2813,9 @@ class _CompleteTripDialog extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
-                                        color: isDarkMode ? Colors.white : Colors.black87,
+                                        color: isDarkMode
+                                            ? Colors.white
+                                            : Colors.black87,
                                       ),
                                     ),
                                   ),
@@ -2485,14 +2825,17 @@ class _CompleteTripDialog extends StatelessWidget {
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Warning if not complete
                       if (!isComplete)
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.orange.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -2501,7 +2844,11 @@ class _CompleteTripDialog extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.info_outline, size: 16, color: Colors.orange[700]),
+                              Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: Colors.orange[700],
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 '$absentCount students still pending',
@@ -2514,20 +2861,20 @@ class _CompleteTripDialog extends StatelessWidget {
                             ],
                           ),
                         ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Info Card
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: isDarkMode 
+                          color: isDarkMode
                               ? Colors.white.withValues(alpha: 0.05)
                               : const Color(0xFFF5F5F0),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isDarkMode 
-                                ? Colors.white.withValues(alpha: 0.1) 
+                            color: isDarkMode
+                                ? Colors.white.withValues(alpha: 0.1)
                                 : const Color(0xFFE0E0D5),
                           ),
                         ),
@@ -2537,7 +2884,9 @@ class _CompleteTripDialog extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                                color: const Color(
+                                  0xFF6B9B5B,
+                                ).withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
@@ -2556,7 +2905,9 @@ class _CompleteTripDialog extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: isDarkMode ? Colors.white : Colors.black87,
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -2564,7 +2915,9 @@ class _CompleteTripDialog extends StatelessWidget {
                                     'All guardians will be notified that the trip has ended.',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                                      color: isDarkMode
+                                          ? Colors.white60
+                                          : Colors.grey[600],
                                     ),
                                   ),
                                 ],
@@ -2576,7 +2929,7 @@ class _CompleteTripDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Buttons
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -2586,10 +2939,17 @@ class _CompleteTripDialog extends StatelessWidget {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () => Navigator.pop(context, true),
-                          icon: Icon(isComplete ? Icons.check_circle : Icons.warning, size: 20),
-                          label: Text(isComplete ? 'Complete Trip' : 'Complete Anyway'),
+                          icon: Icon(
+                            isComplete ? Icons.check_circle : Icons.warning,
+                            size: 20,
+                          ),
+                          label: Text(
+                            isComplete ? 'Complete Trip' : 'Complete Anyway',
+                          ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isComplete ? const Color(0xFF6B9B5B) : const Color(0xFFFF9800),
+                            backgroundColor: isComplete
+                                ? const Color(0xFF6B9B5B)
+                                : const Color(0xFFFF9800),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
@@ -2605,7 +2965,9 @@ class _CompleteTripDialog extends StatelessWidget {
                           onPressed: () => Navigator.pop(context, false),
                           child: const Text('Go Back'),
                           style: TextButton.styleFrom(
-                            foregroundColor: isDarkMode ? Colors.white60 : Colors.grey[600],
+                            foregroundColor: isDarkMode
+                                ? Colors.white60
+                                : Colors.grey[600],
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
@@ -2620,7 +2982,7 @@ class _CompleteTripDialog extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildStatCard({
     required String value,
     required String label,
@@ -2652,7 +3014,9 @@ class _CompleteTripDialog extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 10,
-                color: isDarkMode ? Colors.white60 : color.withValues(alpha: 0.8),
+                color: isDarkMode
+                    ? Colors.white60
+                    : color.withValues(alpha: 0.8),
               ),
             ),
           ],
@@ -2676,7 +3040,8 @@ class StudentPickupBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<StudentPickupBottomSheet> createState() => _StudentPickupBottomSheetState();
+  State<StudentPickupBottomSheet> createState() =>
+      _StudentPickupBottomSheetState();
 }
 
 class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
@@ -2703,10 +3068,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                   color: const Color(0xFF6B9B5B).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.location_on,
-                  color: Color(0xFF6B9B5B),
-                ),
+                child: const Icon(Icons.location_on, color: Color(0xFF6B9B5B)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2715,10 +3077,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                   children: [
                     Text(
                       'Arrived at',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                     Text(
                       widget.stopName,
@@ -2735,10 +3094,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
           const SizedBox(height: 20),
           const Text(
             'Select Students',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Flexible(
@@ -2748,21 +3104,25 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
               itemBuilder: (context, index) {
                 final student = widget.students[index];
                 final studentId = student.id?.toString() ?? '';
-                final studentName = student.fullname ?? student.name ?? 'Student';
-                final studentClass = student.classname ?? student.className ?? '';
+                final studentName =
+                    student.fullname ?? student.name ?? 'Student';
+                final studentClass =
+                    student.classname ?? student.className ?? '';
                 final isPicked = _pickedStudents.contains(studentId);
                 final isAbsent = _absentStudents.contains(studentId);
-                
+
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
                     backgroundColor: isPicked
                         ? Colors.green
                         : isAbsent
-                            ? Colors.orange
-                            : Colors.grey[200],
+                        ? Colors.orange
+                        : Colors.grey[200],
                     child: Text(
-                      studentName.isNotEmpty ? studentName[0].toUpperCase() : '?',
+                      studentName.isNotEmpty
+                          ? studentName[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
                         color: isPicked || isAbsent
                             ? Colors.white
@@ -2787,7 +3147,9 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                           });
                         },
                         icon: Icon(
-                          isPicked ? Icons.check_circle : Icons.check_circle_outline,
+                          isPicked
+                              ? Icons.check_circle
+                              : Icons.check_circle_outline,
                           color: isPicked ? Colors.green : Colors.grey,
                         ),
                       ),
@@ -2833,10 +3195,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
               ),
               child: const Text(
                 'Confirm',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
           ),

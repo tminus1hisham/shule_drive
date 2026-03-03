@@ -54,7 +54,7 @@ class StudentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cardContent = Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -98,17 +98,13 @@ class StudentCard extends StatelessWidget {
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                         ),
-                        child: Icon(
-                          _statusIcon,
-                          color: Colors.white,
-                          size: 10,
-                        ),
+                        child: Icon(_statusIcon, color: Colors.white, size: 10),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(width: 14),
-                
+
                 // Info
                 Expanded(
                   child: Column(
@@ -125,14 +121,14 @@ class StudentCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         student.className,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: _statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -149,7 +145,7 @@ class StudentCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Call Button
                 if (onCall != null)
                   GestureDetector(
@@ -176,7 +172,7 @@ class StudentCard extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Action Buttons
           if (showActions && student.status != StudentStatus.picked) ...[
             const Divider(height: 1, indent: 16, endIndent: 16),
@@ -245,6 +241,8 @@ class StudentCard extends StatelessWidget {
         ],
       ),
     );
+
+    return cardContent;
   }
 
   Widget _buildActionButton({

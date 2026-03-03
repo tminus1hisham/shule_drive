@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/trip_provider.dart';
 
 class SideMenu extends StatefulWidget {
   const SideMenu({super.key});
@@ -14,6 +15,8 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
@@ -34,11 +37,22 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
           ),
         );
     _animationController.forward();
+
+    // Pulse animation for active trip indicator
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _pulseController.repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -46,8 +60,10 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
+    final tripProvider = context.watch<TripProvider>();
     final isDarkMode = provider.isDarkMode;
     final isDriver = authProvider.isDriver;
+    final hasActiveTrip = tripProvider.activeTrip != null;
 
     return Drawer(
       backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
@@ -69,6 +85,15 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   child: ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
+                      // Active Trip Shortcut - pulsing green when trip is live
+                      if (isDriver && hasActiveTrip)
+                        _buildActiveTripMenuItem(
+                          tripProvider.activeTrip!.routeName,
+                          () => _navigateTo(context, '/active-trip'),
+                        ),
+
+                      if (isDriver && hasActiveTrip) const SizedBox(height: 8),
+
                       // Profile - Highlighted
                       _buildHighlightedMenuItem(
                         Icons.person,
@@ -513,6 +538,92 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
           fontSize: 12,
           color: isDarkMode ? Colors.white38 : const Color(0xFFAAAAAA),
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  /// Active trip menu item with pulsing green indicator
+  Widget _buildActiveTripMenuItem(String routeName, VoidCallback onTap) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF6B9B5B).withAlpha(isDarkMode ? 40 : 25),
+                const Color(0xFF6B9B5B).withAlpha(isDarkMode ? 20 : 10),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF6B9B5B).withAlpha(60)),
+          ),
+          child: Row(
+            children: [
+              // Pulsing green dot
+              AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: const Color(
+                        0xFF6B9B5B,
+                      ).withAlpha((_pulseAnimation.value * 255).toInt()),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFF6B9B5B,
+                          ).withAlpha((_pulseAnimation.value * 100).toInt()),
+                          blurRadius: 6,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 12),
+              const Icon(Icons.navigation, color: Color(0xFF6B9B5B), size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Active Trip',
+                      style: TextStyle(
+                        color: Color(0xFF6B9B5B),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      routeName,
+                      style: TextStyle(
+                        color: const Color(0xFF6B9B5B).withAlpha(180),
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Color(0xFF6B9B5B),
+                size: 14,
+              ),
+            ],
+          ),
         ),
       ),
     );

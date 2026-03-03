@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 import '../../api/services/bus_service.dart';
+import '../../api/services/trip_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
@@ -13,10 +14,7 @@ import '../../widgets/main_scaffold.dart';
 class VehicleSelectionScreen extends StatefulWidget {
   final MasterTrip? masterTrip;
 
-  const VehicleSelectionScreen({
-    super.key,
-    this.masterTrip,
-  });
+  const VehicleSelectionScreen({super.key, this.masterTrip});
 
   @override
   State<VehicleSelectionScreen> createState() => _VehicleSelectionScreenState();
@@ -29,14 +27,15 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
   List<Bus> _vehicles = [];
   Bus? _selectedVehicle;
   PreloadedTripData? _preloadedData;
-  
+
   late AnimationController _animationController;
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get preloaded data from route arguments (parse from Map)
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final preloadedDataMap = args?['preloadedData'] as Map<String, dynamic>?;
     if (preloadedDataMap != null) {
       _preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
@@ -66,41 +65,123 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     });
 
     try {
-      final appProvider = context.read<AppProvider>();
       final authProvider = context.read<AuthProvider>();
-      
+      final busService = BusService();
+
       // Get driver's school ID
       final user = authProvider.currentUser;
       final schoolId = user?.schoolId;
-      
+
       debugPrint('🚗 VehicleSelection: Loading vehicles for school: $schoolId');
-      
+
+      List<Bus> buses = [];
+
       if (schoolId != null && schoolId.isNotEmpty) {
-        await appProvider.fetchAllSchoolData(schoolId);
+        // Fetch only buses belonging to the driver's school
+        buses = await busService.getBusesBySchool(schoolId);
+        debugPrint(
+          '🚗 VehicleSelection: Loaded ${buses.length} school-filtered vehicles',
+        );
+
+        // Further filter: only show buses that appear in this driver's master trips
+        final driverId = user?.id;
+        if (driverId != null && driverId.isNotEmpty) {
+          try {
+            final tripService = TripService();
+            final masterTrips = await tripService.getMasterTripsByDriverCached(
+              driverId,
+              onRefresh: (_) {},
+            );
+
+            // Collect all numberPlates from the driver's trips
+            final driverPlates = masterTrips
+                .where(
+                  (t) => t.numberPlate != null && t.numberPlate!.isNotEmpty,
+                )
+                .map((t) => t.numberPlate!.toLowerCase())
+                .toSet();
+
+            if (driverPlates.isNotEmpty) {
+              final driverBuses = buses
+                  .where(
+                    (b) => driverPlates.contains(
+                      b.registrationNumber.toLowerCase(),
+                    ),
+                  )
+                  .toList();
+
+              if (driverBuses.isNotEmpty) {
+                buses = driverBuses;
+                debugPrint(
+                  '🚗 VehicleSelection: Filtered to ${buses.length} driver-assigned vehicles',
+                );
+              } else {
+                debugPrint(
+                  '⚠️ VehicleSelection: No plate match found, keeping all ${buses.length} school vehicles',
+                );
+              }
+            }
+          } catch (e) {
+            debugPrint(
+              '⚠️ VehicleSelection: Could not filter by master trips: $e',
+            );
+          }
+        }
       } else {
-        await appProvider.fetchBuses();
+        // Fallback: try to infer schoolId from the driver's own buses
+        debugPrint(
+          '⚠️ VehicleSelection: No schoolId on user, fetching all & filtering by driver',
+        );
+        final allBuses = await busService.getAllBuses();
+
+        // If we can find a bus that belongs to this driver, use its schoolId to filter
+        if (allBuses.isNotEmpty) {
+          final driverSchool = allBuses.firstWhere(
+            (b) => b.schoolId != null && b.schoolId!.isNotEmpty,
+            orElse: () => allBuses.first,
+          );
+          if (driverSchool.schoolId != null &&
+              driverSchool.schoolId!.isNotEmpty) {
+            final inferredSchoolId = driverSchool.schoolId!;
+            buses = allBuses
+                .where((b) => b.schoolId == inferredSchoolId)
+                .toList();
+            debugPrint(
+              '🚗 VehicleSelection: Inferred schoolId=$inferredSchoolId, ${buses.length} vehicles',
+            );
+          } else {
+            buses = allBuses;
+            debugPrint(
+              '🚗 VehicleSelection: Could not infer school, showing all ${buses.length} vehicles',
+            );
+          }
+        }
       }
-      
+
       if (mounted) {
-        final buses = appProvider.buses;
-        debugPrint('🚗 VehicleSelection: Loaded ${buses.length} vehicles');
-        
+        debugPrint('🚗 VehicleSelection: Final vehicle count: ${buses.length}');
+
         setState(() {
           _vehicles = buses;
           _isLoading = false;
-          
+
           // Pre-select if master trip has a vehicle assigned
           if (widget.masterTrip?.numberPlate != null && buses.isNotEmpty) {
             try {
               _selectedVehicle = buses.firstWhere(
-                (v) => v.registrationNumber.toLowerCase() == 
-                       widget.masterTrip!.numberPlate!.toLowerCase(),
+                (v) =>
+                    v.registrationNumber.toLowerCase() ==
+                    widget.masterTrip!.numberPlate!.toLowerCase(),
               );
-              debugPrint('🚗 Pre-selected vehicle: ${_selectedVehicle?.registrationNumber}');
+              debugPrint(
+                '🚗 Pre-selected vehicle: ${_selectedVehicle?.registrationNumber}',
+              );
             } catch (e) {
               // No matching vehicle found
               _selectedVehicle = null;
-              debugPrint('🚗 No matching vehicle found for: ${widget.masterTrip?.numberPlate}');
+              debugPrint(
+                '🚗 No matching vehicle found for: ${widget.masterTrip?.numberPlate}',
+              );
             }
           }
         });
@@ -127,19 +208,24 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
 
   void _onConfirm() {
     if (_selectedVehicle == null) return;
-    
+
     HapticFeedback.mediumImpact();
-    
+
     // Update preloaded data with selected vehicle
-    final updatedPreloadedData = _preloadedData?.copyWith(vehicle: _selectedVehicle);
-    
-    // Navigate to start trip with pre-populated data (as Map for serialization)
+    final updatedPreloadedData = _preloadedData?.copyWith(
+      vehicle: _selectedVehicle,
+    );
+
+    // Navigate directly to active trip (skip start-trip intermediate screen)
     Navigator.pushReplacementNamed(
       context,
-      '/start-trip',
+      '/active-trip',
       arguments: {
         'masterTrip': widget.masterTrip,
+        'tripId': widget.masterTrip?.id,
         'vehicle': _selectedVehicle,
+        'vehicleId': _selectedVehicle?.id,
+        'busPlate': _selectedVehicle?.registrationNumber,
         'preSelectedRoute': widget.masterTrip?.route,
         'preloadedData': updatedPreloadedData?.toJson(),
       },
@@ -163,18 +249,18 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
           children: [
             // Header with trip info
             _buildHeader(isDarkMode),
-            
+
             // Content
             Expanded(
               child: _isLoading
                   ? _buildLoadingState(isDarkMode)
                   : _error != null
-                      ? _buildErrorState(isDarkMode)
-                      : _vehicles.isEmpty
-                          ? _buildEmptyState(isDarkMode)
-                          : _buildVehiclesList(isDarkMode),
+                  ? _buildErrorState(isDarkMode)
+                  : _vehicles.isEmpty
+                  ? _buildEmptyState(isDarkMode)
+                  : _buildVehiclesList(isDarkMode),
             ),
-            
+
             // Bottom button
             if (!_isLoading && _error == null && _vehicles.isNotEmpty)
               _buildBottomButton(isDarkMode),
@@ -277,7 +363,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+              color: isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : const Color(0xFFE5E5EA),
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -290,7 +378,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   width: 150,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFE5E5EA),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -299,7 +389,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   width: 100,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFE5E5EA),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -318,11 +410,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red.shade400,
-            ),
+            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
             const SizedBox(height: 16),
             Text(
               _error!,
@@ -340,7 +428,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6B9B5B),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -362,8 +453,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: isDarkMode 
-                    ? Colors.white.withOpacity(0.05) 
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.05)
                     : const Color(0xFF2196F3).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
@@ -402,7 +493,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6B9B5B),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -414,8 +508,13 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   icon: const Icon(Icons.arrow_back),
                   label: const Text('Go Back'),
                   style: TextButton.styleFrom(
-                    foregroundColor: isDarkMode ? Colors.white70 : const Color(0xFF666666),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    foregroundColor: isDarkMode
+                        ? Colors.white70
+                        : const Color(0xFF666666),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ],
@@ -426,7 +525,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: isDarkMode ? const Color(0x66FFFFFF) : const Color(0xFF999999),
+                color: isDarkMode
+                    ? const Color(0x66FFFFFF)
+                    : const Color(0xFF999999),
               ),
             ),
             // Hidden button for development/testing - long press to add mock vehicle
@@ -476,19 +577,18 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
         itemBuilder: (context, index) {
           final vehicle = _vehicles[index];
           final isSelected = _selectedVehicle?.id == vehicle.id;
-          
+
           return AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
               final delay = index * 0.1;
-              final value = (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
-              
+              final value =
+                  (_animationController.value - delay).clamp(0.0, 1.0) /
+                  (1 - delay);
+
               return Transform.translate(
                 offset: Offset(0, 20 * (1 - value)),
-                child: Opacity(
-                  opacity: value,
-                  child: child,
-                ),
+                child: Opacity(opacity: value, child: child),
               );
             },
             child: _buildVehicleCard(vehicle, isSelected, isDarkMode),
@@ -510,8 +610,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             color: isSelected
                 ? const Color(0xFF2196F3)
                 : isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : const Color(0xFFE5E5EA),
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFE5E5EA),
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
@@ -537,27 +637,23 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   color: isSelected
                       ? const Color(0xFF2196F3)
                       : isDarkMode
-                          ? const Color(0xFF2C2C2C)
-                          : const Color(0xFFE5E5EA),
+                      ? const Color(0xFF2C2C2C)
+                      : const Color(0xFFE5E5EA),
                   border: Border.all(
                     color: isSelected
                         ? const Color(0xFF2196F3)
                         : isDarkMode
-                            ? const Color(0xFF3A3A3C)
-                            : const Color(0xFFD1D1D6),
+                        ? const Color(0xFF3A3A3C)
+                        : const Color(0xFFD1D1D6),
                     width: 2,
                   ),
                 ),
                 child: isSelected
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 16,
-                      )
+                    ? const Icon(Icons.check, color: Colors.white, size: 16)
                     : null,
               ),
               const SizedBox(width: 16),
-              
+
               // Vehicle icon
               Container(
                 width: 56,
@@ -573,7 +669,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Vehicle details
               Expanded(
                 child: Column(
@@ -584,7 +680,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                        color: isDarkMode
+                            ? Colors.white
+                            : const Color(0xFF1A1A1A),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -593,7 +691,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                         vehicle.model!,
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                          color: isDarkMode
+                              ? Colors.white60
+                              : const Color(0xFF666666),
                         ),
                       ),
                     const SizedBox(height: 6),
@@ -653,8 +753,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
         color: isActive
             ? const Color(0xFF4CAF50).withOpacity(0.1)
             : isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFF5F5F5),
+            ? const Color(0xFF2C2C2C)
+            : const Color(0xFFF5F5F5),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -664,7 +764,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             width: 6,
             height: 6,
             decoration: BoxDecoration(
-              color: isActive ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+              color: isActive
+                  ? const Color(0xFF4CAF50)
+                  : const Color(0xFFFF9800),
               shape: BoxShape.circle,
             ),
           ),
@@ -676,8 +778,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               color: isActive
                   ? const Color(0xFF4CAF50)
                   : isDarkMode
-                      ? Colors.white60
-                      : const Color(0xFF666666),
+                  ? Colors.white60
+                  : const Color(0xFF666666),
               fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
             ),
           ),
@@ -688,14 +790,16 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
 
   Widget _buildBottomButton(bool isDarkMode) {
     final canConfirm = _selectedVehicle != null;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+            color: isDarkMode
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFE5E5EA),
           ),
         ),
       ),
@@ -711,11 +815,11 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: isDarkMode 
-                      ? const Color(0xFF2C2C2C) 
+                  disabledBackgroundColor: isDarkMode
+                      ? const Color(0xFF2C2C2C)
                       : const Color(0xFFE5E5EA),
-                  disabledForegroundColor: isDarkMode 
-                      ? Colors.white30 
+                  disabledForegroundColor: isDarkMode
+                      ? Colors.white30
                       : const Color(0xFF999999),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -724,10 +828,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 ),
                 child: const Text(
                   'Confirm Vehicle',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

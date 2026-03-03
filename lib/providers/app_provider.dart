@@ -268,14 +268,16 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (kDebugMode) {
         print('🚌 AppProvider: Fetching buses (cache-first: $useCache)...');
       }
-      
+
       if (useCache) {
         // Use cache-first pattern
         final buses = await _busService.getAllBusesCached(
           onRefresh: (freshBuses) {
             // Background refresh callback
             if (kDebugMode) {
-              print('🔄 AppProvider: Background refresh with ${freshBuses.length} buses');
+              print(
+                '🔄 AppProvider: Background refresh with ${freshBuses.length} buses',
+              );
             }
             _buses = freshBuses;
             notifyListeners();
@@ -288,7 +290,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         _buses = await _busService.getAllBuses();
         notifyListeners();
       }
-      
+
       if (kDebugMode) {
         print('✅ AppProvider: Fetched ${_buses.length} buses');
       }
@@ -360,18 +362,28 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ==========================================================================
 
   /// Fetch routes by school ID
-  Future<void> fetchRoutesBySchool(String schoolId, {String? schoolName}) async {
+  Future<void> fetchRoutesBySchool(
+    String schoolId, {
+    String? schoolName,
+  }) async {
     _setLoading(true);
     _clearError();
 
     try {
       if (kDebugMode) {
-        print('📍 AppProvider: Fetching routes for school $schoolId (name: $schoolName)...');
+        print(
+          '📍 AppProvider: Fetching routes for school $schoolId (name: $schoolName)...',
+        );
       }
-      _routes = await _routeService.getRoutesBySchool(schoolId, schoolName: schoolName);
+      _routes = await _routeService.getRoutesBySchool(
+        schoolId,
+        schoolName: schoolName,
+      );
       _currentSchoolId = schoolId;
       if (kDebugMode) {
-        print('✅ AppProvider: Fetched ${_routes.length} routes for school $schoolId');
+        print(
+          '✅ AppProvider: Fetched ${_routes.length} routes for school $schoolId',
+        );
       }
       notifyListeners();
     } on api.NotFoundException catch (e) {
@@ -407,7 +419,9 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _buses = await _busService.getBusesBySchool(schoolId);
       _currentSchoolId = schoolId;
       if (kDebugMode) {
-        print('✅ AppProvider: Fetched ${_buses.length} buses for school $schoolId');
+        print(
+          '✅ AppProvider: Fetched ${_buses.length} buses for school $schoolId',
+        );
       }
       notifyListeners();
     } on api.NotFoundException catch (e) {
@@ -443,7 +457,9 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       _apiStudents = await _studentService.getStudentsBySchool(schoolId);
       _currentSchoolId = schoolId;
       if (kDebugMode) {
-        print('✅ AppProvider: Fetched ${_apiStudents.length} students for school $schoolId');
+        print(
+          '✅ AppProvider: Fetched ${_apiStudents.length} students for school $schoolId',
+        );
       }
       notifyListeners();
     } on api.NotFoundException catch (e) {
@@ -474,9 +490,11 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       if (kDebugMode) {
-        print('🏫 AppProvider: Fetching all data for school $schoolId (name: $schoolName)...');
+        print(
+          '🏫 AppProvider: Fetching all data for school $schoolId (name: $schoolName)...',
+        );
       }
-      
+
       // Fetch all data in parallel
       final results = await Future.wait([
         _routeService.getRoutesBySchool(schoolId, schoolName: schoolName),
@@ -495,7 +513,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         print('   🚌 Buses: ${_buses.length}');
         print('   👨‍🎓 Students: ${_apiStudents.length}');
       }
-      
+
       notifyListeners();
     } on api.ApiException catch (e) {
       if (kDebugMode) {
@@ -895,6 +913,22 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       parentPhone: '+254 712 345 678',
     ),
   ];
+
+  // Notification badge counts
+  int _unreadChatCount = 0;
+  int get unreadChatCount => _unreadChatCount;
+  int _unreadAlertCount = 0;
+  int get unreadAlertCount => _unreadAlertCount;
+
+  void setUnreadChatCount(int count) {
+    _unreadChatCount = count;
+    notifyListeners();
+  }
+
+  void setUnreadAlertCount(int count) {
+    _unreadAlertCount = count;
+    notifyListeners();
+  }
 
   // Trip status
   bool _hasActiveTrip = false;

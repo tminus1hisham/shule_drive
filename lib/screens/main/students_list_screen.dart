@@ -30,7 +30,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() => setState(() {}));
-    
+
     // Load students from active trip
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadStudentsFromTrip();
@@ -45,11 +45,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   }
 
   void _loadStudentsFromTrip() {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final tripId = args?['tripId']?.toString();
-    
+
     final tripProvider = context.read<TripProvider>();
-    
+
     // Try to get trip from provider
     Trip? trip;
     if (tripId != null) {
@@ -60,27 +61,33 @@ class _StudentsListScreenState extends State<StudentsListScreen>
       }
     }
     trip ??= tripProvider.activeTrip;
-    
+
     if (trip != null) {
       _trip = trip;
       // Convert StudentPickup to Student
-      students = trip.students.map((s) => Student(
-        id: s.id,
-        name: s.name,
-        className: '', // Not available in StudentPickup
-        avatar: s.photo ?? '',
-        status: _mapStatus(s.status),
-      )).toList();
-      
+      students = trip.students
+          .map(
+            (s) => Student(
+              id: s.id,
+              name: s.name,
+              className: '', // Not available in StudentPickup
+              avatar: s.photo ?? '',
+              status: _mapStatus(s.status),
+            ),
+          )
+          .toList();
+
       if (kDebugMode) {
-        print('🎓 StudentsListScreen: Loaded ${students.length} students from trip');
+        print(
+          '🎓 StudentsListScreen: Loaded ${students.length} students from trip',
+        );
       }
     } else {
       if (kDebugMode) {
         print('⚠️ StudentsListScreen: No active trip found');
       }
     }
-    
+
     setState(() => _isLoading = false);
   }
 
@@ -108,13 +115,13 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   List<Student> _getFilteredStudents() {
     final query = _searchController.text.toLowerCase();
     var filtered = students;
-    
+
     if (query.isNotEmpty) {
-      filtered = filtered.where((s) => 
-        s.name.toLowerCase().contains(query)
-      ).toList();
+      filtered = filtered
+          .where((s) => s.name.toLowerCase().contains(query))
+          .toList();
     }
-    
+
     switch (_tabController.index) {
       case 1:
         return filtered.where((s) => s.status == StudentStatus.picked).toList();
@@ -128,7 +135,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    
+
     if (_isLoading) {
       return const MainScaffold(
         title: 'Students',
@@ -138,9 +145,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ),
       );
     }
-    
+
     final filteredStudents = _getFilteredStudents();
-    final pickedCount = students.where((s) => s.status == StudentStatus.picked).length;
+    final pickedCount = students
+        .where((s) => s.status == StudentStatus.picked)
+        .length;
     final progress = students.isEmpty ? 0.0 : pickedCount / students.length;
 
     return MainScaffold(
@@ -210,7 +219,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               ),
             ),
           ),
-          
+
           // Content
           SliverToBoxAdapter(
             child: Padding(
@@ -219,7 +228,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  
+
                   // Progress Card
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -253,7 +262,10 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(20),
@@ -274,8 +286,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                           borderRadius: BorderRadius.circular(8),
                           child: LinearProgressIndicator(
                             value: progress,
-                            backgroundColor: Colors.white.withValues(alpha: 0.2),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.2,
+                            ),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                             minHeight: 8,
                           ),
                         ),
@@ -290,9 +306,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Search Bar
                   Container(
                     decoration: BoxDecoration(
@@ -322,7 +338,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                           margin: const EdgeInsets.all(12),
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                            color: const Color(
+                              0xFF6B9B5B,
+                            ).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -337,7 +355,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
-                                icon: Icon(Icons.close, size: 20, color: provider.textMutedColor),
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 20,
+                                  color: provider.textMutedColor,
+                                ),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() {});
@@ -358,7 +380,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   // Tabs
                   Container(
                     decoration: BoxDecoration(
-                      color: provider.isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5),
+                      color: provider.isDarkMode
+                          ? const Color(0xFF2A2A2A)
+                          : const Color(0xFFF5F5F5),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: TabBar(
@@ -368,7 +392,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFF6B9B5B,
+                            ).withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -387,38 +413,149 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       padding: const EdgeInsets.all(4),
                       tabs: [
                         _buildTab('All', students.length, provider),
-                        _buildTab('Picked', students.where((s) => s.status == StudentStatus.picked).length, provider),
-                        _buildTab('Absent', students.where((s) => s.status == StudentStatus.absent).length, provider),
+                        _buildTab(
+                          'Picked',
+                          students
+                              .where((s) => s.status == StudentStatus.picked)
+                              .length,
+                          provider,
+                        ),
+                        _buildTab(
+                          'Absent',
+                          students
+                              .where((s) => s.status == StudentStatus.absent)
+                              .length,
+                          provider,
+                        ),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 20),
-
-                  // Students List
-                  if (filteredStudents.isEmpty)
-                    _buildEmptyState(provider)
-                  else
-                    ...filteredStudents.map(
-                      (student) => StudentCard(
-                        student: student,
-                        onPick: () => _updateStudentStatus(student.id, StudentStatus.picked),
-                        onAbsent: () => _updateStudentStatus(student.id, StudentStatus.absent),
-                        onCall: () {},
-                      ),
-                    ),
-                    
-                  const SizedBox(height: 100),
                 ],
               ),
             ),
           ),
+
+          // Students List - in a separate SliverList for proper Dismissible gesture support
+          if (filteredStudents.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildEmptyState(provider),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList.builder(
+                itemCount: filteredStudents.length + 1, // +1 for bottom spacer
+                itemBuilder: (context, index) {
+                  if (index == filteredStudents.length) {
+                    return const SizedBox(height: 100);
+                  }
+
+                  final student = filteredStudents[index];
+                  final card = StudentCard(
+                    student: student,
+                    onPick: () =>
+                        _updateStudentStatus(student.id, StudentStatus.picked),
+                    onAbsent: () =>
+                        _updateStudentStatus(student.id, StudentStatus.absent),
+                    onCall: () {},
+                  );
+
+                  // Wrap pending students with swipe-to-act
+                  if (student.status == StudentStatus.pending) {
+                    return Dismissible(
+                      key: Key('swipe_${student.id}'),
+                      direction: DismissDirection.horizontal,
+                      dismissThresholds: const {
+                        DismissDirection.startToEnd: 0.3,
+                        DismissDirection.endToStart: 0.3,
+                      },
+                      confirmDismiss: (direction) async {
+                        if (direction == DismissDirection.startToEnd) {
+                          HapticFeedback.mediumImpact();
+                          _updateStudentStatus(
+                            student.id,
+                            StudentStatus.picked,
+                          );
+                        } else {
+                          HapticFeedback.heavyImpact();
+                          _updateStudentStatus(
+                            student.id,
+                            StudentStatus.absent,
+                          );
+                        }
+                        return false;
+                      },
+                      background: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6B9B5B),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 24),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Pick Up',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      secondaryBackground: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9800),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Absent',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Icon(Icons.cancel, color: Colors.white, size: 28),
+                          ],
+                        ),
+                      ),
+                      child: card,
+                    );
+                  }
+
+                  return card;
+                },
+              ),
+            ),
         ],
       ),
       floatingActionButton: Container(
         margin: const EdgeInsets.only(bottom: 5),
         child: FloatingActionButton.extended(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'),
+          onPressed: () =>
+              Navigator.pushReplacementNamed(context, '/dashboard'),
           backgroundColor: const Color(0xFF6B9B5B),
           icon: const Icon(Icons.check_circle_outline),
           label: const Text(
@@ -441,7 +578,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: _tabController.index == _tabController.animation?.value?.round()
+              color:
+                  _tabController.index ==
+                      _tabController.animation?.value?.round()
                   ? Colors.white.withValues(alpha: 0.3)
                   : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
@@ -451,7 +590,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: _tabController.index == _tabController.animation?.value?.round()
+                color:
+                    _tabController.index ==
+                        _tabController.animation?.value?.round()
                     ? Colors.white
                     : const Color(0xFF6B9B5B),
               ),
@@ -491,10 +632,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           const SizedBox(height: 4),
           Text(
             'Try adjusting your search',
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
           ),
         ],
       ),
