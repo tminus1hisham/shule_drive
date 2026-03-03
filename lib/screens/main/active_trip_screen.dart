@@ -1813,7 +1813,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                       final isAbsent = status == 'absent';
                       final isPending = status == 'pending';
 
-                      return Container(
+                      final content = Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: isDarkMode
@@ -1940,6 +1940,94 @@ class _StudentListBottomSheet extends StatelessWidget {
                                   ],
                                 ),
                         ),
+                      );
+
+                      if (isDropped || isAbsent) {
+                        return content;
+                      }
+
+                      return Dismissible(
+                        key: Key('bs_swipe_${student['id']}'),
+                        direction: isPicked
+                            ? DismissDirection.startToEnd
+                            : DismissDirection.horizontal,
+                        dismissThresholds: const {
+                          DismissDirection.startToEnd: 0.3,
+                          DismissDirection.endToStart: 0.3,
+                        },
+                        confirmDismiss: (direction) async {
+                          if (direction == DismissDirection.startToEnd) {
+                            HapticFeedback.mediumImpact();
+                            onUpdateStatus(
+                              student['id'],
+                              isPending ? 'picked' : 'dropped',
+                            );
+                          } else {
+                            HapticFeedback.heavyImpact();
+                            onUpdateStatus(student['id'], 'absent');
+                          }
+                          return false; // Don't actually dismiss the widget from the tree, UI will rebuild
+                        },
+                        background: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isPending
+                                ? const Color(0xFF6B9B5B)
+                                : Colors.blue,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.only(left: 20),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isPending ? Icons.check_circle : Icons.logout,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                isPending ? 'Pick Up' : 'Drop Off',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        secondaryBackground: isPending
+                            ? Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    const Text(
+                                      'Absent',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Icon(
+                                      Icons.cancel,
+                                      color: Colors.white,
+                                      size: 28,
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                        child: content,
                       );
                     },
                   ),
