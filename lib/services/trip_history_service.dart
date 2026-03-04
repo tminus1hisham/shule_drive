@@ -22,10 +22,10 @@ class TripHistoryService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Get existing trips
       final existingTrips = await getTripHistory(driverId);
-      
+
       // Create history entry
       final historyEntry = TripHistory(
         trip: trip,
@@ -34,19 +34,19 @@ class TripHistoryService {
         attendantName: attendantName,
         loggedAt: DateTime.now(),
       );
-      
+
       // Add to beginning of list
       existingTrips.insert(0, historyEntry);
-      
+
       // Keep only last 100 trips to prevent storage bloat
       if (existingTrips.length > 100) {
         existingTrips.removeRange(100, existingTrips.length);
       }
-      
+
       // Convert to JSON
       final tripsJson = existingTrips.map((t) => t.toJson()).toList();
       final jsonString = jsonEncode(tripsJson);
-      
+
       if (kDebugMode) {
         print('💾 Saving trip to history:');
         print('   Trip ID: ${trip.id}');
@@ -58,13 +58,13 @@ class TripHistoryService {
           print('   First student JSON: $firstStudentJson');
         }
       }
-      
+
       // Save to storage
       await prefs.setString('${_tripsKey}_$driverId', jsonString);
-      
+
       // Update stats
       await _updateStats(prefs, driverId, trip);
-      
+
       if (kDebugMode) {
         print('✅ Trip saved to history: ${trip.id}');
         print('   ├─ Driver: $driverName');
@@ -85,18 +85,18 @@ class TripHistoryService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final tripsString = prefs.getString('${_tripsKey}_$driverId');
-      
+
       if (tripsString == null || tripsString.isEmpty) {
         return [];
       }
-      
+
       final tripsJson = jsonDecode(tripsString) as List;
-      
+
       if (kDebugMode) {
         print('📜 Loading trip history for driver: $driverId');
         print('   Trips count: ${tripsJson.length}');
       }
-      
+
       final history = <TripHistory>[];
       for (var i = 0; i < tripsJson.length; i++) {
         try {
@@ -108,7 +108,7 @@ class TripHistoryService {
           }
         }
       }
-      
+
       return history;
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -120,28 +120,80 @@ class TripHistoryService {
   }
 
   /// Get driver statistics
+  /// Computes stats from actual trip history data to stay accurate
   Future<DriverStats> getDriverStats(String driverId) async {
     try {
+      // First try the saved counter
       final prefs = await SharedPreferences.getInstance();
       final statsString = prefs.getString('${_statsKey}_$driverId');
-      
+
       if (statsString != null) {
-        return DriverStats.fromJson(jsonDecode(statsString));
+        final savedStats = DriverStats.fromJson(jsonDecode(statsString));
+        // If saved stats look valid (non-zero trips), use them
+        if (savedStats.totalTrips > 0) {
+          return savedStats;
+        }
+      }
+
+      // Fallback: compute stats directly from trip history
+      final history = await getTripHistory(driverId);
+      if (history.isNotEmpty) {
+        int totalStudents = 0;
+        int totalPicked = 0;
+        int totalAbsent = 0;
+        double totalDistance = 0;
+        DateTime? lastTripDate;
+
+        for (final entry in history) {
+          totalStudents += entry.trip.students.length;
+          totalPicked += entry.trip.pickedCount;
+          totalAbsent += entry.trip.absentCount;
+          totalDistance += entry.trip.distance ?? 0;
+          if (lastTripDate == null ||
+              entry.trip.startTime.isAfter(lastTripDate)) {
+            lastTripDate = entry.trip.startTime;
+          }
+        }
+
+        final computedStats = DriverStats(
+          totalTrips: history.length,
+          totalStudents: totalStudents,
+          totalPicked: totalPicked,
+          totalAbsent: totalAbsent,
+          totalDistance: totalDistance,
+          lastTripDate: lastTripDate,
+        );
+
+        // Save the recomputed stats so they persist
+        await prefs.setString(
+          '${_statsKey}_$driverId',
+          jsonEncode(computedStats.toJson()),
+        );
+
+        if (kDebugMode) {
+          print('📊 Recomputed driver stats from ${history.length} trips');
+        }
+
+        return computedStats;
       }
     } catch (e) {
       if (kDebugMode) {
         print('❌ Failed to load driver stats: $e');
       }
     }
-    
+
     return DriverStats.empty();
   }
 
   /// Update driver statistics
-  Future<void> _updateStats(SharedPreferences prefs, String driverId, Trip trip) async {
+  Future<void> _updateStats(
+    SharedPreferences prefs,
+    String driverId,
+    Trip trip,
+  ) async {
     try {
       final stats = await getDriverStats(driverId);
-      
+
       final updatedStats = DriverStats(
         totalTrips: stats.totalTrips + 1,
         totalStudents: stats.totalStudents + trip.students.length,
@@ -150,8 +202,11 @@ class TripHistoryService {
         totalDistance: stats.totalDistance + (trip.distance ?? 0),
         lastTripDate: DateTime.now(),
       );
-      
-      await prefs.setString('${_statsKey}_$driverId', jsonEncode(updatedStats.toJson()));
+
+      await prefs.setString(
+        '${_statsKey}_$driverId',
+        jsonEncode(updatedStats.toJson()),
+      );
     } catch (e) {
       if (kDebugMode) {
         print('❌ Failed to update stats: $e');
@@ -165,7 +220,7 @@ class TripHistoryService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('${_tripsKey}_$driverId');
       await prefs.remove('${_statsKey}_$driverId');
-      
+
       if (kDebugMode) {
         print('🗑️ Trip history cleared for driver: $driverId');
       }
@@ -180,7 +235,7 @@ class TripHistoryService {
   Future<List<TripHistory>> searchTrips(String driverId, String query) async {
     final allTrips = await getTripHistory(driverId);
     final lowerQuery = query.toLowerCase();
-    
+
     return allTrips.where((t) {
       return t.trip.routeName.toLowerCase().contains(lowerQuery) ||
           t.trip.vehicleNumber?.toLowerCase().contains(lowerQuery) == true ||
@@ -195,7 +250,7 @@ class TripHistoryService {
     DateTime end,
   ) async {
     final allTrips = await getTripHistory(driverId);
-    
+
     return allTrips.where((t) {
       final tripDate = t.trip.startTime;
       return tripDate.isAfter(start) && tripDate.isBefore(end);
@@ -207,30 +262,34 @@ class TripHistoryService {
   Future<List<TripHistory>> getAllTripsForGuardian(String guardianPhone) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Get all keys that match the trip history pattern
       final allKeys = prefs.getKeys();
-      final tripKeys = allKeys.where((key) => key.startsWith(_tripsKey)).toList();
-      
+      final tripKeys = allKeys
+          .where((key) => key.startsWith(_tripsKey))
+          .toList();
+
       final List<TripHistory> allTrips = [];
-      
+
       for (final key in tripKeys) {
         try {
           final tripsString = prefs.getString(key);
           if (tripsString == null || tripsString.isEmpty) continue;
-          
+
           final tripsJson = jsonDecode(tripsString) as List;
-          
+
           for (var i = 0; i < tripsJson.length; i++) {
             try {
               final tripHistory = TripHistory.fromJson(tripsJson[i]);
               // Check if any student in this trip belongs to the guardian
-              final hasGuardianStudent = tripHistory.trip.students.any((student) {
+              final hasGuardianStudent = tripHistory.trip.students.any((
+                student,
+              ) {
                 return student.parentPhone == guardianPhone ||
                     student.parentPhone?.replaceAll(RegExp(r'[^0-9]'), '') ==
                         guardianPhone.replaceAll(RegExp(r'[^0-9]'), '');
               });
-              
+
               if (hasGuardianStudent) {
                 allTrips.add(tripHistory);
               }
@@ -246,14 +305,14 @@ class TripHistoryService {
           }
         }
       }
-      
+
       // Sort by date, newest first
       allTrips.sort((a, b) => b.trip.startTime.compareTo(a.trip.startTime));
-      
+
       if (kDebugMode) {
         print('📜 Found ${allTrips.length} trips for guardian: $guardianPhone');
       }
-      
+
       return allTrips;
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -355,7 +414,6 @@ class DriverStats {
     };
   }
 
-  double get completionRate => totalStudents > 0
-      ? (totalPicked / totalStudents) * 100
-      : 0;
+  double get completionRate =>
+      totalStudents > 0 ? (totalPicked / totalStudents) * 100 : 0;
 }

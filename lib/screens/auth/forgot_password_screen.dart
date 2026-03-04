@@ -16,7 +16,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
+
   String _completePhoneNumber = '';
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -33,13 +33,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _animationController.forward();
   }
 
@@ -56,21 +56,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     HapticFeedback.lightImpact();
 
     final authProvider = context.read<AuthProvider>();
-    
-    // Request password reset OTP
-    final success = await authProvider.requestPasswordReset(_completePhoneNumber);
-    
+
+    // Request password reset - sends OTP to phone
+    final success = await authProvider.requestPasswordReset(
+      _completePhoneNumber,
+    );
+
     if (!mounted) return;
 
     if (success) {
-      // Navigate to OTP verification for password reset
+      // Navigate directly to reset password screen
       Navigator.pushNamed(
         context,
-        '/verify-reset-otp',
+        '/reset-password',
         arguments: {'phone': _completePhoneNumber},
       );
     } else {
-      _showError(authProvider.errorMessage ?? 'Failed to send OTP. Please try again.');
+      _showError(
+        authProvider.errorMessage ?? 'Failed to send OTP. Please try again.',
+      );
     }
   }
 
@@ -97,14 +101,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      backgroundColor: isDark
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F5F0),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : const Color(0xFF1A1A1A)),
+          icon: Icon(
+            Icons.arrow_back,
+            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -114,14 +123,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             children: [
               // Welcome Text
               _buildHeader(),
-              
+
               const SizedBox(height: 20),
-              
+
               // Bus Illustration
               const BusIllustration(height: 160),
-              
+
               const SizedBox(height: 32),
-              
+
               // Form
               FadeTransition(
                 opacity: _fadeAnimation,
@@ -190,9 +199,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           children: [
             // Phone Field
             _buildPhoneField(),
-            
+
             const SizedBox(height: 24),
-            
+
             // Send OTP Button
             SizedBox(
               width: double.infinity,
@@ -206,7 +215,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                     borderRadius: BorderRadius.circular(16),
                   ),
                   elevation: 0,
-                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                  disabledBackgroundColor: const Color(
+                    0xFF6B9B5B,
+                  ).withValues(alpha: 0.5),
                 ),
                 child: authProvider.isLoading
                     ? const SizedBox(
@@ -214,7 +225,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(
@@ -226,9 +239,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                       ),
               ),
             ),
-            
+
             const SizedBox(height: 20),
-            
+
             // Back to Login
             Center(
               child: TextButton(
@@ -270,7 +283,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
             ),
             filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+            fillColor: isDark
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFF5F5F5),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,

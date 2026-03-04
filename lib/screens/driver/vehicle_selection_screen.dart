@@ -4,9 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 import '../../api/services/bus_service.dart';
-import '../../api/services/trip_service.dart';
 import '../../providers/app_provider.dart';
-import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 /// Vehicle Selection Screen
@@ -65,102 +63,13 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     });
 
     try {
-      final authProvider = context.read<AuthProvider>();
       final busService = BusService();
+      debugPrint('🚗 VehicleSelection: Fetching driver assigned vehicles');
 
-      // Get driver's school ID
-      final user = authProvider.currentUser;
-      final schoolId = user?.schoolId;
-
-      debugPrint('🚗 VehicleSelection: Loading vehicles for school: $schoolId');
-
-      List<Bus> buses = [];
-
-      if (schoolId != null && schoolId.isNotEmpty) {
-        // Fetch only buses belonging to the driver's school
-        buses = await busService.getBusesBySchool(schoolId);
-        debugPrint(
-          '🚗 VehicleSelection: Loaded ${buses.length} school-filtered vehicles',
-        );
-
-        // Further filter: only show buses that appear in this driver's master trips
-        final driverId = user?.id;
-        if (driverId != null && driverId.isNotEmpty) {
-          try {
-            final tripService = TripService();
-            final masterTrips = await tripService.getMasterTripsByDriverCached(
-              driverId,
-              onRefresh: (_) {},
-            );
-
-            // Collect all numberPlates from the driver's trips
-            final driverPlates = masterTrips
-                .where(
-                  (t) => t.numberPlate != null && t.numberPlate!.isNotEmpty,
-                )
-                .map((t) => t.numberPlate!.toLowerCase())
-                .toSet();
-
-            if (driverPlates.isNotEmpty) {
-              final driverBuses = buses
-                  .where(
-                    (b) => driverPlates.contains(
-                      b.registrationNumber.toLowerCase(),
-                    ),
-                  )
-                  .toList();
-
-              if (driverBuses.isNotEmpty) {
-                buses = driverBuses;
-                debugPrint(
-                  '🚗 VehicleSelection: Filtered to ${buses.length} driver-assigned vehicles',
-                );
-              } else {
-                debugPrint(
-                  '⚠️ VehicleSelection: No plate match found, keeping all ${buses.length} school vehicles',
-                );
-              }
-            }
-          } catch (e) {
-            debugPrint(
-              '⚠️ VehicleSelection: Could not filter by master trips: $e',
-            );
-          }
-        }
-      } else {
-        // Fallback: try to infer schoolId from the driver's own buses
-        debugPrint(
-          '⚠️ VehicleSelection: No schoolId on user, fetching all & filtering by driver',
-        );
-        final allBuses = await busService.getAllBuses();
-
-        // If we can find a bus that belongs to this driver, use its schoolId to filter
-        if (allBuses.isNotEmpty) {
-          final driverSchool = allBuses.firstWhere(
-            (b) => b.schoolId != null && b.schoolId!.isNotEmpty,
-            orElse: () => allBuses.first,
-          );
-          if (driverSchool.schoolId != null &&
-              driverSchool.schoolId!.isNotEmpty) {
-            final inferredSchoolId = driverSchool.schoolId!;
-            buses = allBuses
-                .where((b) => b.schoolId == inferredSchoolId)
-                .toList();
-            debugPrint(
-              '🚗 VehicleSelection: Inferred schoolId=$inferredSchoolId, ${buses.length} vehicles',
-            );
-          } else {
-            buses = allBuses;
-            debugPrint(
-              '🚗 VehicleSelection: Could not infer school, showing all ${buses.length} vehicles',
-            );
-          }
-        }
-      }
+      final buses = await busService.getBusesByUser();
 
       if (mounted) {
         debugPrint('🚗 VehicleSelection: Final vehicle count: ${buses.length}');
-
         setState(() {
           _vehicles = buses;
           _isLoading = false;

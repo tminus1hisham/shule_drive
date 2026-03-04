@@ -1207,8 +1207,122 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         onUpdateStatus: (studentId, newStatus) {
           _updateStudentStatus(studentId, newStatus);
         },
+        onPickAll: () {
+          Navigator.pop(context);
+          _pickAllStudents();
+        },
+        onDropAll: () {
+          Navigator.pop(context);
+          _dropAllStudents();
+        },
       ),
     );
+  }
+
+  Future<void> _pickAllStudents() async {
+    if (_tripId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pick All Students'),
+        content: const Text(
+          'Are you sure you want to mark all pending students as picked?',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B9B5B),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Pick All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    if (!mounted) return;
+    final tripProvider = context.read<TripProvider>();
+    final success = await tripProvider.pickAllStudents(_tripId!);
+
+    if (success && mounted) {
+      setState(() {
+        for (var s in _preloadedStudents) {
+          if (s['status'] == 'pending') s['status'] = 'picked';
+        }
+        _pickedCount = _preloadedStudents
+            .where((s) => s['status'] == 'picked')
+            .length;
+      });
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ All pending students marked as picked'),
+          backgroundColor: Color(0xFF6B9B5B),
+        ),
+      );
+    }
+  }
+
+  Future<void> _dropAllStudents() async {
+    if (_tripId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Drop All Students'),
+        content: const Text(
+          'Are you sure you want to mark all picked students as dropped?',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6B9B5B),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Drop All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    if (!mounted) return;
+    final tripProvider = context.read<TripProvider>();
+    final success = await tripProvider.dropAllStudents(_tripId!);
+
+    if (success && mounted) {
+      setState(() {
+        for (var s in _preloadedStudents) {
+          if (s['status'] == 'picked') s['status'] = 'dropped';
+        }
+        _pickedCount = _preloadedStudents
+            .where((s) => s['status'] == 'picked')
+            .length;
+      });
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🏠 All students marked as dropped'),
+          backgroundColor: Color(0xFF6B9B5B),
+        ),
+      );
+    }
   }
 
   /// Show student action dialog - Modern UI with Pick/Absent/Drop actions
@@ -1650,6 +1764,8 @@ class _StudentListBottomSheet extends StatelessWidget {
   final Function(Map<String, dynamic>) onChatWithGuardian;
   final VoidCallback onMessageAll;
   final Function(String, String) onUpdateStatus;
+  final VoidCallback onPickAll;
+  final VoidCallback onDropAll;
 
   const _StudentListBottomSheet({
     required this.students,
@@ -1659,6 +1775,8 @@ class _StudentListBottomSheet extends StatelessWidget {
     required this.onChatWithGuardian,
     required this.onMessageAll,
     required this.onUpdateStatus,
+    required this.onPickAll,
+    required this.onDropAll,
   });
 
   @override
@@ -1772,6 +1890,69 @@ class _StudentListBottomSheet extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
+            ),
+
+          if (students.isNotEmpty) const SizedBox(height: 12),
+
+          // Pick All and Drop All Buttons
+          if (students.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onPickAll,
+                      icon: const Icon(Icons.check_circle_outline, size: 20),
+                      label: const Text('Pick All'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDarkMode
+                            ? Colors.white12
+                            : Colors.grey[100],
+                        foregroundColor: isDarkMode
+                            ? Colors.white
+                            : Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isDarkMode
+                                ? Colors.white24
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onDropAll,
+                      icon: const Icon(Icons.home_outlined, size: 20),
+                      label: const Text('Drop All'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isDarkMode
+                            ? Colors.white12
+                            : Colors.grey[100],
+                        foregroundColor: isDarkMode
+                            ? Colors.white
+                            : Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isDarkMode
+                                ? Colors.white24
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

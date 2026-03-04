@@ -3,14 +3,14 @@
 
 class Endpoints {
   Endpoints._(); // Private constructor to prevent instantiation
-  
+
   // ==========================================================================
   // BASE URL
   // ==========================================================================
   // Note: Endpoints already include '/api' prefix
   static const String baseUrl = 'https://staging-api.shuledrive.com';
   static const String devBaseUrl = 'http://localhost:8000';
-  
+
   // ==========================================================================
   // AUTH ENDPOINTS
   // ==========================================================================
@@ -18,18 +18,19 @@ class Endpoints {
   static const String login = '/api/auth/login';
   static const String enableTwoFactor = '/api/auth/enable/two/factor';
   static const String verifyTwoFactor = '/api/auth/verify/two/factor';
-  static const String verifyOtp = '/api/auth/verify-otp';  // Legacy OTP verification
+  static const String verifyOtp =
+      '/api/auth/verify-otp'; // Legacy OTP verification
   static const String refreshToken = '/api/auth/refresh/token';
   static const String confirmPhoneNumber = '/api/auth/confirm/phonenumber';
   static const String confirmEmail = '/api/auth/confirm/email';
-  static const String forgotPassword = '/api/auth/forget/password';
+  static const String forgotPassword = '/api/auth/forgot/password';
   static const String verifyResetOtp = '/api/auth/verify/reset/otp';
   static const String resetPassword = '/api/auth/reset/password';
   static const String changePassword = '/api/auth/change/password';
   static const String updateProfilePicture = '/api/auth/update/profile/picture';
-  static const String logout = '/api/auth/logout';  // Logout endpoint
+  static const String logout = '/api/auth/logout'; // Logout endpoint
   static String deleteAccount(String id) => '/api/auth/delete/$id';
-  
+
   // ==========================================================================
   // USER / PROFILE ENDPOINTS
   // ==========================================================================
@@ -37,7 +38,7 @@ class Endpoints {
   static const String updateProfile = '/api/user/profile';
   static const String uploadAvatar = '/api/user/avatar';
   static const String deleteAccountUser = '/api/user/account';
-  
+
   // ==========================================================================
   // BUS ENDPOINTS
   // ==========================================================================
@@ -50,20 +51,21 @@ class Endpoints {
   static String deleteBus(String id) => '/api/buses/delete/$id';
   static const String getDeletedBuses = '/api/buses/get/deleted';
   static const String getInactiveBuses = '/api/buses/get/inactive';
-  
+
   // ==========================================================================
   // CHATS ENDPOINTS
   // ==========================================================================
   static const String getChats = '/api/chats/get';
   static const String createChat = '/api/chats/create';
   static const String getChatContacts = '/api/chats/get/contacts';
-  
+
   // ==========================================================================
   // DRIVERS ENDPOINTS
   // ==========================================================================
   static const String getAllDrivers = '/api/drivers/get/all';
   static const String getActiveDrivers = '/api/drivers/get/active';
-  static String getDriversBySchool(String schoolId) => '/api/drivers/get/by/school/$schoolId';
+  static String getDriversBySchool(String schoolId) =>
+      '/api/drivers/get/by/school/$schoolId';
   static const String createDriver = '/api/drivers/create';
   static const String getDriversByUser = '/api/drivers/get/by/user';
   static String getDriverById(String id) => '/api/drivers/get/by/$id';
@@ -71,7 +73,7 @@ class Endpoints {
   static String deleteDriver(String id) => '/api/drivers/delete/$id';
   static const String getDeletedDrivers = '/api/drivers/get/deleted';
   static const String getInactiveDrivers = '/api/drivers/get/inactive';
-  
+
   // ==========================================================================
   // GUARDIANS / PARENTS ENDPOINTS
   // ==========================================================================
@@ -85,39 +87,61 @@ class Endpoints {
   static const String getActiveGuardians = '/api/guardians/get/active';
   static const String createGuardianStudent = '/api/guardians/student/create';
   static const String getGuardianStudents = '/api/guardians/get/students';
-  static const String getGuardianStudentsByPhone = '/api/guardians/get/students/by/phone';
-  static const String getGuardianStudentsByPhoneDash = '/api/guardians/get/students/by/phone/dash';
+  static const String getGuardianStudentsByPhone =
+      '/api/guardians/get/students/by/phone';
+  static const String getGuardianStudentsByPhoneDash =
+      '/api/guardians/get/students/by/phone/dash';
   static String deleteGuardian(String id) => '/api/guardians/delete/$id';
-  static String deleteGuardianStudent(String id) => '/api/guardians/student/delete/$id';
+  static String deleteGuardianStudent(String id) =>
+      '/api/guardians/student/delete/$id';
   static const String getDeletedGuardians = '/api/guardians/get/deleted';
   static const String getInactiveGuardians = '/api/guardians/get/inactive';
-  static const String requestDeleteGuardianAccount = '/api/guardians/request/delete/account';
-  static const String updateGuardianChildImage = '/api/guardians/update/child/image';
-  static const String addExtendedGuardianUser = '/api/guardians/add/extended/user';
-  static const String addExtendedGuardianUserByAdmin = '/api/guardians/add/extended/user/by/admin';
-  static const String getExtendedGuardians = '/api/guardians/get/extended/guardians';
-  static String deleteExtendedGuardian(String id) => '/api/guardians/delete/extended/guardian/$id';
-  
+  static const String requestDeleteGuardianAccount =
+      '/api/guardians/request/delete/account';
+  static const String updateGuardianChildImage =
+      '/api/guardians/update/child/image';
+  static const String addExtendedGuardianUser =
+      '/api/guardians/add/extended/user';
+  static const String addExtendedGuardianUserByAdmin =
+      '/api/guardians/add/extended/user/by/admin';
+  static const String getExtendedGuardians =
+      '/api/guardians/get/extended/guardians';
+  static String deleteExtendedGuardian(String id) =>
+      '/api/guardians/delete/extended/guardian/$id';
+
   // ==========================================================================
   // NOTIFICATIONS ENDPOINTS
   // ==========================================================================
-  static const String getNotificationCampaigns = '/api/notifications/get/campaigns';
+  static const String getNotificationCampaigns =
+      '/api/notifications/get/campaigns';
   static const String sendNotification = '/api/notifications/send';
-  static String getAllNotificationsByCampaign(String campaignId) => '/api/notifications/get/all/$campaignId';
-  static String getFailedNotificationsByCampaign(String campaignId) => '/api/notifications/get/failed/$campaignId';
-  static String getSuccessNotificationsByCampaign(String campaignId) => '/api/notifications/get/success/$campaignId';
+  static String getAllNotificationsByCampaign(String campaignId) =>
+      '/api/notifications/get/all/$campaignId';
+  static String getFailedNotificationsByCampaign(String campaignId) =>
+      '/api/notifications/get/failed/$campaignId';
+  static String getSuccessNotificationsByCampaign(String campaignId) =>
+      '/api/notifications/get/success/$campaignId';
   static const String getAllNotifications = '/api/notifications/get/all';
   static const String getAllSmsNotifications = '/api/notifications/get/all/sms';
-  static const String getAllEmailNotifications = '/api/notifications/get/all/emails';
-  static String getNotificationsByPhoneNumber(String phoneNumber) => '/api/notifications/get/by/$phoneNumber';
-  static const String getEmailCampaigns = '/api/notifications/get/email/campaigns';
-  static const String getNotificationCampaignsList = '/api/notifications/get/notifications/campaigns';
-  static String getEmailCampaignRecipients(String campaignId) => '/api/notifications/get/email/campaigns/recipients/$campaignId';
-  static String getNotificationCampaignRecipients(String campaignId) => '/api/notifications/get/notifications/campaigns/recipients/$campaignId';
-  static const String getNotificationTypes = '/api/notifications/get/notification/type';
-  static const String updateNotificationType = '/api/notifications/update/notification/type';
-  static const String getNotificationsByPhone = '/api/notifications/get/notifications/by/phone';
-  
+  static const String getAllEmailNotifications =
+      '/api/notifications/get/all/emails';
+  static String getNotificationsByPhoneNumber(String phoneNumber) =>
+      '/api/notifications/get/by/$phoneNumber';
+  static const String getEmailCampaigns =
+      '/api/notifications/get/email/campaigns';
+  static const String getNotificationCampaignsList =
+      '/api/notifications/get/notifications/campaigns';
+  static String getEmailCampaignRecipients(String campaignId) =>
+      '/api/notifications/get/email/campaigns/recipients/$campaignId';
+  static String getNotificationCampaignRecipients(String campaignId) =>
+      '/api/notifications/get/notifications/campaigns/recipients/$campaignId';
+  static const String getNotificationTypes =
+      '/api/notifications/get/notification/type';
+  static const String updateNotificationType =
+      '/api/notifications/update/notification/type';
+  static const String getNotificationsByPhone =
+      '/api/notifications/get/notifications/by/phone';
+
   // ==========================================================================
   // PAYMENTS ENDPOINTS
   // ==========================================================================
@@ -125,31 +149,37 @@ class Endpoints {
   static String paymentDetails(String id) => '/api/payments/$id';
   static const String makePayment = '/api/payments/make';
   static const String paymentMethods = '/api/payments/methods';
-  static String paymentReceipt(String paymentId) => '/api/payments/$paymentId/receipt';
-  static String refundPayment(String paymentId) => '/api/payments/$paymentId/refund';
+  static String paymentReceipt(String paymentId) =>
+      '/api/payments/$paymentId/receipt';
+  static String refundPayment(String paymentId) =>
+      '/api/payments/$paymentId/refund';
   static const String paymentHistory = '/api/payments/history';
-  
+
   // ==========================================================================
   // PAYMENT PLANS ENDPOINTS
   // ==========================================================================
   static const String paymentPlans = '/api/payment-plans';
   static String paymentPlanDetails(String id) => '/api/payment-plans/$id';
-  static String subscribeToPlan(String planId) => '/api/payment-plans/$planId/subscribe';
-  static String cancelSubscription(String subscriptionId) => '/api/payment-plans/subscriptions/$subscriptionId/cancel';
-  static const String currentSubscription = '/api/payment-plans/subscriptions/current';
-  
+  static String subscribeToPlan(String planId) =>
+      '/api/payment-plans/$planId/subscribe';
+  static String cancelSubscription(String subscriptionId) =>
+      '/api/payment-plans/subscriptions/$subscriptionId/cancel';
+  static const String currentSubscription =
+      '/api/payment-plans/subscriptions/current';
+
   // ==========================================================================
   // REPORTS ENDPOINTS
   // ==========================================================================
   static const String reports = '/api/reports';
   static String reportDetails(String id) => '/api/reports/$id';
   static const String generateReport = '/api/reports/generate';
-  static String downloadReport(String reportId) => '/api/reports/$reportId/download';
+  static String downloadReport(String reportId) =>
+      '/api/reports/$reportId/download';
   static const String tripReports = '/api/reports/trips';
   static const String paymentReports = '/api/reports/payments';
   static const String attendanceReports = '/api/reports/attendance';
   static const String driverPerformanceReports = '/api/reports/drivers';
-  
+
   // ==========================================================================
   // ROLES & PERMISSIONS ENDPOINTS
   // ==========================================================================
@@ -165,7 +195,7 @@ class Endpoints {
   static const String addClaimToRole = '/api/roles/add/claim/to/role';
   static const String getClaimsForRole = '/api/roles/get/claims/for/role';
   static const String removeClaimFromRole = '/api/roles/remove/claim/from/role';
-  
+
   // ==========================================================================
   // ROUTES ENDPOINTS
   // ==========================================================================
@@ -174,7 +204,7 @@ class Endpoints {
   static const String getRoutesByUser = '/api/routes/get/by/user';
   static String updateRoute(String id) => '/api/routes/update/$id';
   static String deleteRoute(String id) => '/api/routes/delete/$id';
-  
+
   // ==========================================================================
   // SCHOOLS ENDPOINTS
   // ==========================================================================
@@ -188,7 +218,7 @@ class Endpoints {
   static const String getDeletedSchools = '/api/schools/get/deleted';
   static const String getInactiveSchools = '/api/schools/get/inactive';
   static const String getSosSchools = '/api/schools/get/sos';
-  
+
   // ==========================================================================
   // STUDENTS ENDPOINTS
   // ==========================================================================
@@ -196,56 +226,68 @@ class Endpoints {
   static String studentDetails(String id) => '/api/students/$id';
   static String updateStudent(String id) => '/api/students/$id';
   static String deleteStudent(String id) => '/api/students/$id';
-  static String studentAttendance(String studentId) => '/api/students/$studentId/attendance';
-  static String studentTrips(String studentId) => '/api/students/$studentId/trips';
-  static String studentPickupLocation(String studentId) => '/api/students/$studentId/pickup-location';
-  
+  static String studentAttendance(String studentId) =>
+      '/api/students/$studentId/attendance';
+  static String studentTrips(String studentId) =>
+      '/api/students/$studentId/trips';
+  static String studentPickupLocation(String studentId) =>
+      '/api/students/$studentId/pickup-location';
+
   // ==========================================================================
   // TRIPS ENDPOINTS
   // ==========================================================================
   static const String getAllMasterTrips = '/api/trips/get/all/master/trips';
-  static const String getMasterTripsByDriver = '/api/trips/get/master/trips/by/driver';
+  static const String getMasterTripsByDriver =
+      '/api/trips/get/master/trips/by/driver';
   static const String createMasterTrip = '/api/trips/master/create';
-  static const String addStudentToMasterTrip = '/api/trips/add/student/to/master';
-  static const String activateDeactivateMasterTrip = '/api/trips/activate/deactivate/master/trip';
-  static const String getMasterTripStudents = '/api/trips/get/master/trip/students';
-  static const String getStudentsGuardiansInMasterTrips = '/api/trips/get/students/guardians/in/mastertrips';
+  static const String addStudentToMasterTrip =
+      '/api/trips/add/student/to/master';
+  static const String activateDeactivateMasterTrip =
+      '/api/trips/activate/deactivate/master/trip';
+  static const String getMasterTripStudents =
+      '/api/trips/get/master/trip/students';
+  static const String getStudentsGuardiansInMasterTrips =
+      '/api/trips/get/students/guardians/in/mastertrips';
   static const String editMasterTrip = '/api/trips/edit/master/trip';
   static const String deleteMasterTrip = '/api/trips/delete/master/trip';
   static const String startTrip = '/api/trips/start';
-  static const String deleteStudentFromMasterTrip = '/api/trips/delete/student/from/master/trip';
-  static const String getStudentActiveTrip = '/api/trips/get/student/active/trip';
+  static const String deleteStudentFromMasterTrip =
+      '/api/trips/delete/student/from/master/trip';
+  static const String getStudentActiveTrip =
+      '/api/trips/get/student/active/trip';
   static const String pickAllStudents = '/api/trips/pick/all';
   static const String dropAllStudents = '/api/trips/drop/all';
   static const String getUniqueTrips = '/api/trips/get/unique/trips';
-  static const String getUniqueTripsFromTrip = '/api/trips/get/unique/trips/from/trip';
+  static const String getUniqueTripsFromTrip =
+      '/api/trips/get/unique/trips/from/trip';
   static const String studentNotPicked = '/api/trips/student/not/picked';
   static const String createTripRating = '/api/trips/create/rating';
-  static const String notifyGuardiansTripStarted = '/api/trips/notify/guardians/trip-started';
+  static const String notifyGuardiansTripStarted =
+      '/api/trips/notify/guardians/trip-started';
   static const String notifyGuardiansEta = '/api/trips/notify/guardians/eta';
-  
+
   // ==========================================================================
   // UTILITIES / HELPER METHODS
   // ==========================================================================
-  
+
   /// Build full URL with query parameters
   static String buildUrl(String endpoint, {Map<String, dynamic>? queryParams}) {
     var url = '$baseUrl$endpoint';
-    
+
     if (queryParams != null && queryParams.isNotEmpty) {
       final queryString = queryParams.entries
           .where((e) => e.value != null)
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value.toString())}')
           .join('&');
-      
+
       if (queryString.isNotEmpty) {
         url = '$url?$queryString';
       }
     }
-    
+
     return url;
   }
-  
+
   /// Replace path parameters in endpoint
   /// Example: replacePathParams('/trips/{id}', {'id': '123'}) => '/trips/123'
   static String replacePathParams(String endpoint, Map<String, String> params) {
@@ -263,33 +305,34 @@ class Endpoints {
 
 class QueryParams {
   QueryParams._();
-  
+
   /// Pagination params
   static Map<String, String> pagination({int page = 1, int limit = 20}) => {
     'page': page.toString(),
     'limit': limit.toString(),
   };
-  
+
   /// Date range params
-  static Map<String, String> dateRange({DateTime? startDate, DateTime? endDate}) => {
+  static Map<String, String> dateRange({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) => {
     if (startDate != null) 'start_date': startDate.toIso8601String(),
     if (endDate != null) 'end_date': endDate.toIso8601String(),
   };
-  
+
   /// Search params
   static Map<String, String> search(String query, {String? filter}) => {
     'q': query,
     if (filter != null) 'filter': filter,
   };
-  
+
   /// Sorting params
-  static Map<String, String> sort({required String by, bool ascending = true}) => {
-    'sort_by': by,
-    'sort_order': ascending ? 'asc' : 'desc',
-  };
-  
+  static Map<String, String> sort({
+    required String by,
+    bool ascending = true,
+  }) => {'sort_by': by, 'sort_order': ascending ? 'asc' : 'desc'};
+
   /// Status filter
-  static Map<String, String> status(String status) => {
-    'status': status,
-  };
+  static Map<String, String> status(String status) => {'status': status};
 }

@@ -13,24 +13,26 @@ class OTPScreen extends StatefulWidget {
   State<OTPScreen> createState() => _OTPScreenState();
 }
 
-class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMixin {
-  final List<TextEditingController> _otpControllers = 
-      List.generate(4, (index) => TextEditingController());
-  final List<FocusNode> _focusNodes = 
-      List.generate(4, (index) => FocusNode());
-  
+class _OTPScreenState extends State<OTPScreen>
+    with SingleTickerProviderStateMixin {
+  final List<TextEditingController> _otpControllers = List.generate(
+    4,
+    (index) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
+
   late AnimationController _shakeController;
-  
+
   // Rate limiting and security
   int _failedAttempts = 0;
   static const int _maxAttempts = 5;
   DateTime? _lastAttemptTime;
-  
+
   // Resend cooldown
   Timer? _resendTimer;
   int _resendCooldownSeconds = 30;
   bool _canResend = false;
-  
+
   String? _phoneNumber;
 
   @override
@@ -40,10 +42,10 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    
+
     // Start resend cooldown
     _startResendCooldown();
-    
+
     // Delay auto-focus to ensure screen is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNodes[0].requestFocus();
@@ -54,7 +56,8 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get phone number from route arguments
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     _phoneNumber = args?['phone'] as String?;
   }
 
@@ -76,7 +79,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       _canResend = false;
       _resendCooldownSeconds = 30;
     });
-    
+
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
@@ -94,7 +97,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
   bool get _isLockedOut {
     if (_failedAttempts < _maxAttempts) return false;
     if (_lastAttemptTime == null) return false;
-    
+
     final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
     return timeSinceLastAttempt < const Duration(minutes: 5);
   }
@@ -105,13 +108,13 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       _otpControllers[index].clear();
       return;
     }
-    
+
     if (value.length == 1 && index < 3) {
       _focusNodes[index + 1].requestFocus();
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    
+
     // Auto-verify when all digits are entered
     if (index == 3 && value.isNotEmpty) {
       final otp = _otpText;
@@ -130,7 +133,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
     }
 
     final otp = _otpText;
-    
+
     // Validate OTP format
     if (otp.length != 4 || !RegExp(r'^\d{4}$').hasMatch(otp)) {
       _showError('Please enter a valid 4-digit OTP');
@@ -144,9 +147,9 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
     }
 
     final authProvider = context.read<AuthProvider>();
-    
+
     final success = await authProvider.verifyOtp(_phoneNumber!, otp);
-    
+
     if (!mounted) return;
 
     if (success) {
@@ -154,7 +157,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       for (var controller in _otpControllers) {
         controller.clear();
       }
-      
+
       // Navigate to landing screen
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -165,10 +168,10 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
       // Record failed attempt
       _failedAttempts++;
       _lastAttemptTime = DateTime.now();
-      
+
       _triggerShake();
       _showError(authProvider.errorMessage ?? 'Invalid OTP. Please try again.');
-      
+
       // Clear OTP fields
       for (var controller in _otpControllers) {
         controller.clear();
@@ -179,17 +182,17 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
 
   Future<void> _resendOTP() async {
     if (!_canResend) return;
-    
+
     if (_phoneNumber == null) {
       _showError('Phone number not found');
       return;
     }
 
     final authProvider = context.read<AuthProvider>();
-    
+
     // Request new OTP via API
     final success = await authProvider.requestPasswordReset(_phoneNumber!);
-    
+
     if (!mounted) return;
 
     if (success) {
@@ -244,11 +247,10 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
 
   String get _otpText => _otpControllers.map((c) => c.text).join();
 
-
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F0),
       body: SafeArea(
@@ -257,14 +259,14 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
             children: [
               // Header Section
               _buildHeader(),
-              
+
               const SizedBox(height: 20),
-              
+
               // Bus Illustration
               const BusIllustration(height: 160),
-              
+
               const SizedBox(height: 32),
-              
+
               // OTP Form
               _buildOTPForm(authProvider),
             ],
@@ -342,18 +344,15 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // Subtitle with phone number
           Text(
             'We sent a 4-digit code to ${_phoneNumber ?? 'your phone'}',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF666666),
-            ),
+            style: const TextStyle(fontSize: 14, color: Color(0xFF666666)),
           ),
           const SizedBox(height: 32),
-          
+
           // OTP Input Fields with shake animation
           AnimatedBuilder(
             animation: _shakeController,
@@ -368,9 +367,9 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
               );
             },
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Verify Button
           SizedBox(
             width: double.infinity,
@@ -384,7 +383,9 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
                   borderRadius: BorderRadius.circular(16),
                 ),
                 elevation: 0,
-                disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                disabledBackgroundColor: const Color(
+                  0xFF6B9B5B,
+                ).withValues(alpha: 0.5),
               ),
               child: authProvider.isLoading
                   ? const SizedBox(
@@ -404,19 +405,16 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
                     ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Resend OTP
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 'Didn\'t receive the code? ',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               TextButton(
                 onPressed: _canResend ? _resendOTP : null,
@@ -435,9 +433,9 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Security notice
           Container(
             padding: const EdgeInsets.all(12),
@@ -447,11 +445,7 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.security,
-                  size: 16,
-                  color: const Color(0xFF6B9B5B),
-                ),
+                Icon(Icons.security, size: 16, color: const Color(0xFF6B9B5B)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -502,11 +496,8 @@ class _OTPScreenState extends State<OTPScreen> with SingleTickerProviderStateMix
             border: InputBorder.none,
             contentPadding: EdgeInsets.zero,
           ),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-          ],
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           onChanged: (value) => _onOTPChanged(index, value),
-
         ),
       ),
     );

@@ -496,7 +496,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Request password reset OTP
+  /// Request password reset - sends OTP to user's phone
   Future<bool> requestPasswordReset(String phoneNumber) async {
     _setLoading(true);
     _clearError();
@@ -509,7 +509,7 @@ class AuthProvider extends ChangeNotifier {
         _setError(
           response.errors?.join(', ') ??
               response.message ??
-              'Failed to send OTP',
+              'Failed to send reset request',
         );
         return false;
       }
@@ -517,7 +517,7 @@ class AuthProvider extends ChangeNotifier {
       _setError(e.message);
       return false;
     } catch (e) {
-      _setError('Failed to send OTP. Please try again.');
+      _setError('Failed to send reset request. Please try again.');
       return false;
     } finally {
       _setLoading(false);
@@ -556,10 +556,10 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Reset password with OTP
+  /// Reset password with reset token
   Future<bool> resetPassword({
     required String phoneNumber,
-    required String otp,
+    required String resetToken,
     required String newPassword,
   }) async {
     _setLoading(true);
@@ -568,7 +568,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final response = await _authService.resetPassword(
         phoneNumber: phoneNumber,
-        otp: otp,
+        resetToken: resetToken,
         newPassword: newPassword,
       );
       if (response.success) {

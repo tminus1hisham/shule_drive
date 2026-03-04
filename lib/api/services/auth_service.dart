@@ -215,8 +215,9 @@ class AuthService {
     }
   }
 
-  /// Request password reset OTP
-  /// POST /api/auth/forgot-password
+  /// Request password reset
+  /// POST /api/auth/forgot/password
+  /// Returns a resetToken in the response that must be passed to resetPassword
   Future<PasswordResetResponse> requestPasswordReset(String phoneNumber) async {
     try {
       // Normalize phone number
@@ -227,9 +228,13 @@ class AuthService {
 
       final response = await _apiClient.post(
         Endpoints.forgotPassword,
-        body: {'PhoneNumber': normalizedPhone},
+        body: {'phoneNumber': normalizedPhone},
         requiresAuth: false,
       );
+
+      if (kDebugMode) {
+        print('📡 Forgot password response: $response');
+      }
 
       return PasswordResetResponse.fromJson(response);
     } on ApiException {
@@ -266,11 +271,12 @@ class AuthService {
     }
   }
 
-  /// Reset password with OTP
-  /// POST /api/auth/reset-password
+  /// Reset password with reset token
+  /// POST /api/auth/reset/password
+  /// Body: { "phoneNumber": "string", "newPassword": "string", "resetToken": "string" }
   Future<PasswordResetResponse> resetPassword({
     required String phoneNumber,
-    required String otp,
+    required String resetToken,
     required String newPassword,
   }) async {
     try {
@@ -280,12 +286,16 @@ class AuthService {
         normalizedPhone = normalizedPhone.substring(1);
       }
 
+      if (kDebugMode) {
+        print('📡 Resetting password for: $normalizedPhone');
+      }
+
       final response = await _apiClient.post(
         Endpoints.resetPassword,
         body: {
-          'PhoneNumber': normalizedPhone,
-          'OTP': otp,
-          'NewPassword': newPassword,
+          'phoneNumber': normalizedPhone,
+          'newPassword': newPassword,
+          'resetToken': resetToken,
         },
         requiresAuth: false,
       );
@@ -492,14 +502,31 @@ class ChangePasswordResponse {
 class PasswordResetResponse {
   final bool success;
   final String? message;
+  final String? resetToken;
   final List<String>? errors;
 
-  PasswordResetResponse({required this.success, this.message, this.errors});
+  PasswordResetResponse({
+    required this.success,
+    this.message,
+    this.resetToken,
+    this.errors,
+  });
 
   factory PasswordResetResponse.fromJson(Map<String, dynamic> json) {
+    // Handle various response formats - check if no errors = success
+    final hasErrors =
+        json['errors'] != null && (json['errors'] as List).isNotEmpty;
+    final message = json['message'] ?? json['msg'];
+    final hasSuccessMessage =
+        message != null && message.toString().toLowerCase().contains('success');
+
     return PasswordResetResponse(
-      success: json['success'] ?? false,
-      message: json['message'],
+      success:
+          json['success'] ??
+          json['isSuccess'] ??
+          hasSuccessMessage || !hasErrors,
+      message: message,
+      resetToken: json['resetToken'] ?? json['reset_token'] ?? json['token'],
       errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
     );
   }

@@ -15,18 +15,19 @@ class VerifyResetOtpScreen extends StatefulWidget {
 
 class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     with SingleTickerProviderStateMixin {
-  final List<TextEditingController> _otpControllers = 
-      List.generate(4, (index) => TextEditingController());
-  final List<FocusNode> _focusNodes = 
-      List.generate(4, (index) => FocusNode());
-  
+  final List<TextEditingController> _otpControllers = List.generate(
+    4,
+    (index) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
+
   late AnimationController _shakeController;
-  
+
   // Resend cooldown
   Timer? _resendTimer;
   int _resendCooldownSeconds = 30;
   bool _canResend = false;
-  
+
   String? _phoneNumber;
 
   @override
@@ -36,10 +37,10 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    
+
     // Start resend cooldown
     _startResendCooldown();
-    
+
     // Delay auto-focus to ensure screen is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNodes[0].requestFocus();
@@ -50,7 +51,8 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get phone number from route arguments
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     _phoneNumber = args?['phone'] as String?;
   }
 
@@ -72,7 +74,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
       _canResend = false;
       _resendCooldownSeconds = 30;
     });
-    
+
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
@@ -92,13 +94,13 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
       _otpControllers[index].clear();
       return;
     }
-    
+
     if (value.length == 1 && index < 3) {
       _focusNodes[index + 1].requestFocus();
     } else if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
-    
+
     // Auto-verify when all digits are entered
     if (index == 3 && value.isNotEmpty) {
       final otp = _otpText;
@@ -110,7 +112,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
 
   Future<void> _verifyOTP() async {
     final otp = _otpText;
-    
+
     // Validate OTP format
     if (otp.length != 4 || !RegExp(r'^\d{4}$').hasMatch(otp)) {
       _showError('Please enter a valid 4-digit OTP');
@@ -124,13 +126,13 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     }
 
     final authProvider = context.read<AuthProvider>();
-    
+
     // Verify OTP for password reset
     final success = await authProvider.verifyPasswordResetOtp(
       phoneNumber: _phoneNumber!,
       otp: otp,
     );
-    
+
     if (!mounted) return;
 
     if (success) {
@@ -138,15 +140,12 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
       Navigator.pushNamed(
         context,
         '/reset-password',
-        arguments: {
-          'phone': _phoneNumber!,
-          'otp': otp,
-        },
+        arguments: {'phone': _phoneNumber!, 'otp': otp},
       );
     } else {
       _triggerShake();
       _showError(authProvider.errorMessage ?? 'Invalid OTP. Please try again.');
-      
+
       // Clear OTP fields
       for (var controller in _otpControllers) {
         controller.clear();
@@ -157,16 +156,16 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
 
   Future<void> _resendOTP() async {
     if (!_canResend) return;
-    
+
     if (_phoneNumber == null) {
       _showError('Phone number not found');
       return;
     }
 
     final authProvider = context.read<AuthProvider>();
-    
+
     final success = await authProvider.requestPasswordReset(_phoneNumber!);
-    
+
     if (!mounted) return;
 
     if (success) {
@@ -224,7 +223,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F0),
       appBar: AppBar(
@@ -241,14 +240,14 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             children: [
               // Header Section
               _buildHeader(),
-              
+
               const SizedBox(height: 20),
-              
+
               // Bus Illustration
               const BusIllustration(height: 140),
-              
+
               const SizedBox(height: 32),
-              
+
               // OTP Form
               _buildOTPForm(authProvider),
             ],
@@ -276,10 +275,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
           const SizedBox(height: 8),
           Text(
             'Enter the 4-digit code sent to ${_phoneNumber ?? 'your phone'}',
-            style: const TextStyle(
-              fontSize: 16,
-              color: Color(0xFF666666),
-            ),
+            style: const TextStyle(fontSize: 16, color: Color(0xFF666666)),
           ),
         ],
       ),
@@ -317,9 +313,9 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
               );
             },
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Verify Button
           SizedBox(
             width: double.infinity,
@@ -333,7 +329,9 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
                   borderRadius: BorderRadius.circular(16),
                 ),
                 elevation: 0,
-                disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
+                disabledBackgroundColor: const Color(
+                  0xFF6B9B5B,
+                ).withValues(alpha: 0.5),
               ),
               child: authProvider.isLoading
                   ? const SizedBox(
@@ -353,19 +351,16 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
                     ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Resend OTP
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 'Didn\'t receive the code? ',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               TextButton(
                 onPressed: _canResend ? _resendOTP : null,
@@ -384,9 +379,9 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Security notice
           Container(
             padding: const EdgeInsets.all(12),
@@ -396,11 +391,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.security,
-                  size: 16,
-                  color: const Color(0xFF6B9B5B),
-                ),
+                Icon(Icons.security, size: 16, color: const Color(0xFF6B9B5B)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -451,9 +442,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             border: InputBorder.none,
             contentPadding: EdgeInsets.zero,
           ),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-          ],
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           onChanged: (value) => _onOTPChanged(index, value),
         ),
       ),

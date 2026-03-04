@@ -228,13 +228,17 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// End a trip (driver only)
-  Future<bool> endTrip(String tripId, {String? driverId, String? driverName}) async {
+  Future<bool> endTrip(
+    String tripId, {
+    String? driverId,
+    String? driverName,
+  }) async {
     _setLoading(true);
     _clearError();
 
     api.Trip? endedTrip;
     bool apiSuccess = false;
-    
+
     // Save original student data before API call - the API might return empty students
     final originalStudents = _activeTrip?.students ?? [];
     final originalRouteName = _activeTrip?.routeName ?? 'Trip';
@@ -249,16 +253,22 @@ class TripProvider extends ChangeNotifier {
       // Also ensure status is 'completed' since we just ended the trip
       if ((endedTrip.students.isEmpty) && originalStudents.isNotEmpty) {
         if (kDebugMode) {
-          print('🔄 API returned empty students, preserving original student data (${originalStudents.length} students)');
+          print(
+            '🔄 API returned empty students, preserving original student data (${originalStudents.length} students)',
+          );
         }
         endedTrip = api.Trip(
           id: endedTrip.id,
-          routeName: endedTrip.routeName.isNotEmpty ? endedTrip.routeName : originalRouteName,
+          routeName: endedTrip.routeName.isNotEmpty
+              ? endedTrip.routeName
+              : originalRouteName,
           routeId: endedTrip.routeId,
           startTime: endedTrip.startTime,
           endTime: endedTrip.endTime ?? DateTime.now(),
           status: 'completed', // Force completed status
-          vehicleId: endedTrip.vehicleId.isNotEmpty ? endedTrip.vehicleId : originalVehicleId,
+          vehicleId: endedTrip.vehicleId.isNotEmpty
+              ? endedTrip.vehicleId
+              : originalVehicleId,
           vehicleNumber: endedTrip.vehicleNumber,
           students: originalStudents,
           stops: endedTrip.stops,
@@ -296,7 +306,7 @@ class TripProvider extends ChangeNotifier {
       }
     } on api.ApiException catch (e) {
       // Check if it's just an empty response error - if so, still consider it success
-      if (e.message.toLowerCase().contains('empty') || 
+      if (e.message.toLowerCase().contains('empty') ||
           e.message.toLowerCase().contains('null')) {
         print('⚠️ Server returned empty response, but trip was likely ended');
         _activeTrip = null;
@@ -329,8 +339,22 @@ class TripProvider extends ChangeNotifier {
       try {
         final historyService = TripHistoryService();
         final history = await historyService.getTripHistory(driverId);
-        final historyIndex = history.indexWhere((h) => h.trip.id == tripId);
-        
+
+        // Find the most recent ACTIVE entry with this trip ID
+        // This prevents overwriting older completed trips with the same master trip ID
+        int historyIndex = -1;
+        for (int i = 0; i < history.length; i++) {
+          if (history[i].trip.id == tripId && !history[i].trip.isCompleted) {
+            historyIndex = i;
+            break;
+          }
+        }
+
+        // If no active entry, try finding any entry with this ID (fallback)
+        if (historyIndex == -1) {
+          historyIndex = history.indexWhere((h) => h.trip.id == tripId);
+        }
+
         if (historyIndex != -1) {
           // Update the existing history entry with completed trip
           final updatedHistory = TripHistory(
@@ -340,14 +364,17 @@ class TripProvider extends ChangeNotifier {
             attendantName: history[historyIndex].attendantName,
             loggedAt: history[historyIndex].loggedAt,
           );
-          
+
           history[historyIndex] = updatedHistory;
-          
+
           // Save updated history
           final prefs = await SharedPreferences.getInstance();
           final tripsJson = history.map((t) => t.toJson()).toList();
-          await prefs.setString('driver_trip_history_$driverId', jsonEncode(tripsJson));
-          
+          await prefs.setString(
+            'driver_trip_history_$driverId',
+            jsonEncode(tripsJson),
+          );
+
           if (kDebugMode) {
             print('✅ Trip history updated with completed status: $tripId');
           }
@@ -457,6 +484,55 @@ class TripProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       _setError('Failed to update status');
+      return false;
+    }
+  }
+
+  /// Pick all students in a trip
+  Future<bool> pickAllStudents(String tripId) async {
+    try {
+      await _tripService.pickAllStudents(tripId);
+
+      // Update local state
+      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
+      if (tripIndex != -1) {
+        for (var i = 0; i < _trips[tripIndex].students.length; i++) {
+          if (_trips[tripIndex].students[i].status == 'pending') {
+            // No direct setter since it's likely final or needs re-creation,
+            // we will just reload the trip details if needed or
+            // simply notifyListeners() and let the screen handle its local state
+          }
+        }
+        notifyListeners();
+      }
+
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to pick all students');
+      return false;
+    }
+  }
+
+  /// Drop all students in a trip
+  Future<bool> dropAllStudents(String tripId) async {
+    try {
+      await _tripService.dropAllStudents(tripId);
+
+      // Update local state
+      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
+      if (tripIndex != -1) {
+        notifyListeners();
+      }
+
+      return true;
+    } on api.ApiException catch (e) {
+      _setError(e.message);
+      return false;
+    } catch (e) {
+      _setError('Failed to drop all students');
       return false;
     }
   }

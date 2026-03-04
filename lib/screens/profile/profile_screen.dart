@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/trip_history_service.dart';
 import '../../utils/permission_helper.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -15,6 +16,35 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Real trip stats from TripHistoryService
+  DriverStats _driverStats = DriverStats.empty();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRealStats();
+  }
+
+  Future<void> _loadRealStats() async {
+    final authProvider = context.read<AuthProvider>();
+    final driverId = authProvider.userId ?? '';
+    if (driverId.isEmpty) return;
+
+    try {
+      final historyService = TripHistoryService();
+      final stats = await historyService.getDriverStats(driverId);
+      if (mounted) {
+        setState(() {
+          _driverStats = stats;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ Failed to load driver stats: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -53,25 +83,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-            
+
             // Profile Header with Avatar
             _buildProfileHeader(userData, isDarkMode, userRole, authProvider),
-            
+
             const SizedBox(height: 24),
-            
+
             // Stats Row
             _buildStatsCard(provider, isDarkMode),
-            
+
             const SizedBox(height: 24),
-            
+
             // Menu Section
             _buildMenuSection(context, isDarkMode),
-            
+
             const SizedBox(height: 24),
-            
+
             // Logout Button
             _buildLogoutButton(context, isDarkMode),
-            
+
             const SizedBox(height: 24),
           ],
         ),
@@ -79,7 +109,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showImagePickerOptions(BuildContext parentContext, AuthProvider authProvider) {
+  void _showImagePickerOptions(
+    BuildContext parentContext,
+    AuthProvider authProvider,
+  ) {
     final isDarkMode = parentContext.read<AppProvider>().isDarkMode;
 
     showModalBottomSheet(
@@ -110,10 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: const Color(0xFF6B9B5B).withValues(alpha: 30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Color(0xFF6B9B5B),
-                  ),
+                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
                 ),
                 title: Text(
                   'Take Photo',
@@ -135,9 +165,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   await Future.delayed(const Duration(milliseconds: 200));
                   // Check permission and open camera using parent context
                   if (parentContext.mounted) {
-                    final hasPermission = await PermissionHelper.requestCameraPermission(parentContext);
+                    final hasPermission =
+                        await PermissionHelper.requestCameraPermission(
+                          parentContext,
+                        );
                     if (hasPermission && parentContext.mounted) {
-                      await _pickAndUploadImage(parentContext, authProvider, ImageSource.camera);
+                      await _pickAndUploadImage(
+                        parentContext,
+                        authProvider,
+                        ImageSource.camera,
+                      );
                     }
                   }
                 },
@@ -174,9 +211,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   await Future.delayed(const Duration(milliseconds: 200));
                   // Check permission and open gallery using parent context
                   if (parentContext.mounted) {
-                    final hasPermission = await PermissionHelper.requestPhotoLibraryPermission(parentContext);
+                    final hasPermission =
+                        await PermissionHelper.requestPhotoLibraryPermission(
+                          parentContext,
+                        );
                     if (hasPermission && parentContext.mounted) {
-                      await _pickAndUploadImage(parentContext, authProvider, ImageSource.gallery);
+                      await _pickAndUploadImage(
+                        parentContext,
+                        authProvider,
+                        ImageSource.gallery,
+                      );
                     }
                   }
                 },
@@ -196,7 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ) async {
     // Store a reference to the ScaffoldMessenger for later use
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    
+
     try {
       debugPrint('📸 Starting image picker...');
       final ImagePicker picker = ImagePicker();
@@ -249,7 +293,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             content: const Text('Profile photo updated successfully'),
             backgroundColor: const Color(0xFF6B9B5B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -260,7 +306,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             content: const Text('Failed to upload photo. Please try again.'),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -281,14 +329,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: Text('Error: $e'),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
     }
   }
 
-  Widget _buildProfileHeader(Map<String, dynamic> userData, bool isDarkMode, UserRole userRole, AuthProvider authProvider) {
+  Widget _buildProfileHeader(
+    Map<String, dynamic> userData,
+    bool isDarkMode,
+    UserRole userRole,
+    AuthProvider authProvider,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -350,7 +405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Name
           Text(
             userData['name'],
@@ -361,7 +416,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          
+
           // Role Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
@@ -379,16 +434,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Contact Info
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.phone_outlined, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+              Icon(
+                Icons.phone_outlined,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
               const SizedBox(width: 6),
               Text(
                 userData['phone'],
-                style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
               ),
             ],
           ),
@@ -396,11 +458,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.email_outlined, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+              Icon(
+                Icons.email_outlined,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
               const SizedBox(width: 6),
               Text(
                 userData['email'],
-                style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
               ),
             ],
           ),
@@ -427,29 +496,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Expanded(
             child: _buildStatItem(
-              value: provider.totalTrips.toString(),
+              value: _driverStats.totalTrips.toString(),
               label: 'Trips',
               icon: Icons.route_outlined,
               color: const Color(0xFF6B9B5B),
               isDarkMode: isDarkMode,
             ),
           ),
-          Container(height: 40, width: 1, color: isDarkMode ? Colors.white24 : Colors.black12),
+          Container(
+            height: 40,
+            width: 1,
+            color: isDarkMode ? Colors.white24 : Colors.black12,
+          ),
           Expanded(
             child: _buildStatItem(
-              value: provider.completedTrips.toString(),
-              label: 'Completed',
-              icon: Icons.check_circle_outline,
+              value: _driverStats.totalStudents.toString(),
+              label: 'Students',
+              icon: Icons.people_outline,
               color: const Color(0xFF2196F3),
               isDarkMode: isDarkMode,
             ),
           ),
-          Container(height: 40, width: 1, color: isDarkMode ? Colors.white24 : Colors.black12),
+          Container(
+            height: 40,
+            width: 1,
+            color: isDarkMode ? Colors.white24 : Colors.black12,
+          ),
           Expanded(
             child: _buildStatItem(
-              value: '${provider.totalDistance.toStringAsFixed(0)}km',
-              label: 'Distance',
-              icon: Icons.straighten,
+              value: _driverStats.totalPicked.toString(),
+              label: 'Picked Up',
+              icon: Icons.check_circle_outline,
               color: const Color(0xFFFF9800),
               isDarkMode: isDarkMode,
             ),
@@ -570,7 +647,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 isDestructive: item['isDestructive'] as bool? ?? false,
                 isDarkMode: isDarkMode,
                 onTap: item['route'] != null
-                    ? () => Navigator.pushNamed(context, item['route'] as String)
+                    ? () =>
+                          Navigator.pushNamed(context, item['route'] as String)
                     : () {},
               ),
               if (index < menuItems.length - 1)
@@ -578,7 +656,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   height: 1,
                   indent: 72,
                   endIndent: 20,
-                  color: isDarkMode ? Colors.white12 : Colors.black.withValues(alpha: 0.05),
+                  color: isDarkMode
+                      ? Colors.white12
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
             ],
           );
@@ -614,20 +694,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: isDestructive
               ? color
               : isDarkMode
-                  ? Colors.white
-                  : const Color(0xFF1A1A1A),
+              ? Colors.white
+              : const Color(0xFF1A1A1A),
         ),
       ),
       subtitle: Text(
         subtitle,
         style: TextStyle(
           fontSize: 12,
-          color: isDarkMode ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF999999),
+          color: isDarkMode
+              ? Colors.white.withValues(alpha: 0.5)
+              : const Color(0xFF999999),
         ),
       ),
       trailing: Icon(
         Icons.chevron_right,
-        color: isDarkMode ? Colors.white.withValues(alpha: 0.4) : const Color(0xFFCCCCCC),
+        color: isDarkMode
+            ? Colors.white.withValues(alpha: 0.4)
+            : const Color(0xFFCCCCCC),
         size: 20,
       ),
       onTap: onTap,
@@ -685,11 +769,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return const CircleAvatar(
       radius: 45,
       backgroundColor: Colors.white,
-      child: Icon(
-        Icons.person,
-        size: 45,
-        color: Color(0xFF6B9B5B),
-      ),
+      child: Icon(Icons.person, size: 45, color: Color(0xFF6B9B5B)),
     );
   }
 }

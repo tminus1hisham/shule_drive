@@ -83,7 +83,9 @@ class TripService {
         }
         // If array has data, use first element
         final trip = Trip.fromJson(response.first as Map<String, dynamic>);
-        debugPrint('✅ Active trip fetched from array: ${trip.id} - ${trip.routeName}');
+        debugPrint(
+          '✅ Active trip fetched from array: ${trip.id} - ${trip.routeName}',
+        );
         await _buffer.saveBuffer(
           key: BufferKeys.activeTrip,
           data: trip,
@@ -96,7 +98,9 @@ class TripService {
       if (response['data'] == null) {
         debugPrint('⚠️ No active trip data in response');
         // Try to get from buffer
-        final bufferedTrip = await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
+        final bufferedTrip = await _buffer.getBuffer<Trip>(
+          key: BufferKeys.activeTrip,
+        );
         if (bufferedTrip != null) {
           debugPrint('✅ Returning buffered active trip: ${bufferedTrip.id}');
         }
@@ -115,7 +119,9 @@ class TripService {
 
       return trip;
     } on ApiException catch (e) {
-      debugPrint('❌ ApiException fetching active trip: ${e.message} (status: ${e.statusCode})');
+      debugPrint(
+        '❌ ApiException fetching active trip: ${e.message} (status: ${e.statusCode})',
+      );
       // Return from buffer on API error
       return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     } catch (e) {
@@ -202,13 +208,15 @@ class TripService {
       // Use end trip endpoint with tripId in body
       // The API expects the tripId in the request body, not URL path
       debugPrint('📡 Ending trip: POST /api/trips/end with tripId: $tripId');
-      
+
       final response = await _apiClient.post(
         '/api/trips/end',
         body: {'tripId': tripId},
       );
 
-      debugPrint('📡 End trip response: $response (type: ${response.runtimeType})');
+      debugPrint(
+        '📡 End trip response: $response (type: ${response.runtimeType})',
+      );
 
       // Always clear buffers first - trip is ended on server side
       await _buffer.clearBuffer(BufferKeys.activeTrip);
@@ -216,7 +224,9 @@ class TripService {
 
       // Handle null or empty response (server returned 200 with empty body)
       if (response == null || (response is Map && response.isEmpty)) {
-        debugPrint('⚠️ Server returned empty/null response, creating minimal trip object');
+        debugPrint(
+          '⚠️ Server returned empty/null response, creating minimal trip object',
+        );
         return Trip(
           id: tripId,
           routeName: 'Trip',
@@ -243,13 +253,17 @@ class TripService {
               .map((s) => StudentPickup.fromJson(s))
               .toList();
         }
-        
+
         // Construct trip from response
         trip = Trip(
-          id: response['tripUniqueId']?.toString() ?? response['id']?.toString() ?? tripId,
+          id:
+              response['tripUniqueId']?.toString() ??
+              response['id']?.toString() ??
+              tripId,
           routeName: response['routeName'] ?? response['route'] ?? 'Trip',
           routeId: response['routeId']?.toString() ?? '',
-          startTime: Trip._parseDateTime(response['startTime']) ?? DateTime.now(),
+          startTime:
+              Trip._parseDateTime(response['startTime']) ?? DateTime.now(),
           endTime: Trip._parseDateTime(response['endTime']) ?? DateTime.now(),
           status: 'completed',
           vehicleId: response['vehicleId']?.toString() ?? '',
@@ -259,7 +273,9 @@ class TripService {
         );
       } else {
         // Return a minimal trip object for any other response format
-        debugPrint('⚠️ Unexpected response format, creating minimal trip object');
+        debugPrint(
+          '⚠️ Unexpected response format, creating minimal trip object',
+        );
         trip = Trip(
           id: tripId,
           routeName: 'Trip',
@@ -275,7 +291,9 @@ class TripService {
 
       return trip;
     } on ApiException catch (e) {
-      debugPrint('❌ ApiException in endTrip: ${e.message} (status: ${e.statusCode})');
+      debugPrint(
+        '❌ ApiException in endTrip: ${e.message} (status: ${e.statusCode})',
+      );
       // Even on error, clear the active trip buffer to prevent stale data
       await _buffer.clearBuffer(BufferKeys.activeTrip);
       await _buffer.clearCategory('trips');
@@ -313,6 +331,40 @@ class TripService {
     }
   }
 
+  /// Pick all students in a trip
+  /// POST /api/trips/pick/all
+  Future<void> pickAllStudents(String tripId) async {
+    try {
+      await _apiClient.post(
+        Endpoints.pickAllStudents,
+        body: {'tripId': tripId},
+      );
+      // Clear trip details buffer to force refresh
+      await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
+  /// Drop all students in a trip
+  /// POST /api/trips/drop/all
+  Future<void> dropAllStudents(String tripId) async {
+    try {
+      await _apiClient.post(
+        Endpoints.dropAllStudents,
+        body: {'tripId': tripId},
+      );
+      // Clear trip details buffer to force refresh
+      await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(message: e.toString());
+    }
+  }
+
   /// Refresh trips cache in background
   Future<void> refreshTripsCache({int page = 1, int limit = 20}) async {
     await _buffer.refreshBuffer<List<Trip>>(
@@ -339,13 +391,13 @@ class TripService {
         // Retry logic with shorter timeout
         const maxRetries = 2;
         const timeout = Duration(seconds: 15);
-        
+
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
             if (kDebugMode && attempt > 0) {
               print('🔄 Master trips retry attempt ${attempt + 1}/$maxRetries');
             }
-            
+
             // Fetch all master trips and filter by driver ID
             final response = await _apiClient.get(
               Endpoints.getAllMasterTrips,
@@ -367,25 +419,27 @@ class TripService {
                 .map((trip) => MasterTrip.fromJson(trip))
                 .where((trip) => trip.createdBy == driverId)
                 .toList();
-            
+
             if (kDebugMode) {
               print('🔍 Found ${trips.length} trips for driver ID: $driverId');
               for (final trip in trips) {
                 print('  - ${trip.tripName} (Route: ${trip.route})');
               }
             }
-            
+
             return trips;
           } on TimeoutException catch (e) {
             if (attempt == maxRetries - 1) {
               // Last attempt failed, rethrow
-              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+              throw ApiException(
+                message: 'Request timed out after $maxRetries attempts',
+              );
             }
             // Wait before retrying
             await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
-        
+
         return [];
       },
       bufferKey: 'master_trips_driver_$driverId',
@@ -402,13 +456,13 @@ class TripService {
         // Retry logic with shorter timeout
         const maxRetries = 2;
         const timeout = Duration(seconds: 15);
-        
+
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
             if (kDebugMode && attempt > 0) {
               print('🔄 Master trips retry attempt ${attempt + 1}/$maxRetries');
             }
-            
+
             final response = await _apiClient.get(
               Endpoints.getAllMasterTrips,
               timeout: timeout,
@@ -431,13 +485,15 @@ class TripService {
           } on TimeoutException catch (e) {
             if (attempt == maxRetries - 1) {
               // Last attempt failed, rethrow
-              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+              throw ApiException(
+                message: 'Request timed out after $maxRetries attempts',
+              );
             }
             // Wait before retrying
             await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
-        
+
         return [];
       },
       bufferKey: 'master_trips_all',
@@ -575,7 +631,7 @@ class TripService {
       };
 
       debugPrint('✏️ Editing master trip: $body');
-      
+
       final response = await _apiClient.put(
         Endpoints.editMasterTrip,
         body: body,
@@ -643,10 +699,7 @@ class TripService {
   /// POST /api/trips/delete/master/trip
   Future<void> deleteMasterTrip(int tripId) async {
     try {
-      await _apiClient.post(
-        Endpoints.deleteMasterTrip,
-        body: {'id': tripId},
-      );
+      await _apiClient.post(Endpoints.deleteMasterTrip, body: {'id': tripId});
 
       // Clear master trips cache
       await _buffer.clearCategory('master_trips');
@@ -664,16 +717,15 @@ class TripService {
     required int masterTripId,
   }) async {
     try {
-      debugPrint('🗑️ Deleting student trip: id=$studentTripId, masterTripId=$masterTripId');
-      
+      debugPrint(
+        '🗑️ Deleting student trip: id=$studentTripId, masterTripId=$masterTripId',
+      );
+
       final response = await _apiClient.post(
         Endpoints.deleteStudentFromMasterTrip,
-        body: {
-          'id': studentTripId,
-          'masterTripId': masterTripId,
-        },
+        body: {'id': studentTripId, 'masterTripId': masterTripId},
       );
-      
+
       debugPrint('✅ Delete response: $response');
 
       // Clear students cache for this trip
@@ -705,7 +757,7 @@ class TripService {
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
-      
+
       if (kDebugMode) {
         print('✅ Guardians notified for trip start: $tripId');
       }
@@ -741,7 +793,7 @@ class TripService {
           'timestamp': DateTime.now().toIso8601String(),
         },
       );
-      
+
       if (kDebugMode) {
         print('✅ ETA notification sent for student $studentId at $stopName');
       }
@@ -764,10 +816,12 @@ class TripService {
     required Function(List<MasterTrip>) onRefresh,
   }) async {
     final bufferKey = 'master_trips_driver_$driverId';
-    
+
     // Try to get cached data first (as List<MasterTrip> since that's what we store)
-    final cachedTrips = await _buffer.getBuffer<List<MasterTrip>>(key: bufferKey);
-    
+    final cachedTrips = await _buffer.getBuffer<List<MasterTrip>>(
+      key: bufferKey,
+    );
+
     // Fetch fresh data in background
     Future<void> fetchFresh() async {
       try {
@@ -786,10 +840,10 @@ class TripService {
         }
       }
     }
-    
+
     // Start background fetch
     fetchFresh();
-    
+
     // Return cached data immediately if available
     if (cachedTrips != null && cachedTrips.isNotEmpty) {
       if (kDebugMode) {
@@ -797,7 +851,7 @@ class TripService {
       }
       return cachedTrips;
     }
-    
+
     // No cache, wait for fresh data
     if (kDebugMode) {
       print('📡 No cache available, fetching fresh data...');
@@ -974,24 +1028,20 @@ class StudentPickup {
   factory StudentPickup.fromJson(dynamic json) {
     // Handle corrupted data where json might be a String
     if (json is String) {
-      debugPrint('⚠️ StudentPickup.fromJson received String instead of Map: $json');
-      return StudentPickup(
-        id: '',
-        name: json,
-        status: 'pending',
+      debugPrint(
+        '⚠️ StudentPickup.fromJson received String instead of Map: $json',
       );
+      return StudentPickup(id: '', name: json, status: 'pending');
     }
-    
+
     // Ensure json is a Map
     if (json is! Map<String, dynamic>) {
-      debugPrint('⚠️ StudentPickup.fromJson received unexpected type: ${json.runtimeType}');
-      return StudentPickup(
-        id: '',
-        name: 'Unknown Student',
-        status: 'pending',
+      debugPrint(
+        '⚠️ StudentPickup.fromJson received unexpected type: ${json.runtimeType}',
       );
+      return StudentPickup(id: '', name: 'Unknown Student', status: 'pending');
     }
-    
+
     // Determine status from various API response formats
     String studentStatus = 'pending';
     if (json['isStudentPicked'] == true || json['isStudentDropped'] == true) {
@@ -1006,7 +1056,9 @@ class StudentPickup {
     if (studentName == 'string' || studentName.isEmpty) {
       // Try to use studentRegNumber or studentId as fallback, but only if they look valid
       final studentReg = json['studentRegNumber']?.toString() ?? '';
-      if (studentReg.isNotEmpty && studentReg != 'string' && studentReg != '0') {
+      if (studentReg.isNotEmpty &&
+          studentReg != 'string' &&
+          studentReg != '0') {
         studentName = studentReg;
       } else {
         final studentId = json['studentId']?.toString() ?? '';
@@ -1017,7 +1069,7 @@ class StudentPickup {
         }
       }
     }
-    
+
     return StudentPickup(
       id: json['id']?.toString() ?? json['studentId']?.toString() ?? '',
       name: studentName,
@@ -1030,7 +1082,10 @@ class StudentPickup {
         json['dropTime'] ?? json['dropoff_time'] ?? json['dropoffTime'],
       ),
       notes: json['notes'],
-      parentPhone: json['guardianPhoneNumber'] ?? json['parent_phone'] ?? json['parentPhone'],
+      parentPhone:
+          json['guardianPhoneNumber'] ??
+          json['parent_phone'] ??
+          json['parentPhone'],
     );
   }
 
