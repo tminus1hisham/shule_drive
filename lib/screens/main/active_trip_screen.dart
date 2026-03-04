@@ -67,6 +67,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   // Preloaded trip data
   List<Map<String, dynamic>> _preloadedStudents = [];
 
+  // Map style state - 'auto' uses time-of-day, others are explicit
+  String _currentMapStyle = 'auto'; // auto, streets, satellite, dark, outdoors
+
   @override
   void initState() {
     super.initState();
@@ -713,11 +716,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               },
             ),
             children: [
-              // Mapbox tile layer
+              // Mapbox tile layer - uses time-of-day auto style or manual override
               TileLayer(
-                urlTemplate: isDarkMode
-                    ? MapConfig.mapboxDarkTileUrl
-                    : MapConfig.mapboxTileUrl,
+                urlTemplate: _getMapTileUrl(isDarkMode),
                 userAgentPackageName: 'com.shuledrive.app',
               ),
 
@@ -832,11 +833,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                           _currentLocation!.position.latitude,
                           _currentLocation!.position.longitude,
                         ),
-                        16,
+                        17,
                       );
+                      _mapController.rotate(-161.81);
                     }
                   },
                 ),
+                const SizedBox(height: 8),
+                // Map style selector
+                _buildMapStyleSelector(isDarkMode),
                 const SizedBox(height: 8),
                 // Navigate to next stop button
                 _buildMapButton(
@@ -892,23 +897,40 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         _currentLocation!.position.latitude,
         _currentLocation!.position.longitude,
       ),
-      width: 50,
-      height: 50,
+      width: 60,
+      height: 60,
       child: Transform.rotate(
         angle: _currentLocation!.heading * pi / 180,
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF6B9B5B),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
             ],
           ),
-          child: const Icon(
-            Icons.directions_bus,
-            color: Colors.white,
-            size: 24,
+          child: Image.asset(
+            'assets/images/bus_marker.png',
+            width: 60,
+            height: 60,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              // Fallback to icon if image fails
+              return Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B9B5B),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
+                child: const Icon(
+                  Icons.directions_bus,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -925,6 +947,80 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
       foregroundColor: isDark ? Colors.white : Colors.black87,
       child: Icon(icon),
+    );
+  }
+
+  /// Get the tile URL based on current map style selection
+  String _getMapTileUrl(bool isDarkMode) {
+    switch (_currentMapStyle) {
+      case 'streets':
+        return MapConfig.mapboxTileUrl;
+      case 'satellite':
+        return MapConfig.mapboxSatelliteTileUrl;
+      case 'dark':
+        return MapConfig.mapboxDarkTileUrl;
+      case 'outdoors':
+        return MapConfig.mapboxOutdoorsTileUrl;
+      case 'auto':
+      default:
+        return MapConfig.getTimeBasedTileUrl();
+    }
+  }
+
+  /// Build map style selector popup button
+  Widget _buildMapStyleSelector(bool isDarkMode) {
+    final styles = [
+      {'key': 'auto', 'label': 'Auto', 'icon': Icons.auto_awesome},
+      {'key': 'streets', 'label': 'Streets', 'icon': Icons.map},
+      {'key': 'satellite', 'label': 'Satellite', 'icon': Icons.satellite_alt},
+      {'key': 'dark', 'label': 'Dark', 'icon': Icons.dark_mode},
+      {'key': 'outdoors', 'label': 'Terrain', 'icon': Icons.terrain},
+    ];
+
+    return PopupMenuButton<String>(
+      onSelected: (style) {
+        setState(() => _currentMapStyle = style);
+      },
+      offset: const Offset(-50, 0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+      itemBuilder: (context) => styles.map((style) {
+        final isSelected = _currentMapStyle == style['key'];
+        return PopupMenuItem<String>(
+          value: style['key'] as String,
+          child: Row(
+            children: [
+              Icon(
+                style['icon'] as IconData,
+                size: 20,
+                color: isSelected
+                    ? const Color(0xFF6B9B5B)
+                    : (isDarkMode ? Colors.white70 : Colors.black54),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                style['label'] as String,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected
+                      ? const Color(0xFF6B9B5B)
+                      : (isDarkMode ? Colors.white : Colors.black87),
+                ),
+              ),
+              if (isSelected) ...[
+                const Spacer(),
+                const Icon(Icons.check, size: 18, color: Color(0xFF6B9B5B)),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
+      child: FloatingActionButton.small(
+        onPressed: null,
+        backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+        foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+        child: const Icon(Icons.layers),
+      ),
     );
   }
 

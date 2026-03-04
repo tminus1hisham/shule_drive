@@ -2017,25 +2017,41 @@ class _DashboardScreenState extends State<DashboardScreen>
   // ==================== DIALOGS ====================
 
   void _showEndTripDialog(BuildContext context) {
+    final tripProvider = context.read<TripProvider>();
+    final trip = tripProvider.activeTrip;
+    if (trip == null) return;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('End Trip?'),
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.stop_circle, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('End Trip?'),
+          ],
+        ),
         content: const Text(
           'Are you sure you want to end this trip? This action cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              // TODO: Implement end trip logic
+              Navigator.pop(dialogContext);
               _endTrip();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             child: const Text('End Trip'),
           ),
         ],
@@ -2045,8 +2061,64 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _endTrip() async {
     final tripProvider = context.read<TripProvider>();
-    // TODO: Implement actual end trip API call
-    // Note: Don't call fetchActiveTrip() - that's the guardian endpoint
+    final authProvider = context.read<AuthProvider>();
+    final trip = tripProvider.activeTrip;
+    if (trip == null) return;
+
+    // Show loading overlay
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+      ),
+    );
+
+    try {
+      final userData = authProvider.userData;
+      final driverId = userData['id']?.toString();
+      final driverName = userData['name']?.toString();
+
+      final success = await tripProvider.endTrip(
+        trip.id,
+        driverId: driverId,
+        driverName: driverName,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Remove loading overlay
+
+      if (success) {
+        HapticFeedback.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Trip ended successfully'),
+            backgroundColor: Color(0xFF6B9B5B),
+          ),
+        );
+        // Refresh dashboard
+        _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to end trip: ${tripProvider.errorMessage ?? "Unknown error"}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // Remove loading overlay
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error ending trip: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _openTripChat(BuildContext context, Trip trip) {

@@ -211,7 +211,7 @@ class TripService {
 
       final response = await _apiClient.post(
         '/api/trips/end',
-        body: {'tripId': tripId},
+        body: {'tripId': tripId, 'uniqueTripIdentity': tripId},
       );
 
       debugPrint(
@@ -337,7 +337,7 @@ class TripService {
     try {
       await _apiClient.post(
         Endpoints.pickAllStudents,
-        body: {'tripId': tripId},
+        body: {'tripId': tripId, 'uniqueTripIdentity': tripId},
       );
       // Clear trip details buffer to force refresh
       await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));
@@ -354,7 +354,7 @@ class TripService {
     try {
       await _apiClient.post(
         Endpoints.dropAllStudents,
-        body: {'tripId': tripId},
+        body: {'tripId': tripId, 'uniqueTripIdentity': tripId},
       );
       // Clear trip details buffer to force refresh
       await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));

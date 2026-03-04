@@ -107,6 +107,7 @@ flutter:
   assets:
     - images/
     - assets/
+    - assets/images/
     - assets/chat_bg.jpg
     - assets/dark_chat_bg.jpg
     - .env
