@@ -1417,10 +1417,15 @@ class _StartTripScreenState extends State<StartTripScreen>
   // ==================== ACTIONS ====================
 
   void _openLiveTracking(api.Trip trip) {
+    // Navigate to native Mapbox driver map with vector tiles
+    // Pass preloaded students which include location data
     Navigator.pushNamed(
       context,
-      '/active-trip',
-      arguments: {'tripId': trip.id},
+      '/driver-map',
+      arguments: {
+        'tripId': trip.id,
+        'preloadedData': _preloadedData?.toJson(),
+      },
     );
   }
 

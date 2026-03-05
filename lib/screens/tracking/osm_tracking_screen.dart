@@ -1,18 +1,17 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 
-/// Mapbox Tracking Screen - Replacement for OSM tracking
+/// Mapbox Tracking Screen - Real-time trip tracking with Mapbox native SDK
 ///
 /// Features:
-/// - Full screen Mapbox map
+/// - Full screen Mapbox map using native SDK
 /// - Real-time driver location tracking
 /// - Student markers with status colors
 /// - Route line through all stops
@@ -34,7 +33,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   final TripService _tripService = TripService();
 
   // Mapbox
-  final MapController _mapController = MapController();
+  MapboxMap? _mapboxMap;
+  PointAnnotationManager? _pointAnnotationManager;
+  PolylineAnnotationManager? _polylineAnnotationManager;
 
   // Location
   geo.Position? _currentPosition;
@@ -53,6 +54,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeMapbox();
     _initializeLocation();
     _loadTripData();
   }
@@ -60,11 +62,31 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
-    _mapController.dispose();
+    _mapboxMap?.dispose();
     super.dispose();
   }
 
-  // MapConfig mapbox token is injected directly in TileLayer.
+  /// Initialize Mapbox with access token
+  void _initializeMapbox() {
+    MapboxOptions.setAccessToken(MapConfig.mapboxAccessToken);
+  }
+
+  /// Called when map is created
+  void _onMapCreated(MapboxMap mapboxMap) {
+    _mapboxMap = mapboxMap;
+
+    mapboxMap.annotations.createPointAnnotationManager().then((manager) {
+      _pointAnnotationManager = manager;
+      _updateMarkers();
+    });
+
+    mapboxMap.annotations.createPolylineAnnotationManager().then((manager) {
+      _polylineAnnotationManager = manager;
+      if (_routeResult != null) {
+        _updateRouteLine();
+      }
+    });
+  }
 
   Future<void> _initializeLocation() async {
     try {
@@ -205,10 +227,82 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
     }
   }
 
-  void _updateRouteLine() {
-    if (mounted) {
-      setState(() {});
+  /// Update route line on map
+  Future<void> _updateRouteLine() async {
+    if (_polylineAnnotationManager == null || _routeResult == null) return;
+
+    await _polylineAnnotationManager!.deleteAll();
+
+    final coordinates = _routeResult!.coordinates;
+    if (coordinates == null || coordinates.isEmpty) return;
+
+    // Create line coordinates
+    final lineCoords = coordinates.map((pos) {
+      return Position(pos.longitude, pos.latitude);
+    }).toList();
+
+    await _polylineAnnotationManager!.create(
+      PolylineAnnotationOptions(
+        geometry: LineString(coordinates: lineCoords),
+        lineColor: 0xFF6B9B5B, // Mapbox expects int color
+        lineWidth: 4.0,
+      ),
+    );
+  }
+
+  /// Update all markers on map
+  Future<void> _updateMarkers() async {
+    if (_pointAnnotationManager == null) return;
+    await _pointAnnotationManager!.deleteAll();
+    await _updateDriverMarker();
+    for (final student in _students) {
+      await _addStudentMarker(student);
     }
+  }
+
+  /// Update driver marker on map
+  Future<void> _updateDriverMarker() async {
+    if (_pointAnnotationManager == null || _currentPosition == null) return;
+
+    await _pointAnnotationManager!.create(
+      PointAnnotationOptions(
+        geometry: Point(
+          coordinates: Position(
+            _currentPosition!.longitude,
+            _currentPosition!.latitude,
+          ),
+        ),
+        textField: '🚌',
+        textSize: 24,
+      ),
+    );
+  }
+
+  /// Add student marker to map
+  Future<void> _addStudentMarker(TripStudent student) async {
+    if (_pointAnnotationManager == null) return;
+    if (student.latitude == 0 && student.longitude == 0) return;
+
+    String emoji;
+    if (student.isStudentDropped) {
+      emoji = '🏠';
+    } else if (student.isStudentPicked) {
+      emoji = '✅';
+    } else if (!student.isStudentActive) {
+      emoji = '❌';
+    } else {
+      emoji = '👤';
+    }
+
+    await _pointAnnotationManager!.create(
+      PointAnnotationOptions(
+        geometry: Point(
+          coordinates: Position(student.longitude, student.latitude),
+        ),
+        textField: emoji,
+        textSize: 20,
+      ),
+    );
   }
 
   @override
@@ -227,70 +321,18 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
       ),
       body: Stack(
         children: [
-          // Map
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(
-                MapConfig.defaultLatitude,
-                MapConfig.defaultLongitude,
+          // Mapbox MapWidget
+          MapWidget(
+            onMapCreated: _onMapCreated,
+            cameraOptions: CameraOptions(
+              center: Point(
+                coordinates: Position(
+                  MapConfig.defaultLongitude,
+                  MapConfig.defaultLatitude,
+                ),
               ),
-              initialZoom: 13,
+              zoom: 13,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.shuledrive.app',
-              ),
-              PolylineLayer(
-                polylines: [
-                  if (_routeResult != null && _routeResult!.coordinates != null)
-                    Polyline(
-                      points: _routeResult!.coordinates!
-                          .map((pos) => LatLng(pos.latitude, pos.longitude))
-                          .toList(),
-                      color: const Color(0xFF6B9B5B),
-                      strokeWidth: 4,
-                    ),
-                ],
-              ),
-              MarkerLayer(
-                markers: [
-                  if (_currentPosition != null)
-                    Marker(
-                      point: LatLng(
-                        _currentPosition!.latitude,
-                        _currentPosition!.longitude,
-                      ),
-                      width: 40,
-                      height: 40,
-                      child: const Text('🚌', style: TextStyle(fontSize: 24)),
-                    ),
-                  ..._students
-                      .where((s) => s.latitude != 0 && s.longitude != 0)
-                      .map((student) {
-                        String emoji;
-                        if (student.isStudentDropped)
-                          emoji = '🏠';
-                        else if (student.isStudentPicked)
-                          emoji = '✅';
-                        else if (!student.isStudentActive)
-                          emoji = '❌';
-                        else
-                          emoji = '👤';
-                        return Marker(
-                          point: LatLng(student.latitude, student.longitude),
-                          width: 30,
-                          height: 30,
-                          child: Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 20),
-                          ),
-                        );
-                      }),
-                ],
-              ),
-            ],
           ),
 
           // Loading
@@ -360,13 +402,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
                 FloatingActionButton.small(
                   heroTag: 'center',
                   onPressed: () {
-                    if (_currentPosition != null) {
-                      _mapController.move(
-                        LatLng(
-                          _currentPosition!.latitude,
-                          _currentPosition!.longitude,
+                    if (_mapboxMap != null && _currentPosition != null) {
+                      _mapboxMap!.setCamera(
+                        CameraOptions(
+                          center: Point(
+                            coordinates: Position(
+                              _currentPosition!.longitude,
+                              _currentPosition!.latitude,
+                            ),
+                          ),
+                          zoom: 16,
                         ),
-                        16,
                       );
                     }
                   },

@@ -26,6 +26,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   List<api.MasterTrip> _existingTrips = [];
   api.MasterTrip? _selectedMasterTrip;
   List<api.TripStudent> _masterTripStudents = [];
+  Map<String, dynamic>? _preloadedData; // Store preloaded data for driver map
 
   // UI State
   bool _isLoading = false; // Start false to show UI immediately
@@ -73,12 +74,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
         // If preloaded data has students, use them
         final preloadedDataMap = args['preloadedData'] as Map<String, dynamic>?;
-        if (preloadedDataMap != null && preloadedDataMap['students'] != null) {
-          final studentsJson = preloadedDataMap['students'] as List<dynamic>;
-          _masterTripStudents = studentsJson
-              .map((s) => api.TripStudent.fromJson(s as Map<String, dynamic>))
-              .toList();
-          debugPrint('📋 Preloaded students: ${_masterTripStudents.length}');
+        if (preloadedDataMap != null) {
+          _preloadedData = preloadedDataMap; // Store for driver map
+          if (preloadedDataMap['students'] != null) {
+            final studentsJson = preloadedDataMap['students'] as List<dynamic>;
+            _masterTripStudents = studentsJson
+                .map((s) => api.TripStudent.fromJson(s as Map<String, dynamic>))
+                .toList();
+            debugPrint('📋 Preloaded students: ${_masterTripStudents.length}');
+          }
         }
 
         // If we have a master trip but no students loaded yet, fetch them
@@ -156,7 +160,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             print('✅ Students loaded in background');
           }
           // Switch to name search once students are loaded
-          if (mounted && _allStudents.isNotEmpty) {
+          if (mounted && context.mounted && _allStudents.isNotEmpty) {
             setState(() {
               _showPhoneSearch = false;
             });
@@ -243,7 +247,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       debugPrint('👨‍🎓 FINAL: Loaded ${_allStudents.length} students total');
 
       // Notify UI to update only if still mounted
-      if (mounted) {
+      if (mounted && context.mounted) {
         setState(() {});
       }
     } catch (e, stackTrace) {
@@ -251,7 +255,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       debugPrint('Stack trace: $stackTrace');
 
       // Only update state if still mounted
-      if (mounted) {
+      if (mounted && context.mounted) {
         _allStudents = [];
         _filteredStudents = [];
         setState(() {});
@@ -682,12 +686,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           tripProvider.updateActiveTrip(mergedTrip);
         }
 
-        // Navigate to active trip screen
+        // Navigate to native Mapbox driver map (vector tiles - crisp and clear)
         if (mounted) {
           Navigator.pushReplacementNamed(
             context,
-            '/active-trip',
-            arguments: {'tripId': mergedTrip.id},
+            '/driver-map',
+            arguments: {
+              'tripId': mergedTrip.id,
+              'preloadedData': _preloadedData,
+            },
           );
         }
       } else {

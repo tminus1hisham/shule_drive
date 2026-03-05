@@ -8,11 +8,12 @@ import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
+import '../../models/preloaded_trip_data.dart';
 
 /// Driver Map Screen - Shows driver their route with all students as pins on the map
 /// 
 /// Features:
-/// - Full screen Mapbox map
+/// - Full screen Mapbox map using native SDK
 /// - Student markers with different colors based on status
 /// - Route line from driver location through all student pickup points
 /// - Driver location marker (green bus icon)
@@ -20,12 +21,12 @@ import '../../models/master_trip.dart';
 /// - Route recalculation after each pickup
 class DriverMapScreen extends StatefulWidget {
   final String tripId;
-  final List<TripStudent> students;
+  final Map<String, dynamic>? preloadedData;
 
   const DriverMapScreen({
     super.key,
     required this.tripId,
-    required this.students,
+    this.preloadedData,
   });
 
   @override
@@ -62,8 +63,22 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   void initState() {
     super.initState();
     _initializeMapbox();
-    _students = List.from(widget.students);
+    _loadStudentsFromPreloadedData();
     _initializeLocation();
+  }
+
+  /// Load students from preloaded data if available
+  void _loadStudentsFromPreloadedData() {
+    if (widget.preloadedData != null) {
+      try {
+        final preloaded = PreloadedTripData.fromJson(widget.preloadedData!);
+        _students = preloaded.students;
+        developer.log('Loaded ${_students.length} students from preloaded data', 
+            name: 'DriverMapScreen');
+      } catch (e) {
+        developer.log('Error parsing preloaded data: $e', name: 'DriverMapScreen');
+      }
+    }
   }
 
   @override
@@ -334,8 +349,6 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
 
       // If first time (no location), save current location
       if (student.latitude == 0 && student.longitude == 0 && _currentPosition != null) {
-        // Save location
-        // TODO: Implement API call to save student location
         developer.log(
           'Saving location for student ${student.studentId}: '
           '${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
@@ -354,10 +367,6 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       setState(() {
         _studentStatusUpdates[student.studentId] = 'picked';
         _studentPickedUpdates[student.studentId] = true;
-        // Save location if first time
-        if (student.latitude == 0 && student.longitude == 0 && _currentPosition != null) {
-          // TODO: Save location to backend
-        }
       });
 
       // Recalculate route
@@ -441,7 +450,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       ),
       body: Stack(
         children: [
-          // Map
+          // Mapbox MapWidget
           MapWidget(
             onMapCreated: _onMapCreated,
             cameraOptions: CameraOptions(

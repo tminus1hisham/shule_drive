@@ -155,8 +155,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         driverId,
         onRefresh: (freshTrips) {
           debugPrint('🔄 Background refresh: ${freshTrips.length} trips');
-          if (freshTrips.isNotEmpty && mounted) {
-            // If fresh data has trips and we're still on dashboard, redirect
+          // Only redirect on background refresh if NOT coming from trip end
+          if (freshTrips.isNotEmpty && mounted && !_fromTripEnd) {
             if (firstTrip == null) {
               debugPrint(
                 '✅ Fresh data available, redirecting to trip selection',
@@ -1323,13 +1323,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 const SizedBox(height: 20),
 
-                // PRIMARY: Resume live map button
+                // PRIMARY: Resume live map button (native Mapbox with vector tiles)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () {
                       HapticFeedback.mediumImpact();
-                      Navigator.pushNamed(context, '/active-trip');
+                      Navigator.pushNamed(
+                        context,
+                        '/driver-map',
+                        arguments: {
+                          'tripId': tripProvider.activeTrip?.id ?? '',
+                          'preloadedData': null, // Will be fetched by screen
+                        },
+                      );
                     },
                     icon: const Icon(Icons.map_outlined),
                     label: const Text(

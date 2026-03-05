@@ -44,6 +44,7 @@ import 'screens/chat/user_list_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
 import 'screens/tracking/live_tracking_screen.dart';
 import 'screens/tracking/osm_tracking_screen.dart';
+import 'screens/tracking/driver_map_screen.dart';
 
 import 'services/token_storage.dart';
 import 'services/local_database_service.dart';
@@ -509,6 +510,16 @@ Route _buildPageRoute(RouteSettings settings) {
       break;
     case '/active-trip':
       page = const ActiveTripScreen();
+      protected = true;
+      allowedRoles = [UserRole.driver];
+      break;
+    case '/driver-map':
+      // Native Mapbox driver map with vector tiles - requires arguments
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = DriverMapScreen(
+        tripId: args?['tripId'] as String? ?? '',
+        preloadedData: args?['preloadedData'] as Map<String, dynamic>?,
+      );
       protected = true;
       allowedRoles = [UserRole.driver];
       break;

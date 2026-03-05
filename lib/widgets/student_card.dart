@@ -38,6 +38,8 @@ class StudentCard extends StatelessWidget {
         return const Color(0xFFFF9800);
       case StudentStatus.pending:
         return const Color(0xFF607D8B);
+      case StudentStatus.dropped:
+        return const Color(0xFF2196F3);
     }
   }
 
@@ -49,6 +51,8 @@ class StudentCard extends StatelessWidget {
         return const Color(0xFFFFF3E0);
       case StudentStatus.pending:
         return const Color(0xFFECEFF1);
+      case StudentStatus.dropped:
+        return const Color(0xFFE3F2FD);
     }
   }
 
@@ -60,6 +64,8 @@ class StudentCard extends StatelessWidget {
         return 'Absent';
       case StudentStatus.pending:
         return 'Pending';
+      case StudentStatus.dropped:
+        return 'Dropped Off';
     }
   }
 
@@ -71,6 +77,8 @@ class StudentCard extends StatelessWidget {
         return Icons.cancel_rounded;
       case StudentStatus.pending:
         return Icons.schedule_rounded;
+      case StudentStatus.dropped:
+        return Icons.home_rounded;
     }
   }
 

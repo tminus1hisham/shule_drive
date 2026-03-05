@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart' as geolocator;
+import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
@@ -64,7 +64,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   String? _busPlate;
 
   // Stream subscriptions
-  StreamSubscription<geolocator.Position>? _locationSubscription;
+  StreamSubscription<geo.Position>? _locationSubscription;
   Timer? _refreshTimer;
 
   // Geofence tracking
@@ -263,23 +263,23 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _checkLocationPermission() async {
     try {
       bool serviceEnabled =
-          await geolocator.Geolocator.isLocationServiceEnabled();
+          await geo.Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() => _hasLocationPermission = false);
         return;
       }
 
-      geolocator.LocationPermission permission =
-          await geolocator.Geolocator.checkPermission();
-      if (permission == geolocator.LocationPermission.denied) {
-        permission = await geolocator.Geolocator.requestPermission();
-        if (permission == geolocator.LocationPermission.denied) {
+      geo.LocationPermission permission =
+          await geo.Geolocator.checkPermission();
+      if (permission == geo.LocationPermission.denied) {
+        permission = await geo.Geolocator.requestPermission();
+        if (permission == geo.LocationPermission.denied) {
           setState(() => _hasLocationPermission = false);
           return;
         }
       }
 
-      if (permission == geolocator.LocationPermission.deniedForever) {
+      if (permission == geo.LocationPermission.deniedForever) {
         setState(() => _hasLocationPermission = false);
         return;
       }
@@ -292,13 +292,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   Future<void> _startRealTimeTracking() async {
     try {
-      final initialPosition = await geolocator.Geolocator.getCurrentPosition();
+      final initialPosition = await geo.Geolocator.getCurrentPosition();
       _updateBusLocation(initialPosition);
 
       _locationSubscription =
-          geolocator.Geolocator.getPositionStream(
-            locationSettings: const geolocator.LocationSettings(
-              accuracy: geolocator.LocationAccuracy.high,
+          geo.Geolocator.getPositionStream(
+            locationSettings: const geo.LocationSettings(
+              accuracy: geo.LocationAccuracy.high,
               distanceFilter: 10,
             ),
           ).listen(
@@ -310,12 +310,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  void _onPositionUpdate(geolocator.Position position) {
+  void _onPositionUpdate(geo.Position position) {
     _updateBusLocation(position);
     _publishLocationToMqtt(position);
   }
 
-  void _updateBusLocation(geolocator.Position position) {
+  void _updateBusLocation(geo.Position position) {
     if (!mounted) return;
 
     final busLocation = BusLocation(
@@ -362,7 +362,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  void _publishLocationToMqtt(geolocator.Position position) {
+  void _publishLocationToMqtt(geo.Position position) {
     if (!_mqttService.isConnected) return;
 
     final topic = 'driver/$_busPlate/location';
@@ -632,9 +632,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    '${MapConfig.getMapboxUrl(_currentMapStyle)}&access_token={accessToken}',
-                additionalOptions: {'accessToken': MapConfig.mapboxAccessToken},
+                urlTemplate: MapConfig.getMapboxUrl(_currentMapStyle),
                 maxZoom: 22,
               ),
               PolylineLayer(
@@ -1536,6 +1534,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 context,
                 '/dashboard',
                 (r) => false,
+                arguments: {'fromTripEnd': true},
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(

@@ -1380,7 +1380,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   Future<void> _endTrip() async {
     if (_trip == null) {
       // No trip to end, just go to dashboard
-      Navigator.pushReplacementNamed(context, '/dashboard');
+      Navigator.pushReplacementNamed(
+        context,
+        '/dashboard',
+        arguments: {'fromTripEnd': true},
+      );
       return;
     }
 
@@ -1426,7 +1430,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               backgroundColor: Color(0xFF6B9B5B),
             ),
           );
-          Navigator.pushReplacementNamed(context, '/dashboard');
+          Navigator.pushReplacementNamed(
+            context,
+            '/dashboard',
+            arguments: {'fromTripEnd': true},
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

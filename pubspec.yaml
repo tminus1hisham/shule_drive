@@ -61,6 +61,9 @@ dependencies:
   latlong2: ^0.9.1
   flutter_map_marker_cluster: ^1.4.0
   
+  # Mapbox Official SDK
+  mapbox_maps_flutter: ^2.11.0
+  
   # Push Notifications (Choose your backend)
   # OPTION 1: Firebase (Google) - Uncomment to use
   # firebase_core: ^3.1.0

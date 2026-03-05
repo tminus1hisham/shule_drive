@@ -263,9 +263,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    '${MapConfig.mapboxTileUrl}&access_token={accessToken}',
-                additionalOptions: {'accessToken': MapConfig.mapboxAccessToken},
+                urlTemplate: MapConfig.mapboxTileUrl,
               ),
               PolylineLayer(
                 polylines: [
