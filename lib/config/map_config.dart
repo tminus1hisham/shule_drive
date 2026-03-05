@@ -53,12 +53,22 @@ class MapConfig {
   static String get mapboxNavigationNightTileUrl =>
       'https://api.mapbox.com/styles/v1/mapbox/navigation-night-v1/tiles/{z}/{x}/{y}@2x?access_token=$mapboxAccessToken';
 
-  /// Default map style (for Mapbox SDK)
-  static const String mapStyle = 'mapbox://styles/mapbox/streets-v12';
+  /// Default map style (Light/Streets)
+  static const String mapboxLightStyle = 'mapbox://styles/mapbox/streets-v12';
 
   /// Satellite style
-  static const String satelliteStyle =
+  static const String mapboxSatelliteStyle =
       'mapbox://styles/mapbox/satellite-streets-v12';
+
+  /// Dark style
+  static const String mapboxDarkStyle = 'mapbox://styles/mapbox/dark-v11';
+
+  /// Helper to get generic tile URL from style URI
+  static String getMapboxUrl(String style) {
+    if (style == mapboxDarkStyle) return mapboxDarkTileUrl;
+    if (style == mapboxSatelliteStyle) return mapboxSatelliteTileUrl;
+    return mapboxTileUrl; // Default Light/Streets
+  }
 
   /// Dark style
   static const String darkStyle = 'mapbox://styles/mapbox/dark-v11';

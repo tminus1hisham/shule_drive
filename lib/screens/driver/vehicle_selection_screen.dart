@@ -93,8 +93,24 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               );
             }
           }
+
+          // If there is only one vehicle and none was selected by master trip, select it
+          if (_selectedVehicle == null && buses.length == 1) {
+            _selectedVehicle = buses.first;
+            debugPrint(
+              '🚗 Auto-selected only vehicle: ${_selectedVehicle?.registrationNumber}',
+            );
+          }
         });
         _animationController.forward();
+
+        // Auto-advance if a vehicle is already selected
+        if (_selectedVehicle != null) {
+          // Add a small delay for visualization
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) _onConfirm();
+          });
+        }
       }
     } catch (e, stackTrace) {
       debugPrint('❌ VehicleSelection: Error loading vehicles: $e');
@@ -113,6 +129,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     setState(() {
       _selectedVehicle = vehicle;
     });
+    // Auto-advance on selection
+    _onConfirm();
   }
 
   void _onConfirm() {
@@ -125,16 +143,14 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       vehicle: _selectedVehicle,
     );
 
-    // Navigate directly to active trip (skip start-trip intermediate screen)
+    // Navigate to start-trip screen which will call the startTrip API
+    // This ensures a unique trip ID is generated for pick/drop operations
     Navigator.pushReplacementNamed(
       context,
-      '/active-trip',
+      '/start-trip',
       arguments: {
         'masterTrip': widget.masterTrip,
-        'tripId': widget.masterTrip?.id,
         'vehicle': _selectedVehicle,
-        'vehicleId': _selectedVehicle?.id,
-        'busPlate': _selectedVehicle?.registrationNumber,
         'preSelectedRoute': widget.masterTrip?.route,
         'preloadedData': updatedPreloadedData?.toJson(),
       },

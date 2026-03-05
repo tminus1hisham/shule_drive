@@ -12,7 +12,7 @@ import '../../api/api.dart' as api;
 import '../../widgets/main_scaffold.dart';
 
 /// Start Trip Screen - Unified trip view for both drivers and guardians
-/// 
+///
 /// Driver Mode:
 /// - Can start new trips
 /// - Can pick/drop students
@@ -40,6 +40,9 @@ class _StartTripScreenState extends State<StartTripScreen>
   String? _selectedVehicle;
   String? _selectedRoute;
   String? _selectedAttendant;
+
+  // Driver specific buses
+  List<api.Bus> _driverBuses = [];
 
   // Pre-populated data from navigation arguments
   MasterTrip? _preSelectedMasterTrip;
@@ -85,8 +88,9 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   /// Process navigation arguments to pre-populate selections
   void _processArguments() {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
     if (args != null) {
       _preSelectedMasterTrip = args['masterTrip'] as MasterTrip?;
       _preSelectedVehicle = args['vehicle'] as Bus?;
@@ -123,9 +127,12 @@ class _StartTripScreenState extends State<StartTripScreen>
     // Fetch active trip - role-specific
     if (authProvider.isGuardian) {
       // Guardians: Check if their children are on active trips
-      final hasPhone = authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
+      final hasPhone =
+          authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
       if (hasPhone) {
-        await tripProvider.fetchActiveTrip(guardianPhone: authProvider.userPhone);
+        await tripProvider.fetchActiveTrip(
+          guardianPhone: authProvider.userPhone,
+        );
       }
     } else if (authProvider.isDriver) {
       // Drivers: Skip guardian endpoint - they just selected a trip to start
@@ -149,7 +156,9 @@ class _StartTripScreenState extends State<StartTripScreen>
         // If schoolId is missing, try to refresh user data from API
         if (schoolId == null || schoolId.isEmpty) {
           if (kDebugMode) {
-            print('🔄 StartTripScreen: School ID missing, refreshing user data...');
+            print(
+              '🔄 StartTripScreen: School ID missing, refreshing user data...',
+            );
           }
           await authProvider.refreshUserData();
           user = authProvider.currentUser;
@@ -168,16 +177,16 @@ class _StartTripScreenState extends State<StartTripScreen>
             print('   Falling back to non-scoped data (showing all schools)');
           }
           // Fallback to non-scoped data for backward compatibility
-          await Future.wait([
-            provider.fetchRoutes(),
-            provider.fetchBuses(),
-          ]);
+          await Future.wait([provider.fetchRoutes(), provider.fetchBuses()]);
         } else {
           if (kDebugMode) {
             print('🏫 StartTripScreen: Loading data for school $schoolId');
           }
           // Fetch school-scoped data (pass school name for route filtering fallback)
-          await provider.fetchAllSchoolData(schoolId, schoolName: user?.schoolName);
+          await provider.fetchAllSchoolData(
+            schoolId,
+            schoolName: user?.schoolName,
+          );
         }
 
         if (kDebugMode) {
@@ -185,10 +194,27 @@ class _StartTripScreenState extends State<StartTripScreen>
           print('📍 Routes: ${provider.routes.length}');
           print('🚌 Buses: ${provider.buses.length}');
           for (final route in provider.routes) {
-            print('  - Route: ${route.name} (ID: ${route.id}, School: ${route.schoolId})');
+            print(
+              '  - Route: ${route.name} (ID: ${route.id}, School: ${route.schoolId})',
+            );
           }
-          for (final bus in provider.buses) {
-            print('  - Bus: ${bus.registrationNumber} (ID: ${bus.id}, School: ${bus.schoolId})');
+        }
+
+        // Also load driver's specific buses
+        try {
+          final busService = BusService();
+          final userBuses = await busService.getBusesByUser();
+          if (mounted) {
+            setState(() {
+              _driverBuses = userBuses;
+            });
+          }
+          if (kDebugMode) {
+            print('🚌 Driver specific buses loaded: ${_driverBuses.length}');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ Error loading driver buses: $e');
           }
         }
       } catch (e) {
@@ -214,7 +240,7 @@ class _StartTripScreenState extends State<StartTripScreen>
     // Check if we have both trip and vehicle selected
     if (_preSelectedMasterTrip != null && _selectedVehicle != null) {
       if (kDebugMode) {
-        print('🚀 Auto-starting trip with pre-selected data...');
+        print('🚀 Auto-navigating to select students...');
         print('   Trip: ${_preSelectedMasterTrip!.tripName}');
         print('   Vehicle: $_selectedVehicle');
         print('   Preloaded Students: ${_preloadedData?.students.length ?? 0}');
@@ -224,14 +250,16 @@ class _StartTripScreenState extends State<StartTripScreen>
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
-        // Skip this screen and go directly to active trip
+        // Navigate to Select Students screen which will call the startTrip API
+        // This ensures the trip is properly started before going to active trip
         Navigator.pushReplacementNamed(
           context,
-          '/active-trip',
+          '/select-students',
           arguments: {
-            'tripId': _preSelectedMasterTrip!.id,
+            'masterTrip': _preSelectedMasterTrip,
             'vehicleId': _selectedVehicle,
-            'busPlate': _selectedVehicle,
+            'routeId': _selectedRoute,
+            'routeName': _preSelectedRouteName,
             'preloadedData': _preloadedData?.toJson(),
           },
         );
@@ -244,13 +272,19 @@ class _StartTripScreenState extends State<StartTripScreen>
     if (_preSelectedVehicle != null) {
       // Find matching vehicle in loaded buses
       try {
-        final matchingBus = provider.buses.firstWhere(
-          (bus) => bus.id == _preSelectedVehicle!.id || 
-                   bus.registrationNumber == _preSelectedVehicle!.registrationNumber,
+        final busesToSearch = _driverBuses.isNotEmpty
+            ? _driverBuses
+            : provider.buses;
+        final matchingBus = busesToSearch.firstWhere(
+          (bus) =>
+              bus.id == _preSelectedVehicle!.id ||
+              bus.registrationNumber == _preSelectedVehicle!.registrationNumber,
         );
         _selectedVehicle = matchingBus.id;
         if (kDebugMode) {
-          print('✅ Pre-selected vehicle applied: ${matchingBus.registrationNumber}');
+          print(
+            '✅ Pre-selected vehicle applied: ${matchingBus.registrationNumber}',
+          );
         }
       } catch (e) {
         // No matching bus found
@@ -279,14 +313,21 @@ class _StartTripScreenState extends State<StartTripScreen>
     }
 
     // If master trip has a numberPlate, try to match it
-    if (_preSelectedMasterTrip?.numberPlate != null && _selectedVehicle == null) {
+    if (_preSelectedMasterTrip?.numberPlate != null &&
+        _selectedVehicle == null) {
       try {
-        final matchingBus = provider.buses.firstWhere(
-          (bus) => bus.registrationNumber == _preSelectedMasterTrip!.numberPlate,
+        final busesToSearch = _driverBuses.isNotEmpty
+            ? _driverBuses
+            : provider.buses;
+        final matchingBus = busesToSearch.firstWhere(
+          (bus) =>
+              bus.registrationNumber == _preSelectedMasterTrip!.numberPlate,
         );
         _selectedVehicle = matchingBus.id;
         if (kDebugMode) {
-          print('✅ Vehicle matched from master trip numberPlate: ${matchingBus.registrationNumber}');
+          print(
+            '✅ Vehicle matched from master trip numberPlate: ${matchingBus.registrationNumber}',
+          );
         }
       } catch (e) {
         // No matching bus found
@@ -324,7 +365,7 @@ class _StartTripScreenState extends State<StartTripScreen>
     }
 
     return MainScaffold(
-      title: hasActiveTrip 
+      title: hasActiveTrip
           ? (isGuardian ? 'Track Trip' : 'Active Trip')
           : (isGuardian ? 'My Child\'s Trips' : 'New Trip'),
       showBackButton: true,
@@ -353,13 +394,17 @@ class _StartTripScreenState extends State<StartTripScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF6B9B5B),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'Loading trip...',
                           style: TextStyle(
-                            color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                            color: isDarkMode
+                                ? Colors.white60
+                                : Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -374,15 +419,27 @@ class _StartTripScreenState extends State<StartTripScreen>
                     child: SlideTransition(
                       position: _slideAnimation,
                       child: isGuardian
-                          ? _buildGuardianActiveTripView(tripProvider.activeTrip!, isDarkMode)
-                          : _buildDriverActiveTripView(tripProvider.activeTrip!, isDarkMode),
+                          ? _buildGuardianActiveTripView(
+                              tripProvider.activeTrip!,
+                              isDarkMode,
+                            )
+                          : _buildDriverActiveTripView(
+                              tripProvider.activeTrip!,
+                              isDarkMode,
+                            ),
                     ),
                   ),
                 ),
                 // Bottom action buttons based on role
                 isGuardian
-                    ? _buildGuardianBottomActions(isDarkMode, tripProvider.activeTrip!)
-                    : _buildDriverBottomActions(isDarkMode, tripProvider.activeTrip!),
+                    ? _buildGuardianBottomActions(
+                        isDarkMode,
+                        tripProvider.activeTrip!,
+                      )
+                    : _buildDriverBottomActions(
+                        isDarkMode,
+                        tripProvider.activeTrip!,
+                      ),
               ] else ...[
                 // No active trip
                 if (isGuardian)
@@ -425,7 +482,12 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   // ==================== HEADER ====================
 
-  Widget _buildHeader(bool isDarkMode, AuthProvider authProvider, bool hasActiveTrip, bool isGuardian) {
+  Widget _buildHeader(
+    bool isDarkMode,
+    AuthProvider authProvider,
+    bool hasActiveTrip,
+    bool isGuardian,
+  ) {
     return Container(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -460,7 +522,11 @@ class _StartTripScreenState extends State<StartTripScreen>
                     ],
                   ),
                   child: Icon(
-                    hasActiveTrip ? Icons.location_on : (isGuardian ? Icons.family_restroom : Icons.directions_bus),
+                    hasActiveTrip
+                        ? Icons.location_on
+                        : (isGuardian
+                              ? Icons.family_restroom
+                              : Icons.directions_bus),
                     color: Colors.white,
                     size: 50,
                   ),
@@ -470,7 +536,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           ),
           const SizedBox(height: 20),
           Text(
-            hasActiveTrip 
+            hasActiveTrip
                 ? (isGuardian ? 'Child on Trip' : 'Trip in Progress')
                 : (isGuardian ? 'No Active Trip' : 'Ready to Roll?'),
             style: TextStyle(
@@ -482,12 +548,12 @@ class _StartTripScreenState extends State<StartTripScreen>
           const SizedBox(height: 8),
           Text(
             hasActiveTrip
-                ? (isGuardian 
-                    ? 'Track your child\'s journey in real-time'
-                    : 'Continue monitoring your active trip')
+                ? (isGuardian
+                      ? 'Track your child\'s journey in real-time'
+                      : 'Continue monitoring your active trip')
                 : (isGuardian
-                    ? 'Your child is not on any active trip'
-                    : 'Configure your trip details below'),
+                      ? 'Your child is not on any active trip'
+                      : 'Configure your trip details below'),
             style: TextStyle(
               fontSize: 15,
               color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
@@ -639,13 +705,17 @@ class _StartTripScreenState extends State<StartTripScreen>
           const SizedBox(height: 12),
 
           // Child status cards
-          ...guardianChildren.map((student) => _buildGuardianChildCard(student, isDarkMode)),
+          ...guardianChildren.map(
+            (student) => _buildGuardianChildCard(student, isDarkMode),
+          ),
 
           if (guardianChildren.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -659,7 +729,9 @@ class _StartTripScreenState extends State<StartTripScreen>
                     child: Text(
                       'Your child is not assigned to this trip',
                       style: TextStyle(
-                        color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+                        color: isDarkMode
+                            ? Colors.white70
+                            : Colors.grey.shade700,
                       ),
                     ),
                   ),
@@ -673,17 +745,23 @@ class _StartTripScreenState extends State<StartTripScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF1E3A5F) : const Color(0xFFE3F2FD),
+              color: isDarkMode
+                  ? const Color(0xFF1E3A5F)
+                  : const Color(0xFFE3F2FD),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDarkMode ? const Color(0xFF2196F3) : const Color(0xFF90CAF9),
+                color: isDarkMode
+                    ? const Color(0xFF2196F3)
+                    : const Color(0xFF90CAF9),
               ),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.security,
-                  color: isDarkMode ? const Color(0xFF2196F3) : const Color(0xFF1976D2),
+                  color: isDarkMode
+                      ? const Color(0xFF2196F3)
+                      : const Color(0xFF1976D2),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -694,14 +772,18 @@ class _StartTripScreenState extends State<StartTripScreen>
                         'Safety First',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                          color: isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF1A1A1A),
                         ),
                       ),
                       Text(
                         'Your child\'s location is updated in real-time. You\'ll be notified when they\'re picked up and dropped off.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+                          color: isDarkMode
+                              ? Colors.white70
+                              : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -730,10 +812,7 @@ class _StartTripScreenState extends State<StartTripScreen>
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withAlpha(200),
-            fontSize: 12,
-          ),
+          style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12),
         ),
       ],
     );
@@ -767,15 +846,9 @@ class _StartTripScreenState extends State<StartTripScreen>
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: statusColor.withAlpha(50),
-          width: 2,
-        ),
+        border: Border.all(color: statusColor.withAlpha(50), width: 2),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 10,
-          ),
+          BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -803,7 +876,10 @@ class _StartTripScreenState extends State<StartTripScreen>
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withAlpha(20),
                     borderRadius: BorderRadius.circular(12),
@@ -860,14 +936,18 @@ class _StartTripScreenState extends State<StartTripScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
                   Icon(
                     Icons.schedule,
-                    color: isDarkMode ? Colors.white.withAlpha(100) : Colors.grey.shade400,
+                    color: isDarkMode
+                        ? Colors.white.withAlpha(100)
+                        : Colors.grey.shade400,
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1120,7 +1200,9 @@ class _StartTripScreenState extends State<StartTripScreen>
           Container(
             height: 200,
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
+              color: isDarkMode
+                  ? const Color(0xFF1E1E1E)
+                  : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(16),
             ),
             child: ClipRRect(
@@ -1129,8 +1211,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                 children: [
                   // Map placeholder
                   Container(
-                    color: isDarkMode 
-                        ? const Color(0xFF2C2C2C) 
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2C)
                         : const Color(0xFFE8F5E9),
                     child: Center(
                       child: Column(
@@ -1139,16 +1221,16 @@ class _StartTripScreenState extends State<StartTripScreen>
                           Icon(
                             Icons.map,
                             size: 48,
-                            color: isDarkMode 
-                                ? Colors.white38 
+                            color: isDarkMode
+                                ? Colors.white38
                                 : const Color(0xFF6B9B5B),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Route Map',
                             style: TextStyle(
-                              color: isDarkMode 
-                                  ? Colors.white60 
+                              color: isDarkMode
+                                  ? Colors.white60
                                   : Colors.grey.shade600,
                             ),
                           ),
@@ -1264,10 +1346,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                 icon: const Icon(Icons.map),
                 label: const Text(
                   'Open Live Map',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
@@ -1319,11 +1398,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           ),
           child: Column(
             children: [
-              Icon(
-                icon,
-                color: const Color(0xFF6B9B5B),
-                size: 24,
-              ),
+              Icon(icon, color: const Color(0xFF6B9B5B), size: 24),
               const SizedBox(height: 8),
               Text(
                 label,
@@ -1372,10 +1447,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           children: [
             const Text(
               'Send Notification',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             ListTile(
@@ -1434,11 +1506,16 @@ class _StartTripScreenState extends State<StartTripScreen>
               if (success && mounted) {
                 _showSuccessSnackbar('Trip ended successfully');
               } else if (mounted) {
-                _showErrorSnackbar(tripProvider.errorMessage ?? 'Failed to end trip');
+                _showErrorSnackbar(
+                  tripProvider.errorMessage ?? 'Failed to end trip',
+                );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('End Trip', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'End Trip',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1601,7 +1678,8 @@ class _StartTripScreenState extends State<StartTripScreen>
 
   Widget _buildSelectionContent(AppProvider provider, bool isDarkMode) {
     final routes = provider.routes;
-    final buses = provider.buses;
+    // Use driver specific buses if available, otherwise fallback to provider.buses
+    final buses = _driverBuses.isNotEmpty ? _driverBuses : provider.buses;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1616,7 +1694,6 @@ class _StartTripScreenState extends State<StartTripScreen>
             final subtitle = route.name.isNotEmpty
                 ? route.name
                 : 'Route ${route.id}';
-            
 
             if (kDebugMode) {
               print(
@@ -1815,11 +1892,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                   ),
                 ),
                 if (isSelected)
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.white,
-                    size: 28,
-                  ),
+                  const Icon(Icons.check_circle, color: Colors.white, size: 28),
               ],
             ),
           ),
@@ -1924,8 +1997,11 @@ class _StartTripScreenState extends State<StartTripScreen>
                       context,
                       '/select-students',
                       arguments: {
+                        'masterTrip': _preSelectedMasterTrip,
                         'routeId': _selectedRoute,
                         'vehicleId': _selectedVehicle,
+                        'routeName': _preSelectedRouteName,
+                        'preloadedData': _preloadedData?.toJson(),
                       },
                     );
                   }

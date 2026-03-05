@@ -1,30 +1,31 @@
 import 'dart:async';
 import 'dart:math' show sin, cos, pi, sqrt, atan2;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/map_models.dart';
 
 /// Mock Tracking Data Generator - For testing without real MQTT backend
 class MockTrackingGenerator {
-  static final MockTrackingGenerator _instance = MockTrackingGenerator._internal();
+  static final MockTrackingGenerator _instance =
+      MockTrackingGenerator._internal();
   factory MockTrackingGenerator() => _instance;
   MockTrackingGenerator._internal();
 
   Timer? _locationTimer;
   final List<Function(BusLocation)> _listeners = [];
-  
+
   // Mock route coordinates (example: around Nairobi)
   final List<LatLng> _routePoints = [
-    const LatLng(-1.286389, 36.817223), // CBD
-    const LatLng(-1.280000, 36.820000),
-    const LatLng(-1.275000, 36.825000),
-    const LatLng(-1.270000, 36.830000),
-    const LatLng(-1.265000, 36.835000), // Karen area
-    const LatLng(-1.260000, 36.840000),
+    LatLng(-1.286389, 36.817223), // CBD
+    LatLng(-1.280000, 36.820000),
+    LatLng(-1.275000, 36.825000),
+    LatLng(-1.270000, 36.830000),
+    LatLng(-1.265000, 36.835000), // Karen area
+    LatLng(-1.260000, 36.840000),
   ];
-  
+
   int _currentPointIndex = 0;
   bool _isMoving = false;
-  
+
   // Mock bus data
   final String busId = 'BUS001';
   final String busNumber = 'KCA 123X';
@@ -34,10 +35,10 @@ class MockTrackingGenerator {
   /// Start generating mock location updates
   void startTracking() {
     if (_isMoving) return;
-    
+
     _isMoving = true;
     _currentPointIndex = 0;
-    
+
     // Generate location every 3 seconds
     _locationTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _generateNextLocation();
@@ -64,21 +65,21 @@ class MockTrackingGenerator {
   Stream<BusLocation> trackBus(String busId) {
     // Create a stream controller that emits locations
     final controller = StreamController<BusLocation>.broadcast();
-    
+
     void listener(BusLocation location) {
       if (!controller.isClosed) {
         controller.add(location);
       }
     }
-    
+
     addListener(listener);
-    
+
     // Clean up when stream is cancelled
     controller.onCancel = () {
       removeListener(listener);
       controller.close();
     };
-    
+
     return controller.stream;
   }
 
@@ -89,10 +90,10 @@ class MockTrackingGenerator {
 
     final currentPos = _routePoints[_currentPointIndex];
     final nextPos = _routePoints[_currentPointIndex + 1];
-    
+
     // Calculate heading
     final heading = _calculateBearing(currentPos, nextPos);
-    
+
     // Calculate distance and ETA
     final distance = _calculateDistance(currentPos, nextPos);
     const speed = 30.0; // km/h
@@ -128,7 +129,7 @@ class MockTrackingGenerator {
       RouteStop(
         id: 'STOP_1',
         name: 'Nairobi CBD',
-        position: const LatLng(-1.286389, 36.817223),
+        position: LatLng(-1.286389, 36.817223),
         address: 'Kenyatta Avenue',
         order: 1,
         type: StopType.pickup,
@@ -137,7 +138,7 @@ class MockTrackingGenerator {
       RouteStop(
         id: 'STOP_2',
         name: 'Westlands',
-        position: const LatLng(-1.268264, 36.808945),
+        position: LatLng(-1.268264, 36.808945),
         address: 'Waiyaki Way',
         order: 2,
         type: StopType.pickup,
@@ -146,7 +147,7 @@ class MockTrackingGenerator {
       RouteStop(
         id: 'STOP_3',
         name: 'Karen',
-        position: const LatLng(-1.319167, 36.711389),
+        position: LatLng(-1.319167, 36.711389),
         address: 'Karen Road',
         order: 3,
         type: StopType.dropoff,
@@ -155,7 +156,7 @@ class MockTrackingGenerator {
       RouteStop(
         id: 'STOP_4',
         name: 'Rongai',
-        position: const LatLng(-1.396111, 36.763056),
+        position: LatLng(-1.396111, 36.763056),
         address: 'Magadi Road',
         order: 4,
         type: StopType.dropoff,
@@ -170,13 +171,13 @@ class MockTrackingGenerator {
       id: 'ROUTE_001',
       name: 'CBD to Rongai',
       polyline: [
-        const LatLng(-1.286389, 36.817223),
-        const LatLng(-1.280000, 36.820000),
-        const LatLng(-1.275000, 36.825000),
-        const LatLng(-1.270000, 36.830000),
-        const LatLng(-1.268264, 36.808945),
-        const LatLng(-1.319167, 36.711389),
-        const LatLng(-1.396111, 36.763056),
+        LatLng(-1.286389, 36.817223),
+        LatLng(-1.280000, 36.820000),
+        LatLng(-1.275000, 36.825000),
+        LatLng(-1.270000, 36.830000),
+        LatLng(-1.268264, 36.808945),
+        LatLng(-1.319167, 36.711389),
+        LatLng(-1.396111, 36.763056),
       ],
       distance: 25.5,
       duration: 45,
@@ -191,10 +192,16 @@ class MockTrackingGenerator {
       stopId: 'STOP_2',
       stopName: 'Westlands',
       type: type,
-      distance: type == GeofenceType.approaching ? 2000 : 
-                type == GeofenceType.arriving ? 500 : 100,
-      etaSeconds: type == GeofenceType.approaching ? 300 : 
-                  type == GeofenceType.arriving ? 60 : 0,
+      distance: type == GeofenceType.approaching
+          ? 2000
+          : type == GeofenceType.arriving
+          ? 500
+          : 100,
+      etaSeconds: type == GeofenceType.approaching
+          ? 300
+          : type == GeofenceType.arriving
+          ? 60
+          : 0,
       timestamp: DateTime.now(),
     );
   }
@@ -206,12 +213,12 @@ class MockTrackingGenerator {
     final lat2Rad = p2.latitude * pi / 180;
     final deltaLat = (p2.latitude - p1.latitude) * pi / 180;
     final deltaLng = (p2.longitude - p1.longitude) * pi / 180;
-    
-    final a = (sin(deltaLat / 2) * sin(deltaLat / 2)) +
-              cos(lat1Rad) * cos(lat2Rad) *
-              sin(deltaLng / 2) * sin(deltaLng / 2);
+
+    final a =
+        (sin(deltaLat / 2) * sin(deltaLat / 2)) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(deltaLng / 2) * sin(deltaLng / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    
+
     return earthRadius * c;
   }
 
@@ -220,14 +227,13 @@ class MockTrackingGenerator {
     final lat2 = to.latitude * pi / 180;
     final lng1 = from.longitude * pi / 180;
     final lng2 = to.longitude * pi / 180;
-    
+
     final y = sin(lng2 - lng1) * cos(lat2);
-    final x = cos(lat1) * sin(lat2) - 
-              sin(lat1) * cos(lat2) * cos(lng2 - lng1);
-    
+    final x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lng2 - lng1);
+
     var bearing = atan2(y, x) * 180 / pi;
     bearing = (bearing + 360) % 360;
-    
+
     return bearing;
   }
 }

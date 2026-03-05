@@ -19,7 +19,8 @@ class ManageMasterTripsScreen extends StatefulWidget {
   const ManageMasterTripsScreen({super.key});
 
   @override
-  State<ManageMasterTripsScreen> createState() => _ManageMasterTripsScreenState();
+  State<ManageMasterTripsScreen> createState() =>
+      _ManageMasterTripsScreenState();
 }
 
 class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
@@ -29,17 +30,17 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   final _tripNameController = TextEditingController();
   final _tripTimeController = TextEditingController();
   final _attendantNameController = TextEditingController();
-  
+
   // Search controllers
   final _searchController = TextEditingController();
   final _phoneSearchController = TextEditingController();
-  
+
   // Selected values
   String? _selectedRoute;
   String? _selectedBus;
   String? _selectedDriver;
   String _selectedDirection = 'Pickup';
-  
+
   // State
   MasterTrip? _editingTrip;
   bool _isCreatingNew = true;
@@ -47,18 +48,17 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   bool _isLoadingStudents = false;
   bool _triedLoadingStudents = false;
   String? _errorMessage;
-  
+
   // Search state
   bool _isSearchingByPhone = false;
   List<student_service.Student> _phoneSearchResults = [];
-  
+
   // Data lists for dropdowns
   List<route_service.BusRoute> _routes = [];
   List<bus_service.Bus> _buses = [];
-  List<driver_service.Driver> _drivers = [];
   List<student_service.Student> _students = [];
   List<student_service.Student> _filteredStudents = [];
-  
+
   // Animation
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -74,7 +74,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       parent: _animationController,
       curve: Curves.easeOut,
     );
-    
+
     _loadInitialData();
   }
 
@@ -92,34 +92,65 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   Future<void> _loadInitialData() async {
     // Start animation immediately without blocking
     _animationController.forward();
-    
+
     // Load data silently in the background - don't block UI
     _loadDataInBackground();
   }
-  
+
   Future<void> _loadDataInBackground() async {
     debugPrint('🔄 Starting background data load...');
-    
+
     try {
       final tripProvider = context.read<TripProvider>();
-      
+
       // Load critical data first (trips, routes, buses, drivers) concurrently
+      // Use timeout to prevent indefinite loading
       await Future.wait([
-        tripProvider.fetchMasterTrips().then((_) => debugPrint('✅ Master trips loaded')),
-        _loadRoutes(),
-        _loadBuses(),
-        _loadDrivers(),
-      ]);
-      
+        tripProvider
+            .fetchMasterTrips()
+            .then((_) => debugPrint('✅ Master trips loaded'))
+            .catchError((e) => debugPrint('❌ Error loading master trips: $e')),
+        _loadRoutes().catchError(
+          (e) => debugPrint('❌ Error loading routes: $e'),
+        ),
+        _loadBuses().catchError((e) => debugPrint('❌ Error loading buses: $e')),
+        _loadDrivers().catchError(
+          (e) => debugPrint('❌ Error loading drivers: $e'),
+        ),
+      ]).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint(
+            '⚠️ Timeout loading initial data - some data may be missing',
+          );
+          // Don't throw - allow UI to load with available data
+          return [];
+        },
+      );
+
       debugPrint('✅ Routes, Buses, Drivers loaded');
-      
+
       // Load students in background (takes longest)
-      _loadStudents().then((_) {
+      // Wrap in try-catch to prevent unhandled errors
+      try {
+        await _loadStudents().timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            debugPrint(
+              '⚠️ Timeout loading students - you can still search by phone',
+            );
+            if (mounted) {
+              setState(() => _isLoadingStudents = false);
+            }
+          },
+        );
         debugPrint('✅ Students loaded');
-      }).catchError((e) {
+      } catch (e) {
         debugPrint('❌ Error loading students: $e');
-      });
-      
+        if (mounted) {
+          setState(() => _isLoadingStudents = false);
+        }
+      }
     } catch (e) {
       debugPrint('❌ Background load error: $e');
     }
@@ -128,24 +159,41 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   Future<void> _loadRoutes() async {
     try {
       final routeService = route_service.RouteService();
-      final routes = await routeService.getAllRoutes();
+      final routes = await routeService.getAllRoutes().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('⚠️ Timeout loading routes');
+          return [];
+        },
+      );
       if (mounted) {
         setState(() => _routes = routes);
       }
     } catch (e) {
       debugPrint('Error loading routes: $e');
+      // Don't show error - routes will just be empty
     }
   }
 
   Future<void> _loadBuses() async {
     try {
       final busService = bus_service.BusService();
-      final buses = await busService.getAllBuses();
+      // Load buses linked to the current user
+      final buses = await busService.getBusesByUser();
       if (mounted) {
         setState(() => _buses = buses);
+
+        // Pre-populate bus selection if only one bus is available and none is selected
+        if (_selectedBus == null && buses.isNotEmpty) {
+          setState(() {
+            _selectedBus = buses.first.registrationNumber;
+          });
+          debugPrint('✅ Auto-selected bus: ${_selectedBus}');
+        }
       }
     } catch (e) {
       debugPrint('Error loading buses: $e');
+      // Don't show error - buses will just be empty
     }
   }
 
@@ -153,12 +201,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     try {
       final authProvider = context.read<AuthProvider>();
       final driverName = authProvider.userName;
-      final userId = authProvider.userId;
-      
+
       if (mounted && driverName != null && driverName.isNotEmpty) {
         // Use driver name from JWT token directly - instant load
         setState(() {
-          _drivers = [driver_service.Driver(id: userId ?? '', name: driverName)];
           if (_selectedDriver == null) {
             _selectedDriver = driverName;
           }
@@ -172,15 +218,15 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
 
   Future<void> _loadStudents() async {
     if (_isLoadingStudents) return;
-    
+
     setState(() => _isLoadingStudents = true);
-    
+
     try {
       debugPrint('📚 Loading students using companyOrgId approach...');
       final studentService = student_service.StudentService();
       final guardianService = guardian_service.GuardianService();
       final busService = bus_service.BusService();
-      
+
       // Get driver's companyOrgId from bus
       String? companyOrgId;
       try {
@@ -192,7 +238,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       } catch (e) {
         debugPrint('❌ Failed to get bus: $e');
       }
-      
+
       if (companyOrgId == null || companyOrgId.isEmpty) {
         // Fallback to getAllStudents
         debugPrint('⚠️ No companyOrgId, falling back to getAllStudents');
@@ -205,17 +251,21 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         }
       } else {
         // Get guardians with same companyOrgId
-        final guardians = await guardianService.getAllGuardians(companyOrgId: companyOrgId);
-        
+        final guardians = await guardianService.getAllGuardians(
+          companyOrgId: companyOrgId,
+        );
+
         // Collect unique phone numbers
         final uniquePhones = guardians
             .map((g) => g.bestPhoneNumber)
             .where((p) => p != null && p.isNotEmpty)
             .cast<String>()
             .toSet();
-        
-        debugPrint('👥 Found ${guardians.length} guardians with ${uniquePhones.length} unique phones');
-        
+
+        debugPrint(
+          '👥 Found ${guardians.length} guardians with ${uniquePhones.length} unique phones',
+        );
+
         if (uniquePhones.isNotEmpty) {
           final students = await studentService.getStudentsByPhonesParallel(
             uniquePhones.toList(),
@@ -245,7 +295,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       }
     }
   }
-  
+
   Future<void> _loadStudentsFromGuardianEndpoint() async {
     try {
       debugPrint('📚 Trying guardian students endpoint...');
@@ -257,7 +307,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           _filteredStudents = students;
           _triedLoadingStudents = true;
         });
-        debugPrint('✅ Loaded ${students.length} students from guardian endpoint');
+        debugPrint(
+          '✅ Loaded ${students.length} students from guardian endpoint',
+        );
       }
     } catch (e, stackTrace) {
       debugPrint('❌ Error loading students from guardian endpoint: $e');
@@ -267,11 +319,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       }
     }
   }
-  
+
   /// Search students by phone number
   Future<void> _searchStudentsByPhone() async {
     final phoneNumber = _phoneSearchController.text.trim();
-    
+
     if (phoneNumber.isEmpty) {
       _showErrorSnackbar('Please enter a phone number');
       return;
@@ -287,16 +339,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     }
 
     setState(() => _isSearchingByPhone = true);
-    
+
     try {
       final studentService = student_service.StudentService();
       final students = await studentService.getStudentsByPhone(normalizedPhone);
-      
+
       setState(() {
         _phoneSearchResults = students;
         _isSearchingByPhone = false;
       });
-      
+
       if (students.isEmpty) {
         _showErrorSnackbar('No students found for phone: $normalizedPhone');
       }
@@ -309,7 +361,12 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   void _startCreatingNew() {
     final authProvider = context.read<AuthProvider>();
     final driverName = authProvider.userName;
-    
+
+    // Pre-populate bus if only one is available
+    final busToSelect = _buses.length == 1
+        ? _buses.first.registrationNumber
+        : null;
+
     setState(() {
       _editingTrip = null;
       _isCreatingNew = true;
@@ -317,7 +374,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       _tripTimeController.clear();
       _attendantNameController.clear();
       _selectedRoute = null;
-      _selectedBus = null;
+      // Auto-select bus if only one is available
+      _selectedBus = busToSelect;
       // Use driver name from JWT token directly
       _selectedDriver = driverName;
       _selectedDirection = 'Pickup';
@@ -328,16 +386,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
 
   void _startEditingTrip(MasterTrip trip) {
     final tripProvider = context.read<TripProvider>();
-    
+
     // Clear previous students immediately if selecting a different trip
     if (_editingTrip?.id != trip.id) {
       tripProvider.clearMasterTripData();
     }
-    
+
     // Get driver name from JWT token directly
     final authProvider = context.read<AuthProvider>();
     final driverName = authProvider.userName;
-    
+
     setState(() {
       _editingTrip = trip;
       _isCreatingNew = false;
@@ -349,10 +407,12 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       // Use trip's driver if available, otherwise use JWT driver name
       _selectedDriver = trip.driverName ?? driverName;
       _selectedBus = trip.numberPlate;
-      _selectedDirection = trip.tripDirection == 'to_school' ? 'Pickup' : 'Dropoff';
+      _selectedDirection = trip.tripDirection == 'to_school'
+          ? 'Pickup'
+          : 'Dropoff';
       _errorMessage = null;
     });
-    
+
     // Fetch students for this trip
     tripProvider.fetchMasterTripStudents(trip.id).then((_) {
       if (mounted) {
@@ -373,7 +433,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       final trip = await tripProvider.createMasterTrip(
         tripName: _tripNameController.text.trim(),
         tripTime: _tripTimeController.text.trim(),
-        tripDirection: _selectedDirection == 'Pickup' ? 'to_school' : 'from_school',
+        tripDirection: _selectedDirection == 'Pickup'
+            ? 'to_school'
+            : 'from_school',
         route: _selectedRoute ?? '',
         numberPlate: _selectedBus ?? '',
         attendantName: _attendantNameController.text.trim(),
@@ -395,7 +457,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         tripId: _editingTrip!.id,
         tripName: _tripNameController.text.trim(),
         tripTime: _tripTimeController.text.trim(),
-        tripDirection: _selectedDirection == 'Pickup' ? 'to_school' : 'from_school',
+        tripDirection: _selectedDirection == 'Pickup'
+            ? 'to_school'
+            : 'from_school',
         route: _selectedRoute,
         numberPlate: _selectedBus,
         attendantName: _attendantNameController.text.trim(),
@@ -434,11 +498,12 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     );
 
     if (confirmed == true) {
+      if (!mounted) return;
       final tripProvider = context.read<TripProvider>();
       setState(() => _isLoading = true);
-      
+
       final success = await tripProvider.deleteMasterTrip(trip.id);
-      
+
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
@@ -447,7 +512,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           }
           _showSuccessSnackbar('Trip deleted successfully');
         } else {
-          _showErrorSnackbar(tripProvider.errorMessage ?? 'Failed to delete trip');
+          _showErrorSnackbar(
+            tripProvider.errorMessage ?? 'Failed to delete trip',
+          );
         }
       }
     }
@@ -517,18 +584,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           SliverToBoxAdapter(
             child: _buildExistingTripsSection(isDarkMode, tripProvider),
           ),
-          
+
           // Trip Form Section
-          SliverToBoxAdapter(
-            child: _buildTripFormSection(isDarkMode),
-          ),
-          
+          SliverToBoxAdapter(child: _buildTripFormSection(isDarkMode)),
+
           // Students Section (only when editing)
           if (!_isCreatingNew && _editingTrip != null)
             SliverToBoxAdapter(
               child: _buildStudentsSection(isDarkMode, tripProvider),
             ),
-          
+
           const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
         ],
       ),
@@ -556,7 +621,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     );
   }
 
-  Widget _buildExistingTripsSection(bool isDarkMode, TripProvider tripProvider) {
+  Widget _buildExistingTripsSection(
+    bool isDarkMode,
+    TripProvider tripProvider,
+  ) {
     final trips = tripProvider.masterTrips;
 
     return Container(
@@ -577,7 +645,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               ),
               if (trips.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF6B9B5B).withAlpha(30),
                     borderRadius: BorderRadius.circular(20),
@@ -594,12 +665,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
             ],
           ),
           const SizedBox(height: 12),
-          
+
           if (trips.isEmpty)
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
@@ -619,7 +692,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+                        color: isDarkMode
+                            ? Colors.white70
+                            : Colors.grey.shade600,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -627,7 +702,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       'Create your first trip below',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                        color: isDarkMode
+                            ? Colors.white54
+                            : Colors.grey.shade500,
                       ),
                     ),
                   ],
@@ -640,11 +717,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: trips.length,
-                itemBuilder: (context, index) => _buildTripCard(
-                  trips[index],
-                  isDarkMode,
-                  tripProvider,
-                ),
+                itemBuilder: (context, index) =>
+                    _buildTripCard(trips[index], isDarkMode, tripProvider),
               ),
             ),
         ],
@@ -652,9 +726,13 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     );
   }
 
-  Widget _buildTripCard(MasterTrip trip, bool isDarkMode, TripProvider tripProvider) {
+  Widget _buildTripCard(
+    MasterTrip trip,
+    bool isDarkMode,
+    TripProvider tripProvider,
+  ) {
     final isSelected = _editingTrip?.id == trip.id;
-    
+
     return GestureDetector(
       onTap: () => _startEditingTrip(trip),
       child: Container(
@@ -665,8 +743,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           color: isSelected
               ? const Color(0xFF6B9B5B)
               : isDarkMode
-                  ? const Color(0xFF1E1E1E)
-                  : Colors.white,
+              ? const Color(0xFF1E1E1E)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -690,19 +768,15 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       color: isSelected
                           ? Colors.white
                           : isDarkMode
-                              ? Colors.white
-                              : const Color(0xFF1A1A1A),
+                          ? Colors.white
+                          : const Color(0xFF1A1A1A),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (isSelected)
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
               ],
             ),
             const SizedBox(height: 8),
@@ -713,8 +787,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 color: isSelected
                     ? Colors.white.withAlpha(200)
                     : isDarkMode
-                        ? Colors.white70
-                        : Colors.grey.shade600,
+                    ? Colors.white70
+                    : Colors.grey.shade600,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -728,8 +802,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                   color: isSelected
                       ? Colors.white.withAlpha(180)
                       : isDarkMode
-                          ? Colors.white54
-                          : Colors.grey.shade500,
+                      ? Colors.white54
+                      : Colors.grey.shade500,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -739,8 +813,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     color: isSelected
                         ? Colors.white.withAlpha(180)
                         : isDarkMode
-                            ? Colors.white54
-                            : Colors.grey.shade500,
+                        ? Colors.white54
+                        : Colors.grey.shade500,
                   ),
                 ),
               ],
@@ -750,13 +824,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.white.withAlpha(30)
                         : trip.tripDirection == 'to_school'
-                            ? Colors.blue.withAlpha(30)
-                            : Colors.orange.withAlpha(30),
+                        ? Colors.blue.withAlpha(30)
+                        : Colors.orange.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -767,8 +844,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       color: isSelected
                           ? Colors.white
                           : trip.tripDirection == 'to_school'
-                              ? Colors.blue
-                              : Colors.orange,
+                          ? Colors.blue
+                          : Colors.orange,
                     ),
                   ),
                 ),
@@ -817,10 +894,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     color: const Color(0xFF6B9B5B).withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.edit_note,
-                    color: Color(0xFF6B9B5B),
-                  ),
+                  child: const Icon(Icons.edit_note, color: Color(0xFF6B9B5B)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -832,7 +906,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                          color: isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF1A1A1A),
                         ),
                       ),
                       Text(
@@ -841,7 +917,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                             : 'Update trip details',
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                          color: isDarkMode
+                              ? Colors.white60
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -850,7 +928,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               ],
             ),
             const SizedBox(height: 24),
-            
+
             // Trip Name
             _buildTextField(
               controller: _tripNameController,
@@ -866,7 +944,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               },
             ),
             const SizedBox(height: 16),
-            
+
             // Trip Time
             _buildTextField(
               controller: _tripTimeController,
@@ -882,11 +960,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               },
             ),
             const SizedBox(height: 16),
-            
+
             // Trip Direction
             _buildDirectionSelector(isDarkMode),
             const SizedBox(height: 16),
-            
+
             // Route Dropdown
             _buildDropdown<String>(
               value: _selectedRoute,
@@ -898,7 +976,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               onChanged: (value) => setState(() => _selectedRoute = value),
             ),
             const SizedBox(height: 16),
-            
+
             // Bus/Number Plate Dropdown
             _buildDropdown<String>(
               value: _selectedBus,
@@ -910,12 +988,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               onChanged: (value) => setState(() => _selectedBus = value),
             ),
             const SizedBox(height: 16),
-            
+
             // Driver Display (Read-only)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF2C2C2C)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isDarkMode ? Colors.white24 : Colors.grey.shade200,
@@ -936,7 +1016,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                           'Driver',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                            color: isDarkMode
+                                ? Colors.white60
+                                : Colors.grey.shade600,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -945,14 +1027,19 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                            color: isDarkMode
+                                ? Colors.white
+                                : const Color(0xFF1A1A1A),
                           ),
                         ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6B9B5B).withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
@@ -981,7 +1068,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Attendant Name
             _buildTextField(
               controller: _attendantNameController,
@@ -990,7 +1077,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               icon: Icons.badge_outlined,
               isDarkMode: isDarkMode,
             ),
-            
+
             if (_errorMessage != null) ...[
               const SizedBox(height: 16),
               Container(
@@ -1002,7 +1089,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1014,9 +1105,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 ),
               ),
             ],
-            
+
             const SizedBox(height: 24),
-            
+
             // Save Button
             SizedBox(
               width: double.infinity,
@@ -1029,17 +1120,22 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Icon(_isCreatingNew ? Icons.add : Icons.save),
                 label: Text(
                   _isCreatingNew ? 'Create Trip' : 'Update Trip',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-            
+
             // Extra padding after the create button
             const SizedBox(height: 32),
           ],
@@ -1067,7 +1163,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         hintText: hint,
         prefixIcon: Icon(icon, color: const Color(0xFF6B9B5B)),
         filled: true,
-        fillColor: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+        fillColor: isDarkMode
+            ? const Color(0xFF2C2C2C)
+            : const Color(0xFFF5F5F5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1100,13 +1198,15 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     required void Function(T?) onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF6B9B5B)),
         filled: true,
-        fillColor: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+        fillColor: isDarkMode
+            ? const Color(0xFF2C2C2C)
+            : const Color(0xFFF5F5F5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1136,10 +1236,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       items: items.map((item) {
         return DropdownMenuItem<T>(
           value: item,
-          child: Text(
-            item.toString(),
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(item.toString(), overflow: TextOverflow.ellipsis),
         );
       }).toList(),
       onChanged: onChanged,
@@ -1191,7 +1288,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     bool isDarkMode,
   ) {
     final isSelected = _selectedDirection == direction;
-    
+
     return GestureDetector(
       onTap: () => setState(() => _selectedDirection = direction),
       child: Container(
@@ -1200,8 +1297,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           color: isSelected
               ? color.withAlpha(30)
               : isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : const Color(0xFFF5F5F5),
+              ? const Color(0xFF2C2C2C)
+              : const Color(0xFFF5F5F5),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? color : Colors.transparent,
@@ -1213,7 +1310,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           children: [
             Icon(
               icon,
-              color: isSelected ? color : isDarkMode ? Colors.white54 : Colors.grey.shade500,
+              color: isSelected
+                  ? color
+                  : isDarkMode
+                  ? Colors.white54
+                  : Colors.grey.shade500,
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -1225,8 +1326,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 color: isSelected
                     ? color
                     : isDarkMode
-                        ? Colors.white70
-                        : Colors.grey.shade700,
+                    ? Colors.white70
+                    : Colors.grey.shade700,
               ),
             ),
           ],
@@ -1266,10 +1367,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       color: Colors.blue.withAlpha(30),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.people_outline,
-                      color: Colors.blue,
-                    ),
+                    child: const Icon(Icons.people_outline, color: Colors.blue),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -1280,14 +1378,18 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                          color: isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF1A1A1A),
                         ),
                       ),
                       Text(
                         '${tripStudents.length} students assigned',
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                          color: isDarkMode
+                              ? Colors.white60
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -1301,7 +1403,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1310,12 +1415,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
             ],
           ),
           const SizedBox(height: 16),
-          
+
           if (_isLoadingStudents)
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF2C2C2C)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -1336,7 +1443,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       'Loading students...',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                        color: isDarkMode
+                            ? Colors.white60
+                            : Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -1347,7 +1456,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                color: isDarkMode
+                    ? const Color(0xFF2C2C2C)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -1364,7 +1475,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+                        color: isDarkMode
+                            ? Colors.white70
+                            : Colors.grey.shade600,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1372,7 +1485,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       'Add students to this trip',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                        color: isDarkMode
+                            ? Colors.white54
+                            : Colors.grey.shade500,
                       ),
                     ),
                   ],
@@ -1384,7 +1499,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: tripStudents.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final student = tripStudents[index];
                 return _buildStudentTile(student, isDarkMode, tripProvider);
@@ -1395,7 +1510,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     );
   }
 
-  Widget _buildStudentTile(TripStudent student, bool isDarkMode, TripProvider tripProvider) {
+  Widget _buildStudentTile(
+    TripStudent student,
+    bool isDarkMode,
+    TripProvider tripProvider,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1407,7 +1526,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           CircleAvatar(
             backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
             child: Text(
-              student.fullname.isNotEmpty ? student.fullname[0].toUpperCase() : '?',
+              student.fullname.isNotEmpty
+                  ? student.fullname[0].toUpperCase()
+                  : '?',
               style: const TextStyle(
                 color: Color(0xFF6B9B5B),
                 fontWeight: FontWeight.bold,
@@ -1458,18 +1579,20 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       initialShowPhoneSearch: true,
       isLoadingStudents: _isLoadingStudents,
     );
-    
+
     // If students not loaded yet, trigger background loading
     if (_students.isEmpty && !_isLoadingStudents) {
       debugPrint('📚 Loading students in background...');
-      _loadStudents().then((_) {
-        debugPrint('✅ Students loaded in background: ${_students.length}');
-      }).catchError((e) {
-        debugPrint('❌ Error loading students in background: $e');
-      });
+      _loadStudents()
+          .then((_) {
+            debugPrint('✅ Students loaded in background: ${_students.length}');
+          })
+          .catchError((e) {
+            debugPrint('❌ Error loading students in background: $e');
+          });
     }
   }
-  
+
   void _showAddStudentDialogWithList(
     List<student_service.Student> availableStudents, {
     bool initialShowPhoneSearch = false,
@@ -1491,37 +1614,48 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               if (context.mounted) setState(() {});
             });
           }
-          
+
           // Update local loading state
           if (localIsLoadingStudents != _isLoadingStudents) {
             localIsLoadingStudents = _isLoadingStudents;
           }
-          
+
           // Get current available students (including newly loaded ones)
-          final currentStudents = _students.isNotEmpty ? _students : availableStudents;
-          
+          final currentStudents = _students.isNotEmpty
+              ? _students
+              : availableStudents;
+
           // Filter students based on search query
           var filteredStudents = currentStudents;
           if (searchQuery.isNotEmpty && !showPhoneSearch) {
             filteredStudents = currentStudents.where((s) {
               return s.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                     s.className.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                     (s.schoolName?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false);
+                  s.className.toLowerCase().contains(
+                    searchQuery.toLowerCase(),
+                  ) ||
+                  (s.schoolName?.toLowerCase().contains(
+                        searchQuery.toLowerCase(),
+                      ) ??
+                      false);
             }).toList();
           }
-          
+
           // Also filter out students already in the trip
           final tripProvider = context.read<TripProvider>();
           final tripStudentIds = tripProvider.tripStudents
               .map((s) => s.studentId.toString())
               .toSet();
-          
+
           if (!showPhoneSearch) {
             filteredStudents = filteredStudents
-                .where((s) => !tripStudentIds.contains(s.id) && !tripStudentIds.contains(int.tryParse(s.id)?.toString()))
+                .where(
+                  (s) =>
+                      !tripStudentIds.contains(s.id) &&
+                      !tripStudentIds.contains(int.tryParse(s.id)?.toString()),
+                )
                 .toList();
           }
-          
+
           // Use phone search results if available
           if (showPhoneSearch && _phoneSearchResults.isNotEmpty) {
             filteredStudents = _phoneSearchResults
@@ -1534,612 +1668,757 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
             child: Dialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: Colors.white.withAlpha(50),
-                  width: 1,
-                ),
+                side: BorderSide(color: Colors.white.withAlpha(50), width: 1),
               ),
               elevation: 20,
               shadowColor: Colors.black.withAlpha(100),
               backgroundColor: Colors.white,
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.9,
-              height: MediaQuery.of(context).size.height * 0.7,
-              padding: const EdgeInsets.all(0),
-              child: Column(
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF6B9B5B), Color(0xFF4A7C59)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withAlpha(30),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.person_add,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'Add Student to Trip',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close, color: Colors.white),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
+                height: MediaQuery.of(context).size.height * 0.7,
+                padding: const EdgeInsets.all(0),
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF6B9B5B), Color(0xFF4A7C59)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        const SizedBox(height: 16),
-                        // Search toggle tabs
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(30),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      showPhoneSearch = false;
-                                      _phoneSearchResults = [];
-                                      _phoneSearchController.clear();
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: !showPhoneSearch ? Colors.white : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(10),
-                                      boxShadow: !showPhoneSearch
-                                          ? [BoxShadow(color: Colors.black.withAlpha(20), blurRadius: 4)]
-                                          : null,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.search,
-                                          size: 16,
-                                          color: !showPhoneSearch ? const Color(0xFF6B9B5B) : Colors.white70,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'By Name',
-                                          style: TextStyle(
-                                            color: !showPhoneSearch ? const Color(0xFF6B9B5B) : Colors.white70,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.person_add,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Add Student to Trip',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => setState(() => showPhoneSearch = true),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: showPhoneSearch ? Colors.white : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(10),
-                                      boxShadow: showPhoneSearch
-                                          ? [BoxShadow(color: Colors.black.withAlpha(20), blurRadius: 4)]
-                                          : null,
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.phone,
-                                          size: 16,
-                                          color: showPhoneSearch ? const Color(0xFF6B9B5B) : Colors.white70,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'By Phone',
-                                          style: TextStyle(
-                                            color: showPhoneSearch ? const Color(0xFF6B9B5B) : Colors.white70,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
                                 ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
                             ],
                           ),
-                        ),
-                        // Show hint when students are loading
-                        if (_isLoadingStudents) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 16),
+                          // Search toggle tabs
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: Colors.white.withAlpha(30),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white.withAlpha(200),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    'Loading student list... You can search by phone now!',
-                                    style: TextStyle(
-                                      color: Colors.white.withAlpha(230),
-                                      fontSize: 12,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  
-                  // Search Field
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: showPhoneSearch
-                        ? Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade300),
                             ),
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: TextField(
-                                    controller: _phoneSearchController,
-                                    keyboardType: TextInputType.phone,
-                                    decoration: InputDecoration(
-                                      hintText: 'Enter guardian phone...',
-                                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                                      border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      prefixIcon: Icon(Icons.phone, color: Colors.grey.shade500),
-                                    ),
-                                    onSubmitted: (_) async {
-                                      await _searchStudentsByPhone();
-                                      setState(() {});
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        showPhoneSearch = false;
+                                        _phoneSearchResults = [];
+                                        _phoneSearchController.clear();
+                                      });
                                     },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: !showPhoneSearch
+                                            ? Colors.white
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                        boxShadow: !showPhoneSearch
+                                            ? [
+                                                BoxShadow(
+                                                  color: Colors.black.withAlpha(
+                                                    20,
+                                                  ),
+                                                  blurRadius: 4,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.search,
+                                            size: 16,
+                                            color: !showPhoneSearch
+                                                ? const Color(0xFF6B9B5B)
+                                                : Colors.white70,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'By Name',
+                                            style: TextStyle(
+                                              color: !showPhoneSearch
+                                                  ? const Color(0xFF6B9B5B)
+                                                  : Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                if (_isSearchingByPhone)
-                                  const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => showPhoneSearch = true),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: showPhoneSearch
+                                            ? Colors.white
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                        boxShadow: showPhoneSearch
+                                            ? [
+                                                BoxShadow(
+                                                  color: Colors.black.withAlpha(
+                                                    20,
+                                                  ),
+                                                  blurRadius: 4,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.phone,
+                                            size: 16,
+                                            color: showPhoneSearch
+                                                ? const Color(0xFF6B9B5B)
+                                                : Colors.white70,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'By Phone',
+                                            style: TextStyle(
+                                              color: showPhoneSearch
+                                                  ? const Color(0xFF6B9B5B)
+                                                  : Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  )
-                                else
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    child: ElevatedButton(
-                                      onPressed: () async {
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Show hint when students are loading
+                          if (_isLoadingStudents) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(30),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white.withAlpha(200),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      'Loading student list... You can search by phone now!',
+                                      style: TextStyle(
+                                        color: Colors.white.withAlpha(230),
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    // Search Field
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: showPhoneSearch
+                          ? Container(
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _phoneSearchController,
+                                      keyboardType: TextInputType.phone,
+                                      decoration: InputDecoration(
+                                        hintText: 'Enter guardian phone...',
+                                        hintStyle: TextStyle(
+                                          color: Colors.grey.shade500,
+                                        ),
+                                        border: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 14,
+                                            ),
+                                        prefixIcon: Icon(
+                                          Icons.phone,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                      onSubmitted: (_) async {
                                         await _searchStudentsByPhone();
                                         setState(() {});
                                       },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF6B9B5B),
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                      ),
-                                      child: const Text('Search'),
                                     ),
                                   ),
-                              ],
-                            ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: TextField(
-                              decoration: InputDecoration(
-                                hintText: 'Search by name, class or school...',
-                                hintStyle: TextStyle(color: Colors.grey.shade500),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                prefixIcon: Icon(Icons.search, color: Colors.grey.shade500),
+                                  if (_isSearchingByPhone)
+                                    const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          await _searchStudentsByPhone();
+                                          setState(() {});
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF6B9B5B,
+                                          ),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                        ),
+                                        child: const Text('Search'),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              onChanged: (value) => setState(() => searchQuery = value),
-                            ),
-                          ),
-                  ),
-                  
-                  // Results header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B).withAlpha(20),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${filteredStudents.length} students',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF6B9B5B),
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
                               ),
-                              if (_isLoadingStudents && !showPhoneSearch) ...[
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: const Color(0xFF6B9B5B),
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Search by name, class or school...',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search,
+                                    color: Colors.grey.shade500,
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_isLoadingStudents && !showPhoneSearch)
-                          Text(
-                            'Loading...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                              fontStyle: FontStyle.italic,
+                                onChanged: (value) =>
+                                    setState(() => searchQuery = value),
+                              ),
                             ),
-                          )
-                        else if (selectedStudent != null)
+                    ),
+
+                    // Results header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withAlpha(20),
+                              color: const Color(0xFF6B9B5B).withAlpha(20),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.check_circle, size: 14, color: Colors.blue.shade700),
-                                const SizedBox(width: 4),
                                 Text(
-                                  'Selected',
-                                  style: TextStyle(
+                                  '${filteredStudents.length} students',
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.blue.shade700,
+                                    color: Color(0xFF6B9B5B),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                if (_isLoadingStudents && !showPhoneSearch) ...[
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: const Color(0xFF6B9B5B),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Student list
-                  Expanded(
-                    child: filteredStudents.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    shape: BoxShape.circle,
+                          const Spacer(),
+                          if (_isLoadingStudents && !showPhoneSearch)
+                            Text(
+                              'Loading...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            )
+                          else if (selectedStudent != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withAlpha(20),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 14,
+                                    color: Colors.blue.shade700,
                                   ),
-                                  child: _isLoadingStudents && !showPhoneSearch
-                                    ? const SizedBox(
-                                        width: 48,
-                                        height: 48,
-                                        child: CircularProgressIndicator(
-                                          color: Color(0xFF6B9B5B),
-                                        ),
-                                      )
-                                    : Icon(
-                                        showPhoneSearch ? Icons.phone_android : Icons.search_off,
-                                        size: 48,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  showPhoneSearch
-                                      ? 'Search by phone to find students'
-                                      : _isLoadingStudents
-                                          ? 'Loading students...'
-                                          : currentStudents.isEmpty
-                                              ? 'No students loaded. Try searching by phone.'
-                                              : 'No students match your search',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: filteredStudents.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final student = filteredStudents[index];
-                              final isSelected = selectedStudent?.id == student.id;
-                              
-                              return GestureDetector(
-                                onTap: () => setState(() => selectedStudent = student),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFF6B9B5B).withAlpha(15) : Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isSelected ? const Color(0xFF6B9B5B) : Colors.grey.shade200,
-                                      width: isSelected ? 2 : 1,
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Selected',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withAlpha(10),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: isSelected
-                                                ? [const Color(0xFF6B9B5B), const Color(0xFF4A7C59)]
-                                                : [Colors.grey.shade300, Colors.grey.shade400],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Student list
+                    Expanded(
+                      child: filteredStudents.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child:
+                                        _isLoadingStudents && !showPhoneSearch
+                                        ? const SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: CircularProgressIndicator(
+                                              color: Color(0xFF6B9B5B),
                                             ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              student.name,
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                color: isSelected ? const Color(0xFF6B9B5B) : const Color(0xFF1A1A1A),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.school, size: 12, color: Colors.grey.shade500),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  student.className,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey.shade600,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Icon(Icons.route, size: 12, color: Colors.grey.shade500),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    student.route ?? 'N/A',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey.shade600,
-                                                    ),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            if (student.schoolName != null && student.schoolName!.isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(top: 4),
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.location_on, size: 12, color: Colors.grey.shade500),
-                                                    const SizedBox(width: 4),
-                                                    Expanded(
-                                                      child: Text(
-                                                        student.schoolName!,
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          color: Colors.grey.shade500,
-                                                        ),
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (isSelected)
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF6B9B5B),
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: const Icon(
-                                            Icons.check,
-                                            color: Colors.white,
-                                            size: 20,
-                                          ),
-                                        )
-                                      else
-                                        Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade100,
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: Icon(
-                                            Icons.add,
+                                          )
+                                        : Icon(
+                                            showPhoneSearch
+                                                ? Icons.phone_android
+                                                : Icons.search_off,
+                                            size: 48,
                                             color: Colors.grey.shade400,
                                           ),
-                                        ),
-                                    ],
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  
-                  // Bottom action bar
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(20),
-                        bottomRight: Radius.circular(20),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    showPhoneSearch
+                                        ? 'Search by phone to find students'
+                                        : _isLoadingStudents
+                                        ? 'Loading students...'
+                                        : currentStudents.isEmpty
+                                        ? 'No students loaded. Try searching by phone.'
+                                        : 'No students match your search',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              itemCount: filteredStudents.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final student = filteredStudents[index];
+                                final isSelected =
+                                    selectedStudent?.id == student.id;
+
+                                return GestureDetector(
+                                  onTap: () =>
+                                      setState(() => selectedStudent = student),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? const Color(
+                                              0xFF6B9B5B,
+                                            ).withAlpha(15)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? const Color(0xFF6B9B5B)
+                                            : Colors.grey.shade200,
+                                        width: isSelected ? 2 : 1,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withAlpha(10),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: isSelected
+                                                  ? [
+                                                      const Color(0xFF6B9B5B),
+                                                      const Color(0xFF4A7C59),
+                                                    ]
+                                                  : [
+                                                      Colors.grey.shade300,
+                                                      Colors.grey.shade400,
+                                                    ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              student.name.isNotEmpty
+                                                  ? student.name[0]
+                                                        .toUpperCase()
+                                                  : '?',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                student.name,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isSelected
+                                                      ? const Color(0xFF6B9B5B)
+                                                      : const Color(0xFF1A1A1A),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.school,
+                                                    size: 12,
+                                                    color: Colors.grey.shade500,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    student.className,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Icon(
+                                                    Icons.route,
+                                                    size: 12,
+                                                    color: Colors.grey.shade500,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      student.route ?? 'N/A',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade600,
+                                                      ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (student.schoolName != null &&
+                                                  student
+                                                      .schoolName!
+                                                      .isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 4,
+                                                      ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.location_on,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade500,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Expanded(
+                                                        child: Text(
+                                                          student.schoolName!,
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors
+                                                                .grey
+                                                                .shade500,
+                                                          ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF6B9B5B),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: const Icon(
+                                              Icons.check,
+                                              color: Colors.white,
+                                              size: 20,
+                                            ),
+                                          )
+                                        else
+                                          Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Icon(
+                                              Icons.add,
+                                              color: Colors.grey.shade400,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+
+                    // Bottom action bar
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(20),
+                          bottomRight: Radius.circular(20),
+                        ),
+                        border: Border(
+                          top: BorderSide(color: Colors.grey.shade200),
+                        ),
                       ),
-                      border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.grey.shade700,
-                              side: BorderSide(color: Colors.grey.shade300),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('Cancel', style: TextStyle(fontSize: 16)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            onPressed: selectedStudent == null
-                                ? null
-                                : () {
-                                    Navigator.pop(context);
-                                    _addStudentToTrip(selectedStudent!);
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6B9B5B),
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.grey.shade300,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.person_add, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  selectedStudent == null ? 'Select Student' : 'Add Student',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.grey.shade700,
+                                side: BorderSide(color: Colors.grey.shade300),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
                                 ),
-                              ],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(fontSize: 16),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: selectedStudent == null
+                                  ? null
+                                  : () {
+                                      Navigator.pop(context);
+                                      _addStudentToTrip(selectedStudent!);
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6B9B5B),
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: Colors.grey.shade300,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.person_add, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    selectedStudent == null
+                                        ? 'Select Student'
+                                        : 'Add Student',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    ),
-  );
-}
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _addStudentToTrip(student_service.Student student) async {
     if (_editingTrip == null) return;
@@ -2150,7 +2429,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     // Parse lat/lng from pickup location if available
     double latitude = 0.0;
     double longitude = 0.0;
-    
+
     // Try to get coordinates from student's pickup location
     if (student.pickupLocation != null && student.pickupLocation!.isNotEmpty) {
       // In a real app, you'd geocode the address or store coordinates
@@ -2162,25 +2441,37 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       }
     }
 
-    final result = await tripProvider.addStudentToMasterTrip(
-      masterTripId: _editingTrip!.id,
-      fullname: student.name,
-      studentRegNumber: student.studentRegNumber ?? '',
-      studentId: int.tryParse(student.id) ?? 0,
-      guardianPhoneNumber: student.guardianPhone ?? '',
-      schoolname: student.schoolName ?? '',
-      classname: student.className,
-      route: student.route ?? _selectedRoute ?? '',
-      latitude: latitude,
-      longitude: longitude,
-    );
+    try {
+      final result = await tripProvider.addStudentToMasterTrip(
+        masterTripId: _editingTrip!.id,
+        fullname: student.name,
+        studentRegNumber: student.studentRegNumber ?? '',
+        studentId: int.tryParse(student.id) ?? 0,
+        guardianPhoneNumber: student.guardianPhone ?? '',
+        schoolname: student.schoolName ?? '',
+        classname: student.className,
+        route: student.route ?? _selectedRoute ?? '',
+        latitude: latitude,
+        longitude: longitude,
+      );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (result != null) {
-        _showSuccessSnackbar('${student.name} added to trip');
-      } else {
-        _showErrorSnackbar(tripProvider.errorMessage ?? 'Failed to add student');
+      if (mounted) {
+        if (result != null) {
+          _showSuccessSnackbar('${student.name} added to trip');
+        } else {
+          _showErrorSnackbar(
+            tripProvider.errorMessage ?? 'Failed to add student',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        debugPrint('❌ Error adding student: $e');
+        _showErrorSnackbar('Error adding student: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -2202,7 +2493,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     return null;
   }
 
-  Future<void> _removeStudentFromTrip(TripStudent student, TripProvider tripProvider) async {
+  Future<void> _removeStudentFromTrip(
+    TripStudent student,
+    TripProvider tripProvider,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -2224,7 +2518,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
-      
+
       final success = await tripProvider.deleteStudentFromMasterTrip(
         studentTripId: student.id,
         masterTripId: student.masterTripId,
@@ -2235,7 +2529,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         if (success) {
           _showSuccessSnackbar('${student.fullname} removed from trip');
         } else {
-          _showErrorSnackbar(tripProvider.errorMessage ?? 'Failed to remove student');
+          _showErrorSnackbar(
+            tripProvider.errorMessage ?? 'Failed to remove student',
+          );
         }
       }
     }

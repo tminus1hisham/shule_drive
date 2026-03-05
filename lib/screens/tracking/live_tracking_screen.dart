@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/tracking_provider.dart';
@@ -13,12 +14,7 @@ class LiveTrackingScreen extends StatefulWidget {
   final String? busId;
   final String? routeId;
 
-  const LiveTrackingScreen({
-    super.key,
-    this.tripId,
-    this.busId,
-    this.routeId,
-  });
+  const LiveTrackingScreen({super.key, this.tripId, this.busId, this.routeId});
 
   @override
   State<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
@@ -34,7 +30,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Future<void> _initializeTracking() async {
     final provider = context.read<TrackingProvider>();
     await provider.initialize();
-    
+
     if (widget.tripId != null && widget.busId != null) {
       await provider.startTrackingTrip(
         tripId: widget.tripId!,
@@ -69,20 +65,23 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       body: Stack(
         children: [
           // Map
-          GoogleMap(
-            mapType: provider.mapType,
-            trafficEnabled: provider.showTraffic,
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(-1.286389, 36.817223), // Nairobi default
-              zoom: 12,
+          FlutterMap(
+            mapController: provider.mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(
+                -1.286389,
+                36.817223,
+              ), // Nairobi default
+              initialZoom: 12,
             ),
-            markers: provider.markers,
-            polylines: provider.polylines,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            onMapCreated: provider.setMapController,
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.shuledrive.app',
+              ),
+              PolylineLayer(polylines: provider.polylines),
+              MarkerLayer(markers: provider.markers),
+            ],
           ),
 
           // Loading indicator
@@ -90,15 +89,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF6B9B5B),
-                ),
+                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
               ),
             ),
 
           // Error state
-          if (provider.viewState == MapViewState.error)
-            _buildErrorState(),
+          if (provider.viewState == MapViewState.error) _buildErrorState(),
 
           // Bottom info panel
           if (provider.viewState == MapViewState.ready)
@@ -130,8 +126,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
                 const SizedBox(height: 8),
                 _buildMapButton(
-                  icon: provider.followBus 
-                      ? Icons.navigation 
+                  icon: provider.followBus
+                      ? Icons.navigation
                       : Icons.navigation_outlined,
                   onPressed: provider.toggleFollowBus,
                   isActive: provider.followBus,
@@ -158,18 +154,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Colors.red,
-              ),
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 16),
               const Text(
                 'Failed to load map',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -256,7 +245,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: _getStatusColor(location?.status).withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -330,13 +322,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     decoration: BoxDecoration(
                       color: isNext
                           ? const Color(0xFF6B9B5B).withAlpha(30)
-                          : (isDarkMode ? Colors.white10 : Colors.grey.shade100),
+                          : (isDarkMode
+                                ? Colors.white10
+                                : Colors.grey.shade100),
                       borderRadius: BorderRadius.circular(12),
                       border: isNext
-                          ? Border.all(
-                              color: const Color(0xFF6B9B5B),
-                              width: 1,
-                            )
+                          ? Border.all(color: const Color(0xFF6B9B5B), width: 1)
                           : null,
                     ),
                     child: Column(
@@ -349,7 +340,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: isNext ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isNext
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                             color: isDarkMode ? Colors.white : Colors.black,
                           ),
                         ),
@@ -396,10 +389,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               ),
               child: Row(
                 children: [
-                  Text(
-                    alert.type.icon,
-                    style: const TextStyle(fontSize: 24),
-                  ),
+                  Text(alert.type.icon, style: const TextStyle(fontSize: 24)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -451,9 +441,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
         child: Container(
           width: 44,
           height: 44,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
           child: Icon(
             icon,
             color: isActive ? Colors.white : const Color(0xFF6B9B5B),
@@ -541,10 +529,7 @@ class LiveTrackingMiniMap extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => LiveTrackingScreen(
-                tripId: tripId,
-                busId: busId,
-              ),
+              builder: (_) => LiveTrackingScreen(tripId: tripId, busId: busId),
             ),
           );
         }
@@ -589,7 +574,10 @@ class LiveTrackingMiniMap extends StatelessWidget {
                 top: 12,
                 left: 12,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(20),

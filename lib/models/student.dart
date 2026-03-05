@@ -1,4 +1,4 @@
-enum StudentStatus { pending, picked, absent }
+enum StudentStatus { pending, picked, absent, dropped }
 
 class Student {
   final String id;

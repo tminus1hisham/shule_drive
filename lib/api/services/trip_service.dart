@@ -160,11 +160,9 @@ class TripService {
 
       // Handle different API response formats
       Trip trip;
-      if (response['data'] != null) {
-        // Standard wrapped response
-        trip = Trip.fromJson(response['data']);
-      } else if (response['tripUniqueId'] != null) {
-        // API returns tripUniqueId format - construct Trip from response
+      if (response['tripUniqueId'] != null) {
+        // API returns tripUniqueId format - this is the ID needed for pick/drop operations
+        // Store tripUniqueId as the trip ID for subsequent API calls
         trip = Trip(
           id: response['tripUniqueId']?.toString() ?? '',
           routeName: tripName ?? route ?? 'Trip',
@@ -178,6 +176,10 @@ class TripService {
               .toList(),
           stops: [],
         );
+        debugPrint('✅ Trip started with uniqueId: ${trip.id}');
+      } else if (response['data'] != null) {
+        // Standard wrapped response
+        trip = Trip.fromJson(response['data']);
       } else {
         // Try to parse response directly
         trip = Trip.fromJson(response);
@@ -203,11 +205,16 @@ class TripService {
 
   /// End a trip (completes the trip)
   /// POST /api/trips/end
+  ///
+  /// Request body format: {'tripId': tripId, 'uniqueTripIdentity': tripId}
+  /// The API requires both tripId and uniqueTripIdentity
   Future<Trip> endTrip(String tripId) async {
     try {
-      // Use end trip endpoint with tripId in body
-      // The API expects the tripId in the request body, not URL path
-      debugPrint('📡 Ending trip: POST /api/trips/end with tripId: $tripId');
+      // Use end trip endpoint with both tripId and uniqueTripIdentity in body
+      // The API expects both fields - uniqueTripIdentity is the tripUniqueId from start trip response
+      debugPrint(
+        '📡 Ending trip: POST /api/trips/end with tripId: $tripId, uniqueTripIdentity: $tripId',
+      );
 
       final response = await _apiClient.post(
         '/api/trips/end',
@@ -333,8 +340,14 @@ class TripService {
 
   /// Pick all students in a trip
   /// POST /api/trips/pick/all
+  ///
+  /// Request body format: {'tripId': tripId, 'uniqueTripIdentity': tripId}
+  /// The API requires both tripId and uniqueTripIdentity
   Future<void> pickAllStudents(String tripId) async {
     try {
+      debugPrint(
+        '📡 Picking all students: POST /api/trips/pick/all with tripId: $tripId, uniqueTripIdentity: $tripId',
+      );
       await _apiClient.post(
         Endpoints.pickAllStudents,
         body: {'tripId': tripId, 'uniqueTripIdentity': tripId},
@@ -350,8 +363,14 @@ class TripService {
 
   /// Drop all students in a trip
   /// POST /api/trips/drop/all
+  ///
+  /// Request body format: {'tripId': tripId, 'uniqueTripIdentity': tripId}
+  /// The API requires both tripId and uniqueTripIdentity
   Future<void> dropAllStudents(String tripId) async {
     try {
+      debugPrint(
+        '📡 Dropping all students: POST /api/trips/drop/all with tripId: $tripId, uniqueTripIdentity: $tripId',
+      );
       await _apiClient.post(
         Endpoints.dropAllStudents,
         body: {'tripId': tripId, 'uniqueTripIdentity': tripId},
@@ -606,7 +625,8 @@ class TripService {
   }
 
   /// Edit an existing master trip
-  /// PUT /api/trips/edit/master/trip
+  /// PUT /api/trips/edit/master/trip?id={tripId}
+  /// Some APIs require ID as query parameter
   Future<MasterTrip> editMasterTrip({
     required int tripId,
     String? tripName,
@@ -619,7 +639,6 @@ class TripService {
   }) async {
     try {
       final body = <String, dynamic>{
-        'id': tripId,
         if (tripName != null) 'tripName': tripName,
         if (tripTime != null) 'tripTime': tripTime,
         if (tripDirection != null) 'tripDirection': tripDirection,
@@ -630,12 +649,11 @@ class TripService {
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
       };
 
-      debugPrint('✏️ Editing master trip: $body');
+      // Build endpoint with ID as query parameter (PUT method)
+      final endpoint = '${Endpoints.editMasterTrip}?id=$tripId';
+      debugPrint('✏️ Editing master trip: PUT $endpoint, body: $body');
 
-      final response = await _apiClient.put(
-        Endpoints.editMasterTrip,
-        body: body,
-      );
+      final response = await _apiClient.put(endpoint, body: body);
 
       final trip = MasterTrip.fromJson(response['data'] ?? response);
 

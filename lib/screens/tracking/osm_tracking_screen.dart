@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
@@ -9,7 +10,7 @@ import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 
 /// Mapbox Tracking Screen - Replacement for OSM tracking
-/// 
+///
 /// Features:
 /// - Full screen Mapbox map
 /// - Real-time driver location tracking
@@ -21,12 +22,7 @@ class OsmTrackingScreen extends StatefulWidget {
   final String? busId;
   final String? routeId;
 
-  const OsmTrackingScreen({
-    super.key,
-    this.tripId,
-    this.busId,
-    this.routeId,
-  });
+  const OsmTrackingScreen({super.key, this.tripId, this.busId, this.routeId});
 
   @override
   State<OsmTrackingScreen> createState() => _OsmTrackingScreenState();
@@ -38,9 +34,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   final TripService _tripService = TripService();
 
   // Mapbox
-  MapboxMap? _mapboxMap;
-  PointAnnotationManager? _pointAnnotationManager;
-  PolylineAnnotationManager? _polylineAnnotationManager;
+  final MapController _mapController = MapController();
 
   // Location
   geo.Position? _currentPosition;
@@ -59,7 +53,6 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeMapbox();
     _initializeLocation();
     _loadTripData();
   }
@@ -67,13 +60,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
-    _mapboxMap?.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
-  void _initializeMapbox() {
-    MapboxOptions.setAccessToken(MapConfig.mapboxAccessToken);
-  }
+  // MapConfig mapbox token is injected directly in TileLayer.
 
   Future<void> _initializeLocation() async {
     try {
@@ -85,7 +76,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
         return;
       }
 
-      geo.LocationPermission permission = await geo.Geolocator.checkPermission();
+      geo.LocationPermission permission =
+          await geo.Geolocator.checkPermission();
       if (permission == geo.LocationPermission.denied) {
         permission = await geo.Geolocator.requestPermission();
         if (permission == geo.LocationPermission.denied) {
@@ -129,34 +121,38 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
       if (trip != null) {
         setState(() {
           _trip = trip;
-          _students = trip.students.map((s) => TripStudent(
-            id: int.tryParse(s.id) ?? 0,
-            masterTripId: int.tryParse(widget.tripId!) ?? 0,
-            studentId: int.tryParse(s.id) ?? 0,
-            fullname: s.name,
-            studentRegNumber: '',
-            guardianPhoneNumber: s.parentPhone ?? '',
-            schoolname: '',
-            transportOrg: '',
-            classname: '',
-            route: '',
-            latitude: 0,
-            longitude: 0,
-            pickedLatitude: 0,
-            pickedLongitude: 0,
-            droppedLatitude: 0,
-            droppedLongitude: 0,
-            isStudentPicked: s.status == 'picked',
-            isStudentDropped: s.status == 'dropped',
-            profileImage: s.photo ?? '',
-            address: '',
-            createdBy: '',
-            hasStudentPaid: false,
-            isStudentActive: s.status != 'absent',
-            isStudentDeleted: false,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          )).toList();
+          _students = trip.students
+              .map(
+                (s) => TripStudent(
+                  id: int.tryParse(s.id) ?? 0,
+                  masterTripId: int.tryParse(widget.tripId!) ?? 0,
+                  studentId: int.tryParse(s.id) ?? 0,
+                  fullname: s.name,
+                  studentRegNumber: '',
+                  guardianPhoneNumber: s.parentPhone ?? '',
+                  schoolname: '',
+                  transportOrg: '',
+                  classname: '',
+                  route: '',
+                  latitude: 0,
+                  longitude: 0,
+                  pickedLatitude: 0,
+                  pickedLongitude: 0,
+                  droppedLatitude: 0,
+                  droppedLongitude: 0,
+                  isStudentPicked: s.status == 'picked',
+                  isStudentDropped: s.status == 'dropped',
+                  profileImage: s.photo ?? '',
+                  address: '',
+                  createdBy: '',
+                  hasStudentPaid: false,
+                  isStudentActive: s.status != 'absent',
+                  isStudentDeleted: false,
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                ),
+              )
+              .toList();
           _isLoading = false;
         });
         _calculateRoute();
@@ -174,22 +170,6 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
     }
   }
 
-  void _onMapCreated(MapboxMap mapboxMap) {
-    _mapboxMap = mapboxMap;
-    
-    mapboxMap.annotations.createPointAnnotationManager().then((manager) {
-      _pointAnnotationManager = manager;
-      _updateMarkers();
-    });
-
-    mapboxMap.annotations.createPolylineAnnotationManager().then((manager) {
-      _polylineAnnotationManager = manager;
-      if (_routeResult != null) {
-        _updateRouteLine();
-      }
-    });
-  }
-
   Future<void> _calculateRoute() async {
     if (_currentPosition == null || _students.isEmpty) return;
     if (_isLoadingRoute) return;
@@ -198,22 +178,16 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
 
     try {
       final waypoints = <Map<String, double>>[
-        {
-          'lat': _currentPosition!.latitude,
-          'lng': _currentPosition!.longitude,
-        },
+        {'lat': _currentPosition!.latitude, 'lng': _currentPosition!.longitude},
       ];
 
       // Add pending students with valid locations
       for (final student in _students) {
-        if (!student.isStudentPicked && 
-            !student.isStudentDropped && 
+        if (!student.isStudentPicked &&
+            !student.isStudentDropped &&
             student.isStudentActive &&
             (student.latitude != 0 || student.longitude != 0)) {
-          waypoints.add({
-            'lat': student.latitude,
-            'lng': student.longitude,
-          });
+          waypoints.add({'lat': student.latitude, 'lng': student.longitude});
         }
       }
 
@@ -231,77 +205,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
     }
   }
 
-  Future<void> _updateRouteLine() async {
-    if (_polylineAnnotationManager == null || _routeResult == null) return;
-
-    await _polylineAnnotationManager!.deleteAll();
-
-    final coordinates = _routeResult!.coordinates;
-    if (coordinates == null || coordinates.isEmpty) return;
-
-    final lineCoords = coordinates.map((pos) {
-      return Position(pos.longitude, pos.latitude);
-    }).toList();
-
-    await _polylineAnnotationManager!.create(
-      PolylineAnnotationOptions(
-        geometry: LineString(coordinates: lineCoords),
-        lineColor: 0xFF6B9B5B,
-        lineWidth: 4,
-      ),
-    );
-  }
-
-  Future<void> _updateMarkers() async {
-    if (_pointAnnotationManager == null) return;
-    await _pointAnnotationManager!.deleteAll();
-    await _updateDriverMarker();
-    for (final student in _students) {
-      await _addStudentMarker(student);
+  void _updateRouteLine() {
+    if (mounted) {
+      setState(() {});
     }
-  }
-
-  Future<void> _updateDriverMarker() async {
-    if (_pointAnnotationManager == null || _currentPosition == null) return;
-
-    await _pointAnnotationManager!.create(
-      PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(
-            _currentPosition!.longitude,
-            _currentPosition!.latitude,
-          ),
-        ),
-        textField: '🚌',
-        textSize: 28,
-      ),
-    );
-  }
-
-  Future<void> _addStudentMarker(TripStudent student) async {
-    if (_pointAnnotationManager == null) return;
-    if (student.latitude == 0 && student.longitude == 0) return;
-
-    String emoji;
-    if (student.isStudentDropped) {
-      emoji = '🏠';
-    } else if (student.isStudentPicked) {
-      emoji = '✅';
-    } else if (!student.isStudentActive) {
-      emoji = '❌';
-    } else {
-      emoji = '👤';
-    }
-
-    await _pointAnnotationManager!.create(
-      PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(student.longitude, student.latitude),
-        ),
-        textField: emoji,
-        textSize: 20,
-      ),
-    );
   }
 
   @override
@@ -321,17 +228,69 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
       body: Stack(
         children: [
           // Map
-          MapWidget(
-            onMapCreated: _onMapCreated,
-            cameraOptions: CameraOptions(
-              center: Point(
-                coordinates: Position(
-                  MapConfig.defaultLongitude,
-                  MapConfig.defaultLatitude,
-                ),
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(
+                MapConfig.defaultLatitude,
+                MapConfig.defaultLongitude,
               ),
-              zoom: 13,
+              initialZoom: 13,
             ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.shuledrive.app',
+              ),
+              PolylineLayer(
+                polylines: [
+                  if (_routeResult != null && _routeResult!.coordinates != null)
+                    Polyline(
+                      points: _routeResult!.coordinates!
+                          .map((pos) => LatLng(pos.latitude, pos.longitude))
+                          .toList(),
+                      color: const Color(0xFF6B9B5B),
+                      strokeWidth: 4,
+                    ),
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  if (_currentPosition != null)
+                    Marker(
+                      point: LatLng(
+                        _currentPosition!.latitude,
+                        _currentPosition!.longitude,
+                      ),
+                      width: 40,
+                      height: 40,
+                      child: const Text('🚌', style: TextStyle(fontSize: 24)),
+                    ),
+                  ..._students
+                      .where((s) => s.latitude != 0 && s.longitude != 0)
+                      .map((student) {
+                        String emoji;
+                        if (student.isStudentDropped)
+                          emoji = '🏠';
+                        else if (student.isStudentPicked)
+                          emoji = '✅';
+                        else if (!student.isStudentActive)
+                          emoji = '❌';
+                        else
+                          emoji = '👤';
+                        return Marker(
+                          point: LatLng(student.latitude, student.longitude),
+                          width: 30,
+                          height: 30,
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                        );
+                      }),
+                ],
+              ),
+            ],
           ),
 
           // Loading
@@ -356,7 +315,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
                     const SizedBox(height: 16),
@@ -397,22 +360,21 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
                 FloatingActionButton.small(
                   heroTag: 'center',
                   onPressed: () {
-                    if (_mapboxMap != null && _currentPosition != null) {
-                      _mapboxMap!.setCamera(
-                        CameraOptions(
-                          center: Point(
-                            coordinates: Position(
-                              _currentPosition!.longitude,
-                              _currentPosition!.latitude,
-                            ),
-                          ),
-                          zoom: 16,
+                    if (_currentPosition != null) {
+                      _mapController.move(
+                        LatLng(
+                          _currentPosition!.latitude,
+                          _currentPosition!.longitude,
                         ),
+                        16,
                       );
                     }
                   },
                   backgroundColor: Colors.white,
-                  child: const Icon(Icons.my_location, color: Color(0xFF6B9B5B)),
+                  child: const Icon(
+                    Icons.my_location,
+                    color: Color(0xFF6B9B5B),
+                  ),
                 ),
               ],
             ),
@@ -438,10 +400,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(30),
-            blurRadius: 20,
-          ),
+          BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 20),
         ],
       ),
       child: Column(
@@ -482,7 +441,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -542,24 +504,22 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
     );
   }
 
-  Widget _buildStat({required IconData icon, required String value, required String label}) {
+  Widget _buildStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
     return Column(
       children: [
         Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ],
     );

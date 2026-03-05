@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:math' show sqrt, sin, cos, atan2, pi;
 import 'package:flutter/foundation.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart' as geo;
 import '../models/map_models.dart';
 import '../utils/mock_tracking_data.dart';
 
 /// Tracking Service - Handles real-time bus tracking via MQTT
-/// 
+///
 /// MQTT Topics:
 /// - bus/{busId}/location - Real-time location updates
 /// - bus/{busId}/status - Status changes
@@ -19,35 +20,35 @@ class TrackingService {
 
   // MQTT Service for real-time updates (null when not available)
   dynamic _mqttService;
-  
+
   // Mock data generator for testing without backend (disabled by default)
   final MockTrackingGenerator _mockGenerator = MockTrackingGenerator();
   bool _useMockData = false; // Set to true only for testing without real GPS
-  
+
   // Stream controllers
   final Map<String, StreamController<BusLocation>> _locationControllers = {};
   final Map<String, StreamController<GeofenceAlert>> _geofenceControllers = {};
-  final StreamController<List<BusLocation>> _allBusesController = 
+  final StreamController<List<BusLocation>> _allBusesController =
       StreamController<List<BusLocation>>.broadcast();
-  
+
   // Cached data
   final Map<String, BusLocation> _latestLocations = {};
   final Map<String, RoutePath> _routePaths = {};
   final Map<String, List<RouteStop>> _routeStops = {};
-  
+
   // Geofencing
   final Set<String> _activeGeofences = {};
   Timer? _geofenceCheckTimer;
-  
+
   // Subscriptions
   final Map<String, StreamSubscription> _subscriptions = {};
-  
+
   bool _isInitialized = false;
 
   /// Initialize the tracking service
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     try {
       // TODO: Initialize MQTT service when backend is ready
       // _mqttService = MQTTService();
@@ -82,7 +83,7 @@ class TrackingService {
   Stream<BusLocation> trackBus(String busId) {
     if (!_locationControllers.containsKey(busId)) {
       _locationControllers[busId] = StreamController<BusLocation>.broadcast();
-      
+
       if (_useMockData) {
         // Use mock data generator
         _mockGenerator.addListener((location) {
@@ -117,23 +118,23 @@ class TrackingService {
   /// Subscribe to bus location via MQTT
   void _subscribeToBusLocation(String busId) {
     final topic = 'bus/$busId/location';
-    
+
     final subscription = _mqttService.messageStream
         .where((msg) => msg.topic == topic)
         .listen((message) {
-      try {
-        final location = BusLocation.fromJson(message.payload);
-        _latestLocations[busId] = location;
-        _locationControllers[busId]?.add(location);
-        _notifyAllBusesUpdate();
-        
-        // Check geofences
-        _checkGeofencesForBus(location);
-      } catch (e) {
-        debugPrint('TrackingService: Error parsing location: $e');
-      }
-    });
-    
+          try {
+            final location = BusLocation.fromJson(message.payload);
+            _latestLocations[busId] = location;
+            _locationControllers[busId]?.add(location);
+            _notifyAllBusesUpdate();
+
+            // Check geofences
+            _checkGeofencesForBus(location);
+          } catch (e) {
+            debugPrint('TrackingService: Error parsing location: $e');
+          }
+        });
+
     _subscriptions['location_$busId'] = subscription;
     // _mqttService?.subscribe(topic);
   }
@@ -158,14 +159,14 @@ class TrackingService {
     if (_routePaths.containsKey(routeId)) {
       return _routePaths[routeId];
     }
-    
+
     // Use mock data for testing
     if (_useMockData) {
       final mockPath = _mockGenerator.getMockRoutePath();
       _routePaths[routeId] = mockPath;
       return mockPath;
     }
-    
+
     // TODO: Load from API when backend is ready
     return null;
   }
@@ -175,14 +176,14 @@ class TrackingService {
     if (_routeStops.containsKey(routeId)) {
       return _routeStops[routeId]!;
     }
-    
+
     // Use mock data for testing
     if (_useMockData) {
       final mockStops = _mockGenerator.getMockStops();
       _routeStops[routeId] = mockStops;
       return mockStops;
     }
-    
+
     // TODO: Load from API when backend is ready
     return [];
   }
@@ -196,15 +197,20 @@ class TrackingService {
   // ==================== GEOFENCING ====================
 
   /// Start monitoring geofences for a stop
-  Stream<GeofenceAlert> monitorGeofence(String stopId, String stopName, LatLng stopPosition) {
+  Stream<GeofenceAlert> monitorGeofence(
+    String stopId,
+    String stopName,
+    LatLng stopPosition,
+  ) {
     if (!_geofenceControllers.containsKey(stopId)) {
-      _geofenceControllers[stopId] = StreamController<GeofenceAlert>.broadcast();
+      _geofenceControllers[stopId] =
+          StreamController<GeofenceAlert>.broadcast();
     }
-    
+
     _activeGeofences.add(stopId);
     _geofencePositions[stopId] = stopPosition;
     _geofenceNames[stopId] = stopName;
-    
+
     return _geofenceControllers[stopId]!.stream;
   }
 
@@ -238,21 +244,22 @@ class TrackingService {
     for (final stopId in _activeGeofences) {
       final stopPosition = _geofencePositions[stopId];
       if (stopPosition == null) continue;
-      
+
       final distance = calculateDistance(busLocation.position, stopPosition);
       final eta = estimateTime(distance, busLocation.speed);
-      
+
       // Check if we should send an alert
       GeofenceType? alertType;
-      
+
       if (distance <= 100) {
         alertType = GeofenceType.arrived;
       } else if (distance <= 500 && eta <= 60) {
         alertType = GeofenceType.arriving;
-      } else if (distance <= 2000 && eta <= 300) { // 5 minutes
+      } else if (distance <= 2000 && eta <= 300) {
+        // 5 minutes
         alertType = GeofenceType.approaching;
       }
-      
+
       if (alertType != null) {
         _sendGeofenceAlert(
           busId: busLocation.busId,
@@ -277,11 +284,11 @@ class TrackingService {
     // Rate limit alerts (don't send same alert within 2 minutes)
     final alertKey = '${busId}_${stopId}_${type.name}';
     final lastAlert = _lastAlertTimes[alertKey];
-    if (lastAlert != null && 
+    if (lastAlert != null &&
         DateTime.now().difference(lastAlert).inMinutes < 2) {
       return;
     }
-    
+
     final alert = GeofenceAlert(
       id: '${DateTime.now().millisecondsSinceEpoch}_$alertKey',
       busId: busId,
@@ -292,10 +299,10 @@ class TrackingService {
       etaSeconds: etaSeconds,
       timestamp: DateTime.now(),
     );
-    
+
     _lastAlertTimes[alertKey] = DateTime.now();
     _geofenceControllers[stopId]?.add(alert);
-    
+
     // TODO: Publish to MQTT when backend is ready
     // _mqttService?.publish('geofence/$stopId/alerts', alert.toJson());
   }
@@ -305,17 +312,17 @@ class TrackingService {
   /// Calculate distance between two points in meters (Haversine formula)
   static double calculateDistance(LatLng point1, LatLng point2) {
     const double earthRadius = 6371000; // meters
-    
+
     final lat1Rad = point1.latitude * pi / 180;
     final lat2Rad = point2.latitude * pi / 180;
     final deltaLat = (point2.latitude - point1.latitude) * pi / 180;
     final deltaLng = (point2.longitude - point1.longitude) * pi / 180;
-    
-    final a = sin(deltaLat / 2) * sin(deltaLat / 2) +
-              cos(lat1Rad) * cos(lat2Rad) *
-              sin(deltaLng / 2) * sin(deltaLng / 2);
+
+    final a =
+        sin(deltaLat / 2) * sin(deltaLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(deltaLng / 2) * sin(deltaLng / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    
+
     return earthRadius * c;
   }
 
@@ -332,18 +339,16 @@ class TrackingService {
     final lat2 = to.latitude * pi / 180;
     final lng1 = from.longitude * pi / 180;
     final lng2 = to.longitude * pi / 180;
-    
+
     final y = sin(lng2 - lng1) * cos(lat2);
-    final x = cos(lat1) * sin(lat2) - 
-              sin(lat1) * cos(lat2) * cos(lng2 - lng1);
-    
+    final x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lng2 - lng1);
+
     var bearing = atan2(y, x) * 180 / pi;
     bearing = (bearing + 360) % 360;
-    
+
     return bearing;
   }
 
-  /// Check if a point is within a geofence radius
   static bool isInGeofence(LatLng point, LatLng center, double radiusMeters) {
     return calculateDistance(point, center) <= radiusMeters;
   }

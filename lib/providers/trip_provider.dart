@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart' as api;
 import '../mqtt_client.dart';
@@ -28,6 +27,10 @@ class TripProvider extends ChangeNotifier {
 
   api.Trip? _activeTrip;
   api.Trip? get activeTrip => _activeTrip;
+
+  // Trip unique ID from start trip API - needed for pick/drop operations
+  String? _activeTripUniqueId;
+  String? get activeTripUniqueId => _activeTripUniqueId;
 
   // Role-based filtered trips
   List<api.Trip> get driverTrips =>
@@ -76,7 +79,7 @@ class TripProvider extends ChangeNotifier {
           break;
       }
     } catch (e) {
-      print('Failed to handle trip event: $e');
+      debugPrint('Failed to handle trip event: $e');
     }
   }
 
@@ -151,6 +154,8 @@ class TripProvider extends ChangeNotifier {
       );
 
       _activeTrip = trip;
+      _activeTripUniqueId =
+          trip.id; // Store the unique ID for pick/drop operations
       _trips.insert(0, trip);
 
       // Publish MQTT event (don't fail if MQTT is not connected)
@@ -308,7 +313,9 @@ class TripProvider extends ChangeNotifier {
       // Check if it's just an empty response error - if so, still consider it success
       if (e.message.toLowerCase().contains('empty') ||
           e.message.toLowerCase().contains('null')) {
-        print('⚠️ Server returned empty response, but trip was likely ended');
+        debugPrint(
+          '⚠️ Server returned empty response, but trip was likely ended',
+        );
         _activeTrip = null;
         apiSuccess = true;
         // Create a completed trip preserving original student data
@@ -335,7 +342,8 @@ class TripProvider extends ChangeNotifier {
     }
 
     // Update trip history with completed status (runs for both success and empty response cases)
-    if (driverId != null && endedTrip != null) {
+    // endedTrip is guaranteed to be non-null here (set in both success and catch blocks)
+    if (driverId != null) {
       try {
         final historyService = TripHistoryService();
         final history = await historyService.getTripHistory(driverId);
@@ -401,22 +409,22 @@ class TripProvider extends ChangeNotifier {
         'timestamp': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('⚠️ MQTT publish failed: $e');
+      debugPrint('⚠️ MQTT publish failed: $e');
     }
 
     // Show notification (wrap in try-catch in case of minimal trip object)
     try {
-      final pickedCount = endedTrip?.pickedCount ?? 0;
-      final totalStudents = endedTrip?.students.length ?? 0;
+      final pickedCount = endedTrip.pickedCount;
+      final totalStudents = endedTrip.students.length;
       await NotificationHelper.showTripCompleted(
         tripId: tripId,
-        routeName: endedTrip?.routeName ?? 'Trip',
+        routeName: endedTrip.routeName,
         totalStudents: totalStudents,
         pickedCount: pickedCount,
-        absentCount: endedTrip?.absentCount ?? 0,
+        absentCount: endedTrip.absentCount,
       );
     } catch (e) {
-      print('⚠️ Notification failed: $e');
+      debugPrint('⚠️ Notification failed: $e');
     }
 
     notifyListeners();
@@ -457,7 +465,18 @@ class TripProvider extends ChangeNotifier {
           (s) => s.id == studentId,
         );
         if (studentIndex != -1) {
-          // Update student status locally
+          // Create new StudentPickup with updated status (immutable)
+          final oldStudent = _trips[tripIndex].students[studentIndex];
+          _trips[tripIndex].students[studentIndex] = api.StudentPickup(
+            id: oldStudent.id,
+            name: oldStudent.name,
+            photo: oldStudent.photo,
+            status: status,
+            pickupTime: oldStudent.pickupTime,
+            dropoffTime: oldStudent.dropoffTime,
+            notes: oldStudent.notes,
+            parentPhone: oldStudent.parentPhone,
+          );
           notifyListeners();
         }
       }
@@ -496,13 +515,40 @@ class TripProvider extends ChangeNotifier {
       // Update local state
       final tripIndex = _trips.indexWhere((t) => t.id == tripId);
       if (tripIndex != -1) {
-        for (var i = 0; i < _trips[tripIndex].students.length; i++) {
-          if (_trips[tripIndex].students[i].status == 'pending') {
-            // No direct setter since it's likely final or needs re-creation,
-            // we will just reload the trip details if needed or
-            // simply notifyListeners() and let the screen handle its local state
+        // Update all pending students to picked
+        final updatedStudents = _trips[tripIndex].students.map((s) {
+          if (s.status == 'pending') {
+            return api.StudentPickup(
+              id: s.id,
+              name: s.name,
+              photo: s.photo,
+              status: 'picked',
+              pickupTime: DateTime.now(),
+              dropoffTime: s.dropoffTime,
+              notes: s.notes,
+              parentPhone: s.parentPhone,
+            );
           }
-        }
+          return s;
+        }).toList();
+
+        // Create updated trip with new students
+        _trips[tripIndex] = api.Trip(
+          id: _trips[tripIndex].id,
+          routeName: _trips[tripIndex].routeName,
+          routeId: _trips[tripIndex].routeId,
+          startTime: _trips[tripIndex].startTime,
+          endTime: _trips[tripIndex].endTime,
+          status: _trips[tripIndex].status,
+          vehicleId: _trips[tripIndex].vehicleId,
+          vehicleNumber: _trips[tripIndex].vehicleNumber,
+          students: updatedStudents,
+          stops: _trips[tripIndex].stops,
+          distance: _trips[tripIndex].distance,
+          fare: _trips[tripIndex].fare,
+          notes: _trips[tripIndex].notes,
+        );
+
         notifyListeners();
       }
 
@@ -524,6 +570,40 @@ class TripProvider extends ChangeNotifier {
       // Update local state
       final tripIndex = _trips.indexWhere((t) => t.id == tripId);
       if (tripIndex != -1) {
+        // Update all picked students to dropped
+        final updatedStudents = _trips[tripIndex].students.map((s) {
+          if (s.status == 'picked') {
+            return api.StudentPickup(
+              id: s.id,
+              name: s.name,
+              photo: s.photo,
+              status: 'dropped',
+              pickupTime: s.pickupTime,
+              dropoffTime: DateTime.now(),
+              notes: s.notes,
+              parentPhone: s.parentPhone,
+            );
+          }
+          return s;
+        }).toList();
+
+        // Create updated trip with new students
+        _trips[tripIndex] = api.Trip(
+          id: _trips[tripIndex].id,
+          routeName: _trips[tripIndex].routeName,
+          routeId: _trips[tripIndex].routeId,
+          startTime: _trips[tripIndex].startTime,
+          endTime: _trips[tripIndex].endTime,
+          status: _trips[tripIndex].status,
+          vehicleId: _trips[tripIndex].vehicleId,
+          vehicleNumber: _trips[tripIndex].vehicleNumber,
+          students: updatedStudents,
+          stops: _trips[tripIndex].stops,
+          distance: _trips[tripIndex].distance,
+          fare: _trips[tripIndex].fare,
+          notes: _trips[tripIndex].notes,
+        );
+
         notifyListeners();
       }
 
@@ -805,9 +885,8 @@ class TripProvider extends ChangeNotifier {
         longitude: longitude,
       );
 
-      if (_selectedMasterTrip?.id == masterTripId) {
-        _tripStudents.add(student);
-      }
+      // Add to local state unconditionally since UI fetches it immediately prior
+      _tripStudents.add(student);
 
       notifyListeners();
       return student;

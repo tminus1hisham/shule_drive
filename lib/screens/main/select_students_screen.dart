@@ -16,10 +16,9 @@ class SelectStudentsScreen extends StatefulWidget {
 }
 
 class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
-  int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _phoneSearchController = TextEditingController();
-  
+
   // Data
   List<api.Student> _allStudents = [];
   List<api.Student> _filteredStudents = [];
@@ -27,7 +26,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   List<api.MasterTrip> _existingTrips = [];
   api.MasterTrip? _selectedMasterTrip;
   List<api.TripStudent> _masterTripStudents = [];
-  
+
   // UI State
   bool _isLoading = false; // Start false to show UI immediately
   bool _isLoadingStudents = false;
@@ -36,7 +35,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   bool _showCreateForm = false;
   bool _isSearchingByPhone = false;
   bool _showPhoneSearch = true; // Default to phone search while loading
-  
+
   // Trip configuration from previous screen
   String? _routeId;
   String? _vehicleId;
@@ -57,19 +56,40 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     debugPrint('🚀 SelectStudentsScreen initState()');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('🚀 SelectStudentsScreen postFrameCallback');
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         setState(() {
           _routeId = args['routeId'] as String?;
           _vehicleId = args['vehicleId'] as String?;
           _attendant = args['attendant'] as String?;
+          _routeName = args['routeName'] as String?;
+          _selectedMasterTrip = args['masterTrip'] as api.MasterTrip?;
         });
-        debugPrint('📋 Trip Config: routeId=$_routeId, vehicleId=$_vehicleId, attendant=$_attendant');
+        debugPrint(
+          '📋 Trip Config: routeId=$_routeId, vehicleId=$_vehicleId, attendant=$_attendant',
+        );
+        debugPrint('📋 Master Trip: ${_selectedMasterTrip?.tripName}');
+
+        // If preloaded data has students, use them
+        final preloadedDataMap = args['preloadedData'] as Map<String, dynamic>?;
+        if (preloadedDataMap != null && preloadedDataMap['students'] != null) {
+          final studentsJson = preloadedDataMap['students'] as List<dynamic>;
+          _masterTripStudents = studentsJson
+              .map((s) => api.TripStudent.fromJson(s as Map<String, dynamic>))
+              .toList();
+          debugPrint('📋 Preloaded students: ${_masterTripStudents.length}');
+        }
+
+        // If we have a master trip but no students loaded yet, fetch them
+        if (_selectedMasterTrip != null && _masterTripStudents.isEmpty) {
+          _loadMasterTripStudents();
+        }
       }
       _loadData();
     });
     _searchController.addListener(_filterStudents);
-    
+
     // Listen to TripProvider changes to sync local state
     final tripProvider = context.read<TripProvider>();
     tripProvider.addListener(_onTripProviderChanged);
@@ -80,14 +100,14 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     // Remove TripProvider listener
     final tripProvider = context.read<TripProvider>();
     tripProvider.removeListener(_onTripProviderChanged);
-    
+
     _searchController.dispose();
     _phoneSearchController.dispose();
     _tripNameController.dispose();
     _tripTimeController.dispose();
     super.dispose();
   }
-  
+
   void _onTripProviderChanged() {
     final tripProvider = context.read<TripProvider>();
     // Only update if we're not currently loading and data changed
@@ -104,14 +124,13 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   Future<void> _loadData() async {
     // Don't block UI - start loading in background
     // setState(() => _isLoading = true);
-    
+
     final provider = context.read<AppProvider>();
-    final tripProvider = context.read<TripProvider>();
     final authProvider = context.read<AuthProvider>();
-    
+
     try {
       _schoolId = authProvider.currentUser?.schoolId;
-      
+
       // Get route details
       if (_routeId != null) {
         final route = provider.routes.firstWhere(
@@ -120,33 +139,35 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         );
         _routeName = route.name;
         _schoolName = route.schoolName;
-        
+
         if (kDebugMode) {
           print('🛣️ Selected route: $_routeName (ID: $_routeId)');
           print('🏫 School: $_schoolName (ID: $_schoolId)');
         }
       }
-      
+
       // Load existing master trips first (fast)
       await _loadExistingTrips();
-      
+
       // Load all students in background (slow)
-      _loadAllStudents().then((_) {
-        if (kDebugMode) {
-          print('✅ Students loaded in background');
-        }
-        // Switch to name search once students are loaded
-        if (mounted && _allStudents.isNotEmpty) {
-          setState(() {
-            _showPhoneSearch = false;
-          });
-        }
-      }, onError: (e) {
-        if (kDebugMode) {
-          print('❌ Error loading students: $e');
-        }
-      });
-      
+      _loadAllStudents().then(
+        (_) {
+          if (kDebugMode) {
+            print('✅ Students loaded in background');
+          }
+          // Switch to name search once students are loaded
+          if (mounted && _allStudents.isNotEmpty) {
+            setState(() {
+              _showPhoneSearch = false;
+            });
+          }
+        },
+        onError: (e) {
+          if (kDebugMode) {
+            print('❌ Error loading students: $e');
+          }
+        },
+      );
     } catch (e) {
       if (kDebugMode) {
         print('❌ Error loading data: $e');
@@ -160,7 +181,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       final studentService = api.StudentService();
       final guardianService = api.GuardianService();
       final busService = api.BusService();
-      
+
       // Get driver's companyOrgId from bus (same approach as debug button)
       String? companyOrgId;
       try {
@@ -176,7 +197,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       } catch (e) {
         debugPrint('❌ Failed to get bus: $e');
       }
-      
+
       if (companyOrgId == null || companyOrgId.isEmpty) {
         debugPrint('⚠️ No companyOrgId, falling back to getAllStudents');
         // Fallback: try getAllStudents (which might fail)
@@ -185,36 +206,42 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       } else {
         debugPrint('🔍 Fetching guardians for companyOrgId: $companyOrgId');
         // Get all guardians with same companyOrgId
-        final guardians = await guardianService.getAllGuardians(companyOrgId: companyOrgId);
+        final guardians = await guardianService.getAllGuardians(
+          companyOrgId: companyOrgId,
+        );
         debugPrint('👥 Found ${guardians.length} guardians');
-        
+
         // Collect unique phone numbers
         final uniquePhones = guardians
             .map((g) => g.bestPhoneNumber)
             .where((p) => p != null && p.isNotEmpty)
             .cast<String>()
             .toSet();
-        
+
         debugPrint('📞 Unique phone numbers: $uniquePhones');
-        
+
         if (uniquePhones.isEmpty) {
           debugPrint('⚠️ No phone numbers found!');
           _allStudents = [];
         } else {
-          debugPrint('🚀 Fetching students for ${uniquePhones.length} phones...');
+          debugPrint(
+            '🚀 Fetching students for ${uniquePhones.length} phones...',
+          );
           // Fetch all students in parallel
           _allStudents = await studentService.getStudentsByPhonesParallel(
             uniquePhones.toList(),
             useCache: true,
           );
-          debugPrint('✅ Parallel fetch returned ${_allStudents.length} students');
+          debugPrint(
+            '✅ Parallel fetch returned ${_allStudents.length} students',
+          );
         }
       }
-      
+
       _filteredStudents = _allStudents;
-      
+
       debugPrint('👨‍🎓 FINAL: Loaded ${_allStudents.length} students total');
-      
+
       // Notify UI to update only if still mounted
       if (mounted) {
         setState(() {});
@@ -222,7 +249,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     } catch (e, stackTrace) {
       debugPrint('❌❌❌ ERROR in _loadAllStudents: $e');
       debugPrint('Stack trace: $stackTrace');
-      
+
       // Only update state if still mounted
       if (mounted) {
         _allStudents = [];
@@ -237,23 +264,27 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.fetchMasterTrips();
-      
+
       // Filter trips for this route/school
       _existingTrips = tripProvider.masterTrips.where((trip) {
-        final matchesRoute = trip.route == _routeName || 
-                            trip.route.contains(_routeName ?? '');
-        final matchesSchool = trip.adminUserId == _schoolId ||
-                             trip.schoolname == _schoolName;
+        final matchesRoute =
+            trip.route == _routeName || trip.route.contains(_routeName ?? '');
+        final matchesSchool =
+            trip.adminUserId == _schoolId || trip.schoolname == _schoolName;
         return matchesRoute || matchesSchool;
       }).toList();
-      
+
       if (kDebugMode) {
-        print('🚌 Found ${_existingTrips.length} existing trips for this route');
+        print(
+          '🚌 Found ${_existingTrips.length} existing trips for this route',
+        );
         for (final trip in _existingTrips) {
-          print('   - ${trip.tripName} (${trip.route}) - Active: ${trip.isTripActive}');
+          print(
+            '   - ${trip.tripName} (${trip.route}) - Active: ${trip.isTripActive}',
+          );
         }
       }
-      
+
       // If there's an active trip, select it by default
       if (_existingTrips.isNotEmpty) {
         _selectedMasterTrip = _existingTrips.firstWhere(
@@ -272,9 +303,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   Future<void> _loadMasterTripStudents() async {
     if (_selectedMasterTrip == null) return;
-    
+
     setState(() => _isLoadingStudents = true);
-    
+
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.fetchMasterTripStudents(_selectedMasterTrip!.id);
@@ -282,9 +313,11 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         _masterTripStudents = tripProvider.tripStudents;
         _isLoadingStudents = false;
       });
-      
+
       if (kDebugMode) {
-        print('👨‍🎓 Loaded ${_masterTripStudents.length} students in master trip');
+        print(
+          '👨‍🎓 Loaded ${_masterTripStudents.length} students in master trip',
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -299,14 +332,14 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   void _filterStudents() {
     final query = _searchController.text.toLowerCase();
-    
+
     setState(() {
       if (query.isEmpty) {
         _filteredStudents = _allStudents;
       } else {
         _filteredStudents = _allStudents.where((student) {
           return student.name.toLowerCase().contains(query) ||
-                 student.className.toLowerCase().contains(query);
+              student.className.toLowerCase().contains(query);
         }).toList();
       }
     });
@@ -315,7 +348,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   /// Search students by phone number using the API endpoint
   Future<void> _searchStudentsByPhone() async {
     final phoneNumber = _phoneSearchController.text.trim();
-    
+
     if (phoneNumber.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -336,16 +369,16 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     }
 
     setState(() => _isSearchingByPhone = true);
-    
+
     try {
       final studentService = api.StudentService();
       final students = await studentService.getStudentsByPhone(normalizedPhone);
-      
+
       setState(() {
         _phoneSearchResults = students;
         _isSearchingByPhone = false;
       });
-      
+
       if (students.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -357,7 +390,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         }
       } else {
         if (kDebugMode) {
-          print('✅ Found ${students.length} students for phone: $normalizedPhone');
+          print(
+            '✅ Found ${students.length} students for phone: $normalizedPhone',
+          );
         }
       }
     } catch (e) {
@@ -392,9 +427,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     }
 
     try {
-      final tripService = api.TripService();
-      
-      await tripService.addStudentToMasterTrip(
+      final tripProvider = context.read<TripProvider>();
+
+      await tripProvider.addStudentToMasterTrip(
         masterTripId: _selectedMasterTrip!.id,
         fullname: student.name,
         studentRegNumber: student.id,
@@ -407,9 +442,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         schoolname: _schoolName ?? '',
       );
 
-      // Reload students
+      // Reload students is not strictly necessary anymore, TripProvider handles the optimistic update
       await _loadMasterTripStudents();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -435,16 +470,16 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   Future<void> _removeStudentFromMasterTrip(api.TripStudent student) async {
     try {
-      final tripService = api.TripService();
-      
-      await tripService.deleteStudentFromMasterTrip(
-        masterTripId: _selectedMasterTrip!.id,
+      final tripProvider = context.read<TripProvider>();
+
+      await tripProvider.deleteStudentFromMasterTrip(
         studentTripId: student.id,
+        masterTripId: _selectedMasterTrip!.id,
       );
 
-      // Reload students
+      // Reload students is not strictly necessary anymore, TripProvider handles optimistic update
       await _loadMasterTripStudents();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -477,7 +512,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       final tripService = api.TripService();
       final authProvider = context.read<AuthProvider>();
       final driverName = authProvider.userName ?? 'Unknown Driver';
-      
+
       final newTrip = await tripService.createMasterTrip(
         tripName: _tripNameController.text,
         tripTime: _tripTimeController.text,
@@ -490,12 +525,12 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
       // Reload trips
       await _loadExistingTrips();
-      
+
       setState(() {
         _selectedMasterTrip = newTrip;
         _showCreateForm = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -537,10 +572,12 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     try {
       final tripProvider = context.read<TripProvider>();
       final authProvider = context.read<AuthProvider>();
-      
+
       // Get student IDs from master trip
-      final studentIds = _masterTripStudents.map((s) => s.studentId.toString()).toList();
-      
+      final studentIds = _masterTripStudents
+          .map((s) => s.studentId.toString())
+          .toList();
+
       if (kDebugMode) {
         print('🚀 Starting trip...');
         print('   ├─ Route ID: $_routeId');
@@ -552,7 +589,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       // Get driver details
       final driverName = authProvider.userName ?? 'Unknown Driver';
       final driverPhone = authProvider.userPhone ?? '';
-      
+
       // Get bus number plate from app provider
       String numberPlate = _vehicleId!;
       final appProvider = context.read<AppProvider>();
@@ -562,7 +599,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           break;
         }
       }
-      
+
       // Call API to start trip with all required fields
       final trip = await tripProvider.startTrip(
         routeId: _routeId!,
@@ -581,26 +618,38 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         if (kDebugMode) {
           print('✅ Trip started successfully: ${trip.id}');
         }
-        
+
         // Merge original master trip students with API response
         // The API might return incomplete student data, so we preserve the original
         api.Trip mergedTrip = trip;
-        if (_masterTripStudents.isNotEmpty && 
-            (trip.students.isEmpty || trip.students.any((s) => s.name == 'Unknown Student' || s.name == 'string' || s.name == '0'))) {
+        if (_masterTripStudents.isNotEmpty &&
+            (trip.students.isEmpty ||
+                trip.students.any(
+                  (s) =>
+                      s.name == 'Unknown Student' ||
+                      s.name == 'string' ||
+                      s.name == '0',
+                ))) {
           if (kDebugMode) {
             print('🔄 Merging original student data with API response');
             print('   Original students: ${_masterTripStudents.length}');
           }
-          
+
           // Create StudentPickup list from master trip students
-          final originalStudents = _masterTripStudents.map((s) => api.StudentPickup(
-            id: s.studentId.toString(),
-            name: s.fullname.isNotEmpty ? s.fullname : 'Unknown Student',
-            photo: s.profileImage.isNotEmpty ? s.profileImage : null,
-            status: 'pending',
-            parentPhone: s.guardianPhoneNumber.isNotEmpty ? s.guardianPhoneNumber : null,
-          )).toList();
-          
+          final originalStudents = _masterTripStudents
+              .map(
+                (s) => api.StudentPickup(
+                  id: s.studentId.toString(),
+                  name: s.fullname.isNotEmpty ? s.fullname : 'Unknown Student',
+                  photo: s.profileImage.isNotEmpty ? s.profileImage : null,
+                  status: 'pending',
+                  parentPhone: s.guardianPhoneNumber.isNotEmpty
+                      ? s.guardianPhoneNumber
+                      : null,
+                ),
+              )
+              .toList();
+
           mergedTrip = api.Trip(
             id: trip.id,
             routeName: trip.routeName,
@@ -617,7 +666,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             notes: trip.notes,
           );
         }
-        
+
         // Save trip to local history
         if (authProvider.isDriver) {
           await TripHistoryService().saveTripToHistory(
@@ -632,7 +681,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         if (mergedTrip != trip) {
           tripProvider.updateActiveTrip(mergedTrip);
         }
-        
+
         // Navigate to active trip screen
         if (mounted) {
           Navigator.pushReplacementNamed(
@@ -678,7 +727,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    
+
     // Watch TripProvider to rebuild when students change
     // ignore: unused_local_variable
     final tripProvider = context.watch<TripProvider>();
@@ -699,106 +748,105 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   children: [
                     // Route Info Header
                     _buildRouteHeader(provider),
-                          
-                          const SizedBox(height: 20),
-                          
-                          // Existing Master Trips Section
-                          if (_existingTrips.isNotEmpty) ...[
-                            _buildSectionTitle('Existing Trips', provider),
-                            const SizedBox(height: 8),
-                            _buildExistingTripsList(provider),
-                            const SizedBox(height: 20),
-                          ],
-                          
-                          // Create New Trip Button
-                          if (!_showCreateForm)
-                            ElevatedButton.icon(
-                              onPressed: () => setState(() => _showCreateForm = true),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Create New Master Trip'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6B9B5B),
-                                foregroundColor: Colors.white,
-                                minimumSize: const Size(double.infinity, 48),
-                              ),
-                            ),
-                          
-                          // Create Trip Form
-                          if (_showCreateForm) ...[
-                            _buildCreateTripForm(provider),
-                            const SizedBox(height: 20),
-                          ],
-                          
-                          // Space between create button/form and students section
-                          if ((!_showCreateForm) || _selectedMasterTrip != null)
-                            const SizedBox(height: 40),
-                          
-                          // Current Trip Students Section
-                          if (_selectedMasterTrip != null) ...[
-                            _buildSectionTitle(
-                              'Students in ${_selectedMasterTrip!.tripName}',
-                              provider,
-                            ),
-                            const SizedBox(height: 8),
-                            _buildMasterTripStudentsList(provider),
-                            const SizedBox(height: 20),
-                          ],
-                          
-                          // Available Students Section
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildSectionTitle('Available Students', provider),
-                              if (_isLoadingStudents)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: provider.textMutedColor,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Loading...',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: provider.textMutedColor,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                Text(
-                                  '${_filteredStudents.length} students',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: provider.textMutedColor,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          
-                          // Search Bar
-                          _buildSearchBar(provider),
-                          const SizedBox(height: 12),
-                          
-                          // Available Students List
-                          _buildAvailableStudentsList(provider),
-                        ],
+
+                    const SizedBox(height: 20),
+
+                    // Existing Master Trips Section
+                    if (_existingTrips.isNotEmpty) ...[
+                      _buildSectionTitle('Existing Trips', provider),
+                      const SizedBox(height: 8),
+                      _buildExistingTripsList(provider),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Create New Trip Button
+                    if (!_showCreateForm)
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => _showCreateForm = true),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create New Master Trip'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6B9B5B),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
                       ),
+
+                    // Create Trip Form
+                    if (_showCreateForm) ...[
+                      _buildCreateTripForm(provider),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Space between create button/form and students section
+                    if ((!_showCreateForm) || _selectedMasterTrip != null)
+                      const SizedBox(height: 40),
+
+                    // Current Trip Students Section
+                    if (_selectedMasterTrip != null) ...[
+                      _buildSectionTitle(
+                        'Students in ${_selectedMasterTrip!.tripName}',
+                        provider,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMasterTripStudentsList(provider),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Available Students Section
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildSectionTitle('Available Students', provider),
+                        if (_isLoadingStudents)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: provider.textMutedColor,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Loading...',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: provider.textMutedColor,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          Text(
+                            '${_filteredStudents.length} students',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: provider.textMutedColor,
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 8),
+
+                    // Search Bar
+                    _buildSearchBar(provider),
+                    const SizedBox(height: 12),
+
+                    // Available Students List
+                    _buildAvailableStudentsList(provider),
+                  ],
+                ),
+              ),
+            ),
           ),
 
           // Bottom Start Trip Button
-          if (_selectedMasterTrip != null)
-            _buildBottomButton(provider),
+          if (_selectedMasterTrip != null) _buildBottomButton(provider),
         ],
       ),
     );
@@ -834,10 +882,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           const SizedBox(height: 8),
           Text(
             'School: ${_schoolName ?? 'Unknown'}',
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
           ),
           if (_selectedMasterTrip != null)
             Padding(
@@ -889,7 +934,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                color: isSelected ? const Color(0xFF6B9B5B) : Colors.grey.withAlpha(100),
+                color: isSelected
+                    ? const Color(0xFF6B9B5B)
+                    : Colors.grey.withAlpha(100),
               ),
             ),
             leading: Icon(
@@ -905,10 +952,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
             ),
             subtitle: Text(
               '${trip.tripType} • ${trip.tripTime} • ${trip.route}',
-              style: TextStyle(
-                fontSize: 12,
-                color: provider.textMutedColor,
-              ),
+              style: TextStyle(fontSize: 12, color: provider.textMutedColor),
             ),
             trailing: isSelected
                 ? const Icon(Icons.check, color: Color(0xFF6B9B5B))
@@ -966,26 +1010,30 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _tripType,
+            initialValue: _tripType,
             decoration: const InputDecoration(
               labelText: 'Trip Type',
               border: OutlineInputBorder(),
             ),
-            items: ['Morning', 'Afternoon', 'Evening', 'Special']
-                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                .toList(),
+            items: [
+              'Morning',
+              'Afternoon',
+              'Evening',
+              'Special',
+            ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
             onChanged: (v) => setState(() => _tripType = v!),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _tripDirection,
+            initialValue: _tripDirection,
             decoration: const InputDecoration(
               labelText: 'Direction',
               border: OutlineInputBorder(),
             ),
-            items: ['Pickup', 'Dropoff']
-                .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                .toList(),
+            items: [
+              'Pickup',
+              'Dropoff',
+            ].map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
             onChanged: (v) => setState(() => _tripDirection = v!),
           ),
           const SizedBox(height: 16),
@@ -1038,17 +1086,14 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               const SizedBox(height: 12),
               Text(
                 'Loading students...',
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: provider.textMutedColor, fontSize: 14),
               ),
             ],
           ),
         ),
       );
     }
-    
+
     if (_masterTripStudents.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -1060,9 +1105,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           child: Text(
             'No students in this trip yet.\nAdd students from below.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(color: provider.textMutedColor),
           ),
         ),
       );
@@ -1167,7 +1210,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        
+
         // Show appropriate search field
         if (_showPhoneSearch)
           _buildPhoneSearchBar(provider)
@@ -1186,10 +1229,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   color: provider.textMutedColor,
                   fontSize: 14,
                 ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: provider.textMutedColor,
-                ),
+                prefixIcon: Icon(Icons.search, color: provider.textMutedColor),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1221,10 +1261,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   color: provider.textMutedColor,
                   fontSize: 14,
                 ),
-                prefixIcon: Icon(
-                  Icons.phone,
-                  color: provider.textMutedColor,
-                ),
+                prefixIcon: Icon(Icons.phone, color: provider.textMutedColor),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1256,9 +1293,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   Widget _buildPhoneSearchResultsList(AppProvider provider) {
     // Filter out students already in the master trip
-    final availableStudents = _phoneSearchResults.where(
-      (s) => !_isStudentInMasterTrip(s.id),
-    ).toList();
+    final availableStudents = _phoneSearchResults
+        .where((s) => !_isStudentInMasterTrip(s.id))
+        .toList();
 
     if (availableStudents.isEmpty) {
       return Center(
@@ -1267,18 +1304,12 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.check_circle,
-                size: 48,
-                color: Colors.green,
-              ),
+              Icon(Icons.check_circle, size: 48, color: Colors.green),
               const SizedBox(height: 16),
               Text(
                 'All students from this guardian\nare already in the trip',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                ),
+                style: TextStyle(color: provider.textMutedColor),
               ),
             ],
           ),
@@ -1294,11 +1325,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
             children: [
-              Icon(
-                Icons.search,
-                size: 16,
-                color: AppProvider.primaryGreen,
-              ),
+              Icon(Icons.search, size: 16, color: AppProvider.primaryGreen),
               const SizedBox(width: 8),
               Text(
                 'Found ${availableStudents.length} student(s) from phone: ${_phoneSearchController.text}',
@@ -1346,7 +1373,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                           color: provider.textMutedColor,
                         ),
                       ),
-                      if (student.guardianPhone != null && student.guardianPhone!.isNotEmpty)
+                      if (student.guardianPhone != null &&
+                          student.guardianPhone!.isNotEmpty)
                         Text(
                           'Guardian: ${student.guardianPhone}',
                           style: TextStyle(
@@ -1364,13 +1392,16 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF9800),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ],
             ),
           );
-        }).toList(),
+        }),
         // Clear results button
         const SizedBox(height: 12),
         Center(
@@ -1390,24 +1421,26 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Widget _buildAvailableStudentsList(AppProvider provider) {
-    debugPrint('🎨 _buildAvailableStudentsList: _isLoading=$_isLoading, _filteredStudents=${_filteredStudents.length}, _showPhoneSearch=$_showPhoneSearch');
-    
+    debugPrint(
+      '🎨 _buildAvailableStudentsList: _isLoading=$_isLoading, _filteredStudents=${_filteredStudents.length}, _showPhoneSearch=$_showPhoneSearch',
+    );
+
     // Show phone search results if available
     if (_showPhoneSearch && _phoneSearchResults.isNotEmpty) {
       return _buildPhoneSearchResultsList(provider);
     }
 
     // Show phone search empty state
-    if (_showPhoneSearch && _phoneSearchController.text.isNotEmpty && !_isSearchingByPhone) {
+    if (_showPhoneSearch &&
+        _phoneSearchController.text.isNotEmpty &&
+        !_isSearchingByPhone) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Text(
             'No students found for this phone number.\nTry searching with a different number.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(color: provider.textMutedColor),
           ),
         ),
       );
@@ -1430,9 +1463,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               Text(
                 'Enter a guardian phone number\nto search for students',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                ),
+                style: TextStyle(color: provider.textMutedColor),
               ),
             ],
           ),
@@ -1448,23 +1479,19 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(
-                color: AppProvider.primaryGreen,
-              ),
+              CircularProgressIndicator(color: AppProvider.primaryGreen),
               const SizedBox(height: 16),
               Text(
                 'Loading students...\nYou can search by phone meanwhile',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                ),
+                style: TextStyle(color: provider.textMutedColor),
               ),
             ],
           ),
         ),
       );
     }
-    
+
     if (_filteredStudents.isEmpty) {
       return Center(
         child: Padding(
@@ -1472,27 +1499,18 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.search_off,
-                size: 48,
-                color: provider.textMutedColor,
-              ),
+              Icon(Icons.search_off, size: 48, color: provider.textMutedColor),
               const SizedBox(height: 16),
               Text(
                 'No students found',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                ),
+                style: TextStyle(color: provider.textMutedColor),
               ),
               const SizedBox(height: 8),
               Text(
                 'Try searching by phone number instead',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: provider.textMutedColor,
-                ),
+                style: TextStyle(fontSize: 12, color: provider.textMutedColor),
               ),
             ],
           ),
@@ -1501,9 +1519,9 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     }
 
     // Filter out students already in the master trip
-    final availableStudents = _filteredStudents.where(
-      (s) => !_isStudentInMasterTrip(s.id),
-    ).toList();
+    final availableStudents = _filteredStudents
+        .where((s) => !_isStudentInMasterTrip(s.id))
+        .toList();
 
     if (availableStudents.isEmpty) {
       return Center(
@@ -1511,9 +1529,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
           padding: const EdgeInsets.all(32),
           child: Text(
             'All students are already in this trip',
-            style: TextStyle(
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(color: provider.textMutedColor),
           ),
         ),
       );
@@ -1560,7 +1576,10 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF9800),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
               ),
             ],
@@ -1629,18 +1648,14 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         radius: 24,
         backgroundImage: NetworkImage(photoUrl),
         backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
-        onBackgroundImageError: (_, __) {},
+        onBackgroundImageError: (e, s) {},
       );
     }
 
     return CircleAvatar(
       radius: 24,
       backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
-      child: const Icon(
-        Icons.person,
-        color: Color(0xFF6B9B5B),
-        size: 24,
-      ),
+      child: const Icon(Icons.person, color: Color(0xFF6B9B5B), size: 24),
     );
   }
 }

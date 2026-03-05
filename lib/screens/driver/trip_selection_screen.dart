@@ -21,16 +21,16 @@ class TripSelectionScreen extends StatefulWidget {
 class _TripSelectionScreenState extends State<TripSelectionScreen>
     with SingleTickerProviderStateMixin {
   final TripService _tripService = TripService();
-  
+
   bool _isLoading = true;
   String? _error;
   List<MasterTrip> _masterTrips = [];
   MasterTrip? _selectedTrip;
-  
+
   // Pre-loaded trip data for instant navigation
   PreloadedTripData? _preloadedData;
   bool _isPreloading = false;
-  
+
   late AnimationController _animationController;
 
   @override
@@ -74,7 +74,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
         onRefresh: (freshTrips) {
           // Background refresh callback - update UI with fresh data
           if (mounted && freshTrips.isNotEmpty) {
-            debugPrint('🔄 TripSelection: Background refresh with ${freshTrips.length} trips');
+            debugPrint(
+              '🔄 TripSelection: Background refresh with ${freshTrips.length} trips',
+            );
             setState(() {
               _masterTrips = freshTrips;
             });
@@ -90,15 +92,22 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           }
         },
       );
-      
-      debugPrint('🚌 TripSelection: Loaded ${trips.length} trips (from cache or API)');
-      
+
+      debugPrint(
+        '🚌 TripSelection: Loaded ${trips.length} trips (from cache or API)',
+      );
+
       if (mounted) {
         setState(() {
           _masterTrips = trips;
           _isLoading = false;
         });
         _animationController.forward();
+
+        // Auto-select and advance if there's only 1 trip
+        if (trips.length == 1) {
+          _onTripSelected(trips.first);
+        }
       }
     } catch (e, stackTrace) {
       debugPrint('❌ TripSelection: Error loading trips: $e');
@@ -117,26 +126,30 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     setState(() {
       _selectedTrip = trip;
     });
-    
-    // Pre-load trip data in background for instant navigation
-    _preloadTripData(trip);
+
+    // Pre-load trip data in background and auto-advance
+    _preloadTripData(trip).then((_) {
+      if (mounted) {
+        _onContinue();
+      }
+    });
   }
-  
+
   /// Pre-load all trip data in background
   Future<void> _preloadTripData(MasterTrip trip) async {
     if (_isPreloading) return;
-    
+
     setState(() {
       _isPreloading = true;
     });
-    
+
     try {
       debugPrint('🚀 Pre-loading trip data for: ${trip.tripName}');
-      
+
       final tripData = await _tripService.fetchCompleteTripData(
         masterTrip: trip,
       );
-      
+
       if (mounted) {
         setState(() {
           _preloadedData = PreloadedTripData(
@@ -147,10 +160,12 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           );
           _isPreloading = false;
         });
-        
+
         debugPrint('✅ Trip data pre-loaded:');
         debugPrint('   📊 Students: ${_preloadedData!.students.length}');
-        debugPrint('   🚗 Vehicle: ${_preloadedData!.vehicle?.registrationNumber ?? 'Not selected'}');
+        debugPrint(
+          '   🚗 Vehicle: ${_preloadedData!.vehicle?.registrationNumber ?? 'Not selected'}',
+        );
       }
     } catch (e) {
       debugPrint('⚠️ Failed to pre-load trip data: $e');
@@ -165,9 +180,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
 
   void _onContinue() {
     if (_selectedTrip == null) return;
-    
+
     HapticFeedback.mediumImpact();
-    
+
     // Navigate to vehicle selection with pre-loaded data (as Map for serialization)
     Navigator.pushNamed(
       context,
@@ -197,18 +212,18 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           children: [
             // Header
             _buildHeader(isDarkMode),
-            
+
             // Content
             Expanded(
               child: _isLoading
                   ? _buildLoadingState(isDarkMode)
                   : _error != null
-                      ? _buildErrorState(isDarkMode)
-                      : _masterTrips.isEmpty
-                          ? _buildEmptyState(isDarkMode)
-                          : _buildTripsList(isDarkMode),
+                  ? _buildErrorState(isDarkMode)
+                  : _masterTrips.isEmpty
+                  ? _buildEmptyState(isDarkMode)
+                  : _buildTripsList(isDarkMode),
             ),
-            
+
             // Bottom button
             if (!_isLoading && _error == null && _masterTrips.isNotEmpty)
               _buildBottomButton(isDarkMode),
@@ -293,7 +308,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+              color: isDarkMode
+                  ? const Color(0xFF2C2C2C)
+                  : const Color(0xFFE5E5EA),
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -306,7 +323,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   width: 150,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFE5E5EA),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -315,7 +334,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   width: 100,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+                    color: isDarkMode
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFE5E5EA),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -334,11 +355,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red.shade400,
-            ),
+            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
             const SizedBox(height: 16),
             Text(
               _error!,
@@ -356,7 +373,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6B9B5B),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -383,8 +403,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: isDarkMode 
-                    ? Colors.white.withOpacity(0.05) 
+                color: isDarkMode
+                    ? Colors.white.withOpacity(0.05)
                     : const Color(0xFF6B9B5B).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
@@ -420,7 +440,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6B9B5B),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -443,33 +466,42 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
         itemBuilder: (context, index) {
           final trip = _masterTrips[index];
           final isSelected = _selectedTrip?.id == trip.id;
-          
+
           final isPreloadingThisTrip = isSelected && _isPreloading;
-          
+
           return AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
               final delay = index * 0.1;
-              final value = (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
-              
+              final value =
+                  (_animationController.value - delay).clamp(0.0, 1.0) /
+                  (1 - delay);
+
               return Transform.translate(
                 offset: Offset(0, 20 * (1 - value)),
-                child: Opacity(
-                  opacity: value,
-                  child: child,
-                ),
+                child: Opacity(opacity: value, child: child),
               );
             },
-            child: _buildTripCard(trip, isSelected, isPreloadingThisTrip, isDarkMode),
+            child: _buildTripCard(
+              trip,
+              isSelected,
+              isPreloadingThisTrip,
+              isDarkMode,
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _buildTripCard(MasterTrip trip, bool isSelected, bool isPreloading, bool isDarkMode) {
+  Widget _buildTripCard(
+    MasterTrip trip,
+    bool isSelected,
+    bool isPreloading,
+    bool isDarkMode,
+  ) {
     final dateFormat = DateFormat('EEE, MMM d');
-    
+
     return GestureDetector(
       onTap: () => _onTripSelected(trip),
       child: Container(
@@ -481,8 +513,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             color: isSelected
                 ? const Color(0xFF6B9B5B)
                 : isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : const Color(0xFFE5E5EA),
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFE5E5EA),
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
@@ -508,36 +540,38 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   color: isSelected
                       ? const Color(0xFF6B9B5B)
                       : isDarkMode
-                          ? const Color(0xFF2C2C2C)
-                          : const Color(0xFFE5E5EA),
+                      ? const Color(0xFF2C2C2C)
+                      : const Color(0xFFE5E5EA),
                   border: Border.all(
                     color: isSelected
                         ? const Color(0xFF6B9B5B)
                         : isDarkMode
-                            ? const Color(0xFF3A3A3C)
-                            : const Color(0xFFD1D1D6),
+                        ? const Color(0xFF3A3A3C)
+                        : const Color(0xFFD1D1D6),
                     width: 2,
                   ),
                 ),
                 child: isSelected
                     ? isPreloading
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 16,
-                          )
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            )
                     : null,
               ),
               const SizedBox(width: 16),
-              
+
               // Trip icon
               Container(
                 width: 48,
@@ -553,7 +587,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Trip details
               Expanded(
                 child: Column(
@@ -564,7 +598,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                        color: isDarkMode
+                            ? Colors.white
+                            : const Color(0xFF1A1A1A),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -572,7 +608,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                       trip.route,
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                        color: isDarkMode
+                            ? Colors.white60
+                            : const Color(0xFF666666),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -581,47 +619,60 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                         Icon(
                           Icons.access_time,
                           size: 14,
-                          color: isDarkMode ? Colors.white.withOpacity(0.4) : const Color(0xFF999999),
+                          color: isDarkMode
+                              ? Colors.white.withOpacity(0.4)
+                              : const Color(0xFF999999),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           trip.tripTime,
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                            color: isDarkMode
+                                ? Colors.white60
+                                : const Color(0xFF666666),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Icon(
                           Icons.calendar_today,
                           size: 14,
-                          color: isDarkMode ? Colors.white.withOpacity(0.4) : const Color(0xFF999999),
+                          color: isDarkMode
+                              ? Colors.white.withOpacity(0.4)
+                              : const Color(0xFF999999),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           dateFormat.format(trip.createdAt),
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                            color: isDarkMode
+                                ? Colors.white60
+                                : const Color(0xFF666666),
                           ),
                         ),
                       ],
                     ),
-                    if (trip.numberPlate != null && trip.numberPlate!.isNotEmpty) ...[
+                    if (trip.numberPlate != null &&
+                        trip.numberPlate!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           Icon(
                             Icons.confirmation_number,
                             size: 14,
-                            color: isDarkMode ? Colors.white.withOpacity(0.4) : const Color(0xFF999999),
+                            color: isDarkMode
+                                ? Colors.white.withOpacity(0.4)
+                                : const Color(0xFF999999),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             trip.numberPlate!,
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                              color: isDarkMode
+                                  ? Colors.white60
+                                  : const Color(0xFF666666),
                             ),
                           ),
                         ],
@@ -639,14 +690,16 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
 
   Widget _buildBottomButton(bool isDarkMode) {
     final canContinue = _selectedTrip != null;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+            color: isDarkMode
+                ? const Color(0xFF2C2C2C)
+                : const Color(0xFFE5E5EA),
           ),
         ),
       ),
@@ -662,11 +715,11 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6B9B5B),
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: isDarkMode 
-                      ? const Color(0xFF2C2C2C) 
+                  disabledBackgroundColor: isDarkMode
+                      ? const Color(0xFF2C2C2C)
                       : const Color(0xFFE5E5EA),
-                  disabledForegroundColor: isDarkMode 
-                      ? Colors.white30 
+                  disabledForegroundColor: isDarkMode
+                      ? Colors.white30
                       : const Color(0xFF999999),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -675,10 +728,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 ),
                 child: const Text(
                   'Continue',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),

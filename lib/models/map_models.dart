@@ -1,4 +1,4 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 
 /// Bus Location Model - Real-time position updates
 class BusLocation {
@@ -311,7 +311,7 @@ class RoutePath {
   /// Decode Google polyline string to list of LatLng
   static List<LatLng> _decodePolyline(String encoded) {
     if (encoded.isEmpty) return [];
-    
+
     List<LatLng> points = [];
     int index = 0;
     int len = encoded.length;
@@ -322,38 +322,38 @@ class RoutePath {
       int b;
       int shift = 0;
       int result = 0;
-      
+
       do {
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;
       } while (b >= 0x20);
-      
+
       int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
       lat += dlat;
 
       shift = 0;
       result = 0;
-      
+
       do {
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;
       } while (b >= 0x20);
-      
+
       int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
       lng += dlng;
 
       points.add(LatLng(lat / 1E5, lng / 1E5));
     }
-    
+
     return points;
   }
 
   /// Encode list of LatLng to Google polyline string
   static String _encodePolyline(List<LatLng> points) {
     if (points.isEmpty) return '';
-    
+
     StringBuffer result = StringBuffer();
     int prevLat = 0;
     int prevLng = 0;
@@ -500,12 +500,7 @@ enum GeofenceType {
 }
 
 /// Map View State
-enum MapViewState {
-  loading,
-  ready,
-  error,
-  noPermission,
-}
+enum MapViewState { loading, ready, error, noPermission }
 
 /// Trip Tracking Info
 class TripTrackingInfo {

@@ -601,8 +601,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       print('  userPhone: ${authProvider.userPhone}');
     }
 
-    // Only guardians use the active trip API
-    // Drivers manage trips through StartTripScreen, not dashboard
+    // Both guardians and drivers can fetch active trips
     if (authProvider.isGuardian) {
       final hasPhone =
           authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
@@ -611,6 +610,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           guardianPhone: authProvider.userPhone,
         );
       }
+    } else if (authProvider.isDriver) {
+      await tripProvider.fetchActiveTrip();
     }
 
     // For drivers: start duration timer if active trip, load next scheduled trip
@@ -684,7 +685,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       print('  userPhone: ${authProvider.userPhone}');
     }
 
-    // Only guardians use the active trip API
+    // Fetch active trips for both
     if (authProvider.isGuardian) {
       final hasPhone =
           authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
@@ -693,8 +694,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           guardianPhone: authProvider.userPhone,
         );
       }
+    } else if (authProvider.isDriver) {
+      await tripProvider.fetchActiveTrip();
     }
-    // For drivers, skip active trip fetch
   }
 
   @override
@@ -1354,8 +1356,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () =>
-                            Navigator.pushNamed(context, '/students-list'),
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          '/students-list',
+                          arguments: {'tripId': tripProvider.activeTrip?.id},
+                        ),
                         icon: Icon(
                           Icons.people_outline,
                           size: 20,
