@@ -1,3 +1,5 @@
+import '../services/app_config.dart';
+
 // API Endpoints - All API routes for ShuleDrive
 // Organized by feature/category for easy maintenance
 
@@ -8,7 +10,7 @@ class Endpoints {
   // BASE URL
   // ==========================================================================
   // Note: Endpoints already include '/api' prefix
-  static const String baseUrl = 'https://staging-api.shuledrive.com';
+  static String get baseUrl => appConfig.apiBaseUrl;
   static const String devBaseUrl = 'http://localhost:8000';
 
   // ==========================================================================
@@ -18,26 +20,22 @@ class Endpoints {
   static const String login = '/api/auth/login';
   static const String enableTwoFactor = '/api/auth/enable/two/factor';
   static const String verifyTwoFactor = '/api/auth/verify/two/factor';
-  static const String verifyOtp =
-      '/api/auth/verify-otp'; // Legacy OTP verification
+  static const String verifyOtp = verifyTwoFactor;
   static const String refreshToken = '/api/auth/refresh/token';
   static const String confirmPhoneNumber = '/api/auth/confirm/phonenumber';
   static const String confirmEmail = '/api/auth/confirm/email';
   static const String forgotPassword = '/api/auth/forgot/password';
-  static const String verifyResetOtp = '/api/auth/verify/reset/otp';
   static const String resetPassword = '/api/auth/reset/password';
   static const String changePassword = '/api/auth/change/password';
   static const String updateProfilePicture = '/api/auth/update/profile/picture';
-  static const String logout = '/api/auth/logout'; // Logout endpoint
+  static const String logout = '/api/auth/logout'; // Legacy, not in api.md
   static String deleteAccount(String id) => '/api/auth/delete/$id';
 
   // ==========================================================================
   // USER / PROFILE ENDPOINTS
   // ==========================================================================
-  static const String userProfile = '/api/user/profile';
-  static const String updateProfile = '/api/user/profile';
-  static const String uploadAvatar = '/api/user/avatar';
-  static const String deleteAccountUser = '/api/user/account';
+  static const String userProfile = '/api/auth/get/account';
+  static const String deleteAccountUser = '/api/auth/delete';
 
   // ==========================================================================
   // BUS ENDPOINTS
@@ -56,7 +54,6 @@ class Endpoints {
   // CHATS ENDPOINTS
   // ==========================================================================
   static const String getChats = '/api/chats/get';
-  static const String createChat = '/api/chats/create';
   static const String getChatContacts = '/api/chats/get/contacts';
 
   // ==========================================================================
@@ -145,40 +142,28 @@ class Endpoints {
   // ==========================================================================
   // PAYMENTS ENDPOINTS
   // ==========================================================================
-  static const String payments = '/api/payments';
-  static String paymentDetails(String id) => '/api/payments/$id';
-  static const String makePayment = '/api/payments/make';
-  static const String paymentMethods = '/api/payments/methods';
-  static String paymentReceipt(String paymentId) =>
-      '/api/payments/$paymentId/receipt';
-  static String refundPayment(String paymentId) =>
-      '/api/payments/$paymentId/refund';
-  static const String paymentHistory = '/api/payments/history';
+  static const String payments = '/api/payment/get';
+  static const String makePayment = '/api/payment/create/payment/request';
+  static const String addPayment = '/api/payment/add/payment';
+  static const String paymentStudents = '/api/payment/get/students';
+  static const String paymentExtensions = '/api/payment/get/extensions';
+  static const String extendSubscription = '/api/payment/extend/subscription';
 
   // ==========================================================================
   // PAYMENT PLANS ENDPOINTS
   // ==========================================================================
-  static const String paymentPlans = '/api/payment-plans';
-  static String paymentPlanDetails(String id) => '/api/payment-plans/$id';
-  static String subscribeToPlan(String planId) =>
-      '/api/payment-plans/$planId/subscribe';
-  static String cancelSubscription(String subscriptionId) =>
-      '/api/payment-plans/subscriptions/$subscriptionId/cancel';
-  static const String currentSubscription =
-      '/api/payment-plans/subscriptions/current';
+  static const String paymentPlans = '/api/payment-plans/get';
+  static const String createPaymentPlan = '/api/payment-plans/create';
+  static const String updatePaymentPlan = '/api/payment-plans/update';
+  static String deletePaymentPlan(String id) => '/api/payment-plans/delete/$id';
 
   // ==========================================================================
   // REPORTS ENDPOINTS
   // ==========================================================================
-  static const String reports = '/api/reports';
-  static String reportDetails(String id) => '/api/reports/$id';
-  static const String generateReport = '/api/reports/generate';
-  static String downloadReport(String reportId) =>
-      '/api/reports/$reportId/download';
-  static const String tripReports = '/api/reports/trips';
-  static const String paymentReports = '/api/reports/payments';
-  static const String attendanceReports = '/api/reports/attendance';
-  static const String driverPerformanceReports = '/api/reports/drivers';
+  // api.md exposes a single Reports endpoint: the trips taken on a unique trip.
+  // The trip identifier is passed as a `tripUniqueIdentity` query parameter.
+  static const String getTripsFromUniqueTripReport =
+      '/api/attendants/get/unique/trips/from/trip';
 
   // ==========================================================================
   // ROLES & PERMISSIONS ENDPOINTS
@@ -222,23 +207,16 @@ class Endpoints {
   // ==========================================================================
   // STUDENTS ENDPOINTS
   // ==========================================================================
-  static const String students = '/api/students';
-  static String studentDetails(String id) => '/api/students/$id';
-  static String updateStudent(String id) => '/api/students/$id';
-  static String deleteStudent(String id) => '/api/students/$id';
-  static String studentAttendance(String studentId) =>
-      '/api/students/$studentId/attendance';
-  static String studentTrips(String studentId) =>
-      '/api/students/$studentId/trips';
-  static String studentPickupLocation(String studentId) =>
-      '/api/students/$studentId/pickup-location';
+  static const String students = '/api/guardians/get/students';
+  static const String updateStudent = '/api/guardians/student/update';
+  static String deleteStudent(String id) => '/api/guardians/student/delete/$id';
 
   // ==========================================================================
   // TRIPS ENDPOINTS
   // ==========================================================================
   static const String getAllMasterTrips = '/api/trips/get/all/master/trips';
-  static const String getMasterTripsByDriver =
-      '/api/trips/get/master/trips/by/driver';
+  // Note: api.md has no "master trips by driver" endpoint. Trips are fetched
+  // via getAllMasterTrips and filtered client-side by driver id (createdBy).
   static const String createMasterTrip = '/api/trips/master/create';
   static const String addStudentToMasterTrip =
       '/api/trips/add/student/to/master';
@@ -262,9 +240,6 @@ class Endpoints {
       '/api/trips/get/unique/trips/from/trip';
   static const String studentNotPicked = '/api/trips/student/not/picked';
   static const String createTripRating = '/api/trips/create/rating';
-  static const String notifyGuardiansTripStarted =
-      '/api/trips/notify/guardians/trip-started';
-  static const String notifyGuardiansEta = '/api/trips/notify/guardians/eta';
 
   // ==========================================================================
   // UTILITIES / HELPER METHODS

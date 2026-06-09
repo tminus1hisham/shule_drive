@@ -1421,11 +1421,8 @@ class _StartTripScreenState extends State<StartTripScreen>
     // Pass preloaded students which include location data
     Navigator.pushNamed(
       context,
-      '/driver-map',
-      arguments: {
-        'tripId': trip.id,
-        'preloadedData': _preloadedData?.toJson(),
-      },
+      '/osm-tracking',
+      arguments: {'tripId': trip.id, 'preloadedData': _preloadedData?.toJson()},
     );
   }
 

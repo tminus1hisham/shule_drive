@@ -1,30 +1,81 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:provider/provider.dart';
 import 'package:shule_drive/main.dart';
+import 'package:shule_drive/providers/auth_provider.dart';
+import 'package:shule_drive/widgets/route_guard.dart';
+
+class _FakeAuthProvider extends AuthProvider {
+  _FakeAuthProvider({
+    required this.authenticated,
+    required this.role,
+    this.loading = false,
+  });
+
+  final bool authenticated;
+  final bool loading;
+  final UserRole role;
+
+  @override
+  bool get isAuthenticated => authenticated;
+
+  @override
+  bool get isLoading => loading;
+
+  @override
+  UserRole get userRole => role;
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('ShuleDriveApp builds the app shell', (tester) async {
     await tester.pumpWidget(const ShuleDriveApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.text('ShuleDrive'), findsNothing);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('RouteGuard renders child for an authenticated allowed role', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: _FakeAuthProvider(
+          authenticated: true,
+          role: UserRole.driver,
+        ),
+        child: const MaterialApp(
+          home: RouteGuard(
+            allowedRoles: [UserRole.driver],
+            child: Text('Driver content'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Driver content'), findsOneWidget);
+  });
+
+  testWidgets('RouteGuard blocks authenticated users with the wrong role', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: _FakeAuthProvider(
+          authenticated: true,
+          role: UserRole.guardian,
+        ),
+        child: const MaterialApp(
+          home: RouteGuard(
+            allowedRoles: [UserRole.driver],
+            child: Text('Driver content'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Access Denied'), findsOneWidget);
+    expect(find.text('Driver content'), findsNothing);
   });
 }

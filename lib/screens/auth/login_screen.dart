@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../widgets/ui/ui.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,9 +20,8 @@ class _LoginScreenState extends State<LoginScreen>
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  
+
   String _completePhoneNumber = '';
-  bool _obscurePassword = true;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -44,10 +46,9 @@ class _LoginScreenState extends State<LoginScreen>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
     _animationController.forward();
   }
 
@@ -63,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool get _isLockedOut {
     if (_failedAttempts < _maxAttempts) return false;
     if (_lastAttemptTime == null) return false;
-    
+
     final timeSinceLastAttempt = DateTime.now().difference(_lastAttemptTime!);
     return timeSinceLastAttempt < _lockoutDuration;
   }
@@ -77,14 +78,14 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    // Validate form
     if (!_formKey.currentState!.validate()) return;
-    
-    // Check rate limiting
+
     if (_isLockedOut) {
       final remainingSeconds = _remainingLockoutSeconds;
-      _showError(
-        'Too many attempts. Please try again in ${remainingSeconds ~/ 60}m ${remainingSeconds % 60}s.',
+      AppSnackbar.error(
+        context,
+        'Too many attempts. Please try again in '
+        '${remainingSeconds ~/ 60}m ${remainingSeconds % 60}s.',
       );
       return;
     }
@@ -92,81 +93,50 @@ class _LoginScreenState extends State<LoginScreen>
     HapticFeedback.lightImpact();
 
     final authProvider = context.read<AuthProvider>();
-    
     final success = await authProvider.login(
       phoneNumber: _completePhoneNumber,
       password: _passwordController.text,
     );
-    
+
     if (!mounted) return;
 
     if (success) {
-      // Reset failed attempts on success
       _failedAttempts = 0;
-      
-      // Navigate to dashboard (skip landing redirect)
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/dashboard',
         (route) => false,
       );
     } else {
-      // Record failed attempt
       _failedAttempts++;
       _lastAttemptTime = DateTime.now();
-      
-      _showError(authProvider.errorMessage ?? 'Login failed. Please try again.');
+      AppSnackbar.error(
+        context,
+        authProvider.errorMessage ?? 'Login failed. Please try again.',
+      );
     }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
       body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
           child: Column(
             children: [
-              // Header
-              _buildHeader(),
-              
-              // Welcome Text
-              _buildWelcomeText(),
-              
-              // Animated Bus Illustration
+              _buildHeader(context),
+              _buildWelcomeText(context),
               const BusIllustration(height: 180),
-              
-              // Login Form
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: _buildLoginForm(authProvider),
+                  child: _buildLoginForm(context, authProvider),
                 ),
               ),
-              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -174,70 +144,51 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildHeader() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 24, top: 20, right: 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        0,
+      ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(AppSpacing.xs),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              gradient: context.colors.brandGradient,
+              borderRadius: AppRadius.brSm,
+              boxShadow: context.colors.shadowSm,
             ),
             child: const Icon(
-              Icons.directions_bus,
+              Icons.directions_bus_rounded,
               color: Colors.white,
               size: 22,
             ),
           ),
-          const SizedBox(width: 12),
-          Text(
-            'ShuleDrive',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
-            ),
-          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('ShuleDrive', style: context.text.headlineSmall),
         ],
       ),
     );
   }
 
-  Widget _buildWelcomeText() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildWelcomeText(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Welcome Back! 👋',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
+          Text('Welcome Back! 👋', style: context.text.displaySmall),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Enter your credentials to continue',
-            style: TextStyle(
-              fontSize: 16,
-              color: isDark ? Colors.white70 : const Color(0xFF666666),
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
             ),
           ),
         ],
@@ -245,247 +196,114 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm(AuthProvider authProvider) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Phone Field
-            _buildPhoneField(),
-            
-            const SizedBox(height: 20),
-            
-            // Password Field
-            _buildPasswordField(),
-            
-            const SizedBox(height: 24),
-            
-            // Login Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
-                ),
-                child: authProvider.isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text(
-                        'Sign In',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // Forgot Password
-            Center(
-              child: TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/forgot-password');
+  Widget _buildLoginForm(BuildContext context, AuthProvider authProvider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        shadow: context.colors.shadowMd,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Phone Number', style: context.text.titleSmall),
+              const SizedBox(height: AppSpacing.xs),
+              _buildPhoneField(context),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                label: 'Password',
+                hint: 'Enter your password',
+                controller: _passwordController,
+                obscure: true,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  if (value.length < 4) {
+                    return 'Password must be at least 4 characters';
+                  }
+                  return null;
                 },
-                child: const Text(
-                  'Forgot Password?',
-                  style: TextStyle(
-                    color: Color(0xFF6B9B5B),
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Sign In',
+                loading: authProvider.isLoading,
+                onPressed: _login,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Center(
+                child: TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/forgot-password'),
+                  child: const Text('Forgot Password?'),
                 ),
               ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Security notice
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.security,
-                    size: 16,
-                    color: const Color(0xFF6B9B5B),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Your credentials are secure and encrypted.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: const Color(0xFF6B9B5B),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.xs),
+              _buildSecurityNotice(context),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPhoneField() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Phone Number',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-        ),
-        const SizedBox(height: 8),
-        IntlPhoneField(
-          controller: _phoneController,
-          decoration: InputDecoration(
-            hintText: '712 345 678',
-            hintStyle: TextStyle(
-              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-            ),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-          ),
-          initialCountryCode: 'KE',
-          disableLengthCheck: true,
-          flagsButtonPadding: const EdgeInsets.only(left: 12),
-          dropdownIcon: Icon(
-            Icons.arrow_drop_down,
-            color: isDark ? Colors.white70 : const Color(0xFF666666),
-          ),
-          dropdownTextStyle: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          style: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          onChanged: (phone) {
-            _completePhoneNumber = phone.completeNumber;
-          },
-          validator: (phone) {
-            if (phone == null || phone.number.isEmpty) {
-              return 'Please enter your phone number';
-            }
-            if (phone.number.length < 9) {
-              return 'Please enter a valid phone number';
-            }
-            return null;
-          },
-        ),
-      ],
+  Widget _buildPhoneField(BuildContext context) {
+    return IntlPhoneField(
+      controller: _phoneController,
+      decoration: const InputDecoration(hintText: '712 345 678'),
+      initialCountryCode: 'KE',
+      disableLengthCheck: true,
+      flagsButtonPadding: const EdgeInsets.only(left: AppSpacing.sm),
+      dropdownIcon: Icon(
+        Icons.arrow_drop_down,
+        color: context.colors.textSecondary,
+      ),
+      dropdownTextStyle: context.text.bodyLarge,
+      style: context.text.bodyLarge,
+      onChanged: (phone) => _completePhoneNumber = phone.completeNumber,
+      validator: (phone) {
+        if (phone == null || phone.number.isEmpty) {
+          return 'Please enter your phone number';
+        }
+        if (phone.number.startsWith('0')){
+          return 'Phone number should not start with 0';
+        }
+        if (phone.number.length < 9) {
+          return 'Please enter a valid phone number';
+        }
+        if  (phone.number.length > 9){
+          return 'Phone number should not be more than 9 digits';
+        }
+        return null;
+      },
     );
   }
 
-  Widget _buildPasswordField() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Password',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _passwordController,
-          obscureText: _obscurePassword,
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontSize: 16,
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your password';
-            }
-            if (value.length < 4) {
-              return 'Password must be at least 4 characters';
-            }
-            return null;
-          },
-          decoration: InputDecoration(
-            hintText: 'Enter your password',
-            hintStyle: TextStyle(
-              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-            ),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                color: isDark ? Colors.white70 : Colors.grey.shade600,
+  Widget _buildSecurityNotice(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: context.colors.brandSoft,
+        borderRadius: AppRadius.brSm,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.shield_outlined, size: 16, color: context.colors.onBrandSoft),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'Your credentials are secure and encrypted.',
+              style: context.text.labelMedium?.copyWith(
+                color: context.colors.onBrandSoft,
               ),
-              onPressed: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,6 @@
 {
-    "name": "crossroad",
-    "short_name": "crossroad",
+    "name": "shuledrive",
+    "short_name": "shuledrive",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -34,11 +34,7 @@ class DriverOnly extends StatelessWidget {
   final Widget child;
   final Widget? fallback;
 
-  const DriverOnly({
-    super.key,
-    required this.child,
-    this.fallback,
-  });
+  const DriverOnly({super.key, required this.child, this.fallback});
 
   @override
   Widget build(BuildContext context) {
@@ -55,11 +51,7 @@ class GuardianOnly extends StatelessWidget {
   final Widget child;
   final Widget? fallback;
 
-  const GuardianOnly({
-    super.key,
-    required this.child,
-    this.fallback,
-  });
+  const GuardianOnly({super.key, required this.child, this.fallback});
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +105,9 @@ class RoleBasedNavigator {
   static void _showAccessDenied(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Access denied. You don\'t have permission to access this feature.'),
+        content: Text(
+          'Access denied. You don\'t have permission to access this feature.',
+        ),
         backgroundColor: Colors.red,
       ),
     );
@@ -139,7 +133,7 @@ class RoleBasedRoute<T> extends MaterialPageRoute<T> {
     Widget child,
   ) {
     final authProvider = context.read<AuthProvider>();
-    
+
     if (!allowedRoles.contains(authProvider.userRole)) {
       // Return access denied screen instead
       return super.buildTransitions(
@@ -169,18 +163,11 @@ class _AccessDeniedScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.block,
-              size: 80,
-              color: Colors.red,
-            ),
+            const Icon(Icons.block, size: 80, color: Colors.red),
             const SizedBox(height: 16),
             const Text(
               'Access Denied',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -223,7 +210,7 @@ class RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: badgeColor.withOpacity(0.1),
+        color: badgeColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: badgeColor),
       ),

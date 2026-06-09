@@ -6,6 +6,7 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'dart:math';
 import 'api/api_exceptions.dart';
+import 'services/app_config.dart';
 import 'services/secure_token_storage.dart';
 
 /// MQTT Service - Handles connections with authentication for chat and notifications
@@ -33,6 +34,7 @@ class MqttService {
 
   // Reconnect timer
   Timer? _reconnectTimer;
+  bool _manualDisconnect = false;
 
   // Private constructor
   MqttService._internal();
@@ -62,6 +64,8 @@ class MqttService {
 
     print('🔄 Connecting to MQTT broker...');
 
+    _manualDisconnect = false;
+
     try {
       final userId = await _tokenStorage.getUserId();
       final token = await _tokenStorage.getAccessToken();
@@ -76,7 +80,20 @@ class MqttService {
         throw UnauthorizedException(message: 'No authentication credentials');
       }
 
-      _client = MqttServerClient('analytics.teleeza.africa', '');
+      final broker = appConfig.getOrDefault(
+        'MQTT_BROKER',
+        'analytics.teleeza.africa',
+      );
+      final username = appConfig.getOrDefault(
+        'MQTT_USERNAME',
+        'teleezaAnalytics',
+      );
+      final password = appConfig.getOrDefault(
+        'MQTT_PASSWORD',
+        'teleezaAnalyticsAdmin2023',
+      );
+
+      _client = MqttServerClient(broker, '');
       _client.logging(on: false);
       _client.setProtocolV311();
       _client.keepAlivePeriod = 20;
@@ -101,7 +118,7 @@ class MqttService {
           )
           .withWillQos(MqttQos.atLeastOnce)
           .withWillRetain()
-          .authenticateAs('teleezaAnalytics', 'teleezaAnalyticsAdmin2023');
+          .authenticateAs(username, password);
 
       _client.connectionMessage = connMess;
 
@@ -123,8 +140,10 @@ class MqttService {
 
       print('✅ MQTT setup complete - listening for messages');
 
-      final senderId = await _tokenStorage.getUserPhone().toString();
-      await subscribe("chats/$senderId", handleMessage);
+      final senderPhone = await _tokenStorage.getUserPhone();
+      if (senderPhone != null && senderPhone.isNotEmpty) {
+        await subscribe('chats/$senderPhone', handleMessage);
+      }
     } on SocketException catch (e) {
       print('❌ MQTT CONNECTION FAILED: Network error - $e');
       throw NetworkException();
@@ -141,6 +160,7 @@ class MqttService {
 
   /// Disconnect from MQTT broker
   Future<void> disconnect() async {
+    _manualDisconnect = true;
     _reconnectTimer?.cancel();
 
     if (_isConnected) {
@@ -260,7 +280,9 @@ class MqttService {
     print('⚠️ MQTT DISCONNECTED from broker');
     _isConnected = false;
     _connectionController.add(false);
-    _scheduleReconnect();
+    if (!_manualDisconnect) {
+      _scheduleReconnect();
+    }
   }
 
   void _onSubscribed(String topic) {
@@ -304,7 +326,11 @@ class MqttService {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 5), () {
       if (!_isConnected) {
-        connect();
+        connect().catchError((e) {
+          if (kDebugMode) {
+            print('MQTT reconnect failed: $e');
+          }
+        });
       }
     });
   }

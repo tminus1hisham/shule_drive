@@ -19,7 +19,7 @@ class TripsScreen extends StatefulWidget {
 class _TripsScreenState extends State<TripsScreen> {
   int _currentIndex = 3;
   final TripHistoryService _historyService = TripHistoryService();
-  
+
   List<TripHistory> _trips = [];
   DriverStats _stats = DriverStats.empty();
   bool _isLoading = true;
@@ -39,8 +39,8 @@ class _TripsScreenState extends State<TripsScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final driverId = authProvider.userData?['id'] ?? '';
-      
+      final driverId = authProvider.userData['id'] ?? '';
+
       if (driverId.isEmpty) {
         setState(() {
           _errorMessage = 'Driver ID not found';
@@ -72,14 +72,26 @@ class _TripsScreenState extends State<TripsScreen> {
 
   String _formatDate(DateTime date) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   String _formatTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : (date.hour == 0 ? 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final period = date.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
@@ -117,9 +129,7 @@ class _TripsScreenState extends State<TripsScreen> {
     // Show loading
     if (_isLoading && _trips.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF6B9B5B),
-        ),
+        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
       );
     }
 
@@ -131,10 +141,8 @@ class _TripsScreenState extends State<TripsScreen> {
     return CustomScrollView(
       slivers: [
         // Stats Card
-        SliverToBoxAdapter(
-          child: _buildStatsCard(provider),
-        ),
-        
+        SliverToBoxAdapter(child: _buildStatsCard(provider)),
+
         // Section Title
         SliverToBoxAdapter(
           child: Padding(
@@ -162,24 +170,23 @@ class _TripsScreenState extends State<TripsScreen> {
             ),
           ),
         ),
-        
+
         // Empty State
         if (_trips.isEmpty)
-          SliverFillRemaining(
-            child: _buildEmptyState(provider),
-          )
+          SliverFillRemaining(child: _buildEmptyState(provider))
         else
           // Trips List
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildTripCard(context, provider, _trips[index]),
+                (context, index) =>
+                    _buildTripCard(context, provider, _trips[index]),
                 childCount: _trips.length,
               ),
             ),
           ),
-        
+
         const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
       ],
     );
@@ -219,7 +226,10 @@ class _TripsScreenState extends State<TripsScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -238,9 +248,17 @@ class _TripsScreenState extends State<TripsScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              _buildStatItem('Trips', _stats.totalTrips.toString(), Icons.route),
+              _buildStatItem(
+                'Trips',
+                _stats.totalTrips.toString(),
+                Icons.route,
+              ),
               _buildStatDivider(),
-              _buildStatItem('Students', _stats.totalStudents.toString(), Icons.people),
+              _buildStatItem(
+                'Students',
+                _stats.totalStudents.toString(),
+                Icons.people,
+              ),
               _buildStatDivider(),
               _buildStatItem(
                 'Picked',
@@ -271,10 +289,7 @@ class _TripsScreenState extends State<TripsScreen> {
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(
-              color: Colors.white.withAlpha(180),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 12),
           ),
         ],
       ),
@@ -282,11 +297,7 @@ class _TripsScreenState extends State<TripsScreen> {
   }
 
   Widget _buildStatDivider() {
-    return Container(
-      width: 1,
-      height: 50,
-      color: Colors.white.withAlpha(30),
-    );
+    return Container(width: 1, height: 50, color: Colors.white.withAlpha(30));
   }
 
   Widget _buildErrorState(AppProvider provider) {
@@ -294,11 +305,7 @@ class _TripsScreenState extends State<TripsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: provider.textMutedColor,
-          ),
+          Icon(Icons.error_outline, size: 64, color: provider.textMutedColor),
           const SizedBox(height: 16),
           Text(
             'Error loading trips',
@@ -311,10 +318,7 @@ class _TripsScreenState extends State<TripsScreen> {
           const SizedBox(height: 8),
           Text(
             _errorMessage!,
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -361,10 +365,7 @@ class _TripsScreenState extends State<TripsScreen> {
           const SizedBox(height: 8),
           Text(
             'Start a new trip to see it here',
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
           ),
           const SizedBox(height: 32),
           SizedBox(
@@ -391,7 +392,11 @@ class _TripsScreenState extends State<TripsScreen> {
     );
   }
 
-  Widget _buildTripCard(BuildContext context, AppProvider provider, TripHistory history) {
+  Widget _buildTripCard(
+    BuildContext context,
+    AppProvider provider,
+    TripHistory history,
+  ) {
     final trip = history.trip;
     final isCompleted = trip.isCompleted;
     final statusText = isCompleted ? 'Completed' : 'Active';
@@ -400,13 +405,11 @@ class _TripsScreenState extends State<TripsScreen> {
         : const Color(0xFFFF9800);
 
     // Calculate trip duration
-    final duration = trip.endTime != null
-        ? trip.endTime!.difference(trip.startTime)
-        : null;
+    final duration = trip.endTime?.difference(trip.startTime);
     final durationText = duration != null
         ? duration.inHours > 0
-            ? '${duration.inHours}h ${duration.inMinutes.remainder(60)}m'
-            : '${duration.inMinutes}m'
+              ? '${duration.inHours}h ${duration.inMinutes.remainder(60)}m'
+              : '${duration.inMinutes}m'
         : '--';
 
     return GestureDetector(
@@ -511,9 +514,7 @@ class _TripsScreenState extends State<TripsScreen> {
             const SizedBox(height: 12),
             Divider(
               height: 1,
-              color: provider.isDarkMode
-                  ? Colors.grey[700]
-                  : Colors.grey[300],
+              color: provider.isDarkMode ? Colors.grey[700] : Colors.grey[300],
             ),
             const SizedBox(height: 12),
             Row(
@@ -541,18 +542,11 @@ class _TripsScreenState extends State<TripsScreen> {
   Widget _buildInfoItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 14,
-          color: provider.textMutedColor,
-        ),
+        Icon(icon, size: 14, color: provider.textMutedColor),
         const SizedBox(width: 6),
         Text(
           text,
-          style: TextStyle(
-            fontSize: 12,
-            color: provider.textMutedColor,
-          ),
+          style: TextStyle(fontSize: 12, color: provider.textMutedColor),
         ),
       ],
     );
@@ -561,11 +555,7 @@ class _TripsScreenState extends State<TripsScreen> {
   Widget _buildTripStatItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: const Color(0xFF6B9B5B),
-        ),
+        Icon(icon, size: 16, color: const Color(0xFF6B9B5B)),
         const SizedBox(width: 6),
         Text(
           text,

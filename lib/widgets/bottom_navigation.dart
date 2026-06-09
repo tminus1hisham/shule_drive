@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme_extension.dart';
 
+/// Floating glass-style bottom navigation. Colors come entirely from the theme
+/// so it adapts to light/dark automatically.
 class BottomNavigation extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -16,103 +20,83 @@ class BottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final authProvider = context.watch<AuthProvider>();
-    final isDarkMode = provider.isDarkMode;
-    final isDriver = authProvider.isDriver;
-
-    // Modern glassmorphism background
-    final backgroundColor = isDarkMode
-        ? const Color(0xFF1E2D1C).withValues(alpha: 0.95)
-        : Colors.white.withValues(alpha: 0.95);
-
-    // Border color for glass effect
-    final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.05);
+    final isDriver = context.watch<AuthProvider>().isDriver;
+    final scheme = context.scheme;
+    final colors = context.colors;
 
     return SafeArea(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.xs,
+        ),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: borderColor, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: isDarkMode
-                  ? Colors.black.withValues(alpha: 0.3)
-                  : Colors.black.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-              spreadRadius: 0,
-            ),
-          ],
+          color: scheme.surface.withValues(alpha: 0.96),
+          borderRadius: AppRadius.brPill,
+          border: Border.all(color: colors.outline, width: 1),
+          boxShadow: colors.shadowMd,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildNavItem(Icons.home_rounded, 'Home', 0, isDarkMode),
+            _buildNavItem(context, Icons.home_rounded, 'Home', 0),
             _buildNavItem(
+              context,
               Icons.chat_bubble_outline_rounded,
               'Chat',
               1,
-              isDarkMode,
               showBadge: provider.unreadChatCount > 0,
             ),
             // Only show center '+' button for drivers (taps index 4)
-            if (isDriver) _buildCenterActionButton(isDarkMode),
+            if (isDriver) _buildCenterActionButton(context),
             _buildNavItem(
+              context,
               Icons.notifications_none_rounded,
               'Alerts',
               2,
-              isDarkMode,
               showBadge: provider.unreadAlertCount > 0,
             ),
-            _buildNavItem(Icons.settings_outlined, 'Settings', 3, isDarkMode),
+            _buildNavItem(context, Icons.settings_outlined, 'Settings', 3),
           ],
         ),
       ),
     );
   }
 
-  // Navbar sizing constants
   static const double _iconSizeUnselected = 24;
   static const double _iconSizeSelected = 26;
-  static const double _fontSizeUnselected = 12;
-  static const double _fontSizeSelected = 13;
 
   Widget _buildNavItem(
+    BuildContext context,
     IconData icon,
     String label,
-    int index,
-    bool isDarkMode, {
+    int index, {
     bool showBadge = false,
   }) {
     final isSelected = currentIndex == index;
+    final activeColor = context.scheme.primary;
+    final inactiveColor = context.colors.textMuted;
 
-    // Active color
-    final activeColor = isDarkMode
-        ? const Color(0xFF90C695)
-        : const Color(0xFF6B9B5B);
-
-    // Inactive color
-    final inactiveColor = isDarkMode
-        ? const Color(0xFF6B8B6B)
-        : const Color(0xFF9CA3AF);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => onTap(index),
-        borderRadius: BorderRadius.circular(20),
-        splashColor: activeColor.withValues(alpha: 0.1),
-        highlightColor: activeColor.withValues(alpha: 0.05),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onTap(index),
+          borderRadius: AppRadius.brLg,
+          splashColor: activeColor.withValues(alpha: 0.1),
+          highlightColor: activeColor.withValues(alpha: 0.05),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.xs,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -120,15 +104,11 @@ class BottomNavigation extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: isSelected
-                          ? const EdgeInsets.all(8)
-                          : const EdgeInsets.all(6),
+                      duration: AppDuration.fast,
+                      padding: EdgeInsets.all(isSelected ? 8 : 6),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? activeColor.withValues(
-                                alpha: isDarkMode ? 0.25 : 0.15,
-                              )
+                            ? activeColor.withValues(alpha: 0.15)
                             : Colors.transparent,
                         shape: BoxShape.circle,
                       ),
@@ -140,7 +120,6 @@ class BottomNavigation extends StatelessWidget {
                             : _iconSizeUnselected,
                       ),
                     ),
-                    // Badge dot
                     if (showBadge)
                       Positioned(
                         right: 2,
@@ -149,12 +128,10 @@ class BottomNavigation extends StatelessWidget {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: Colors.red,
+                            color: context.colors.error,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: isDarkMode
-                                  ? const Color(0xFF1E2D1C)
-                                  : Colors.white,
+                              color: context.scheme.surface,
                               width: 1.5,
                             ),
                           ),
@@ -162,14 +139,11 @@ class BottomNavigation extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xxs),
                 Text(
                   label,
-                  style: TextStyle(
+                  style: context.text.labelSmall?.copyWith(
                     color: isSelected ? activeColor : inactiveColor,
-                    fontSize: isSelected
-                        ? _fontSizeSelected
-                        : _fontSizeUnselected,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
@@ -181,41 +155,32 @@ class BottomNavigation extends StatelessWidget {
     );
   }
 
-  // Center action button sizing
-  static const double _centerButtonSize = 60;
-  static const double _centerButtonIconSize = 34;
+  static const double _centerButtonSize = 56;
 
-  Widget _buildCenterActionButton(bool isDarkMode) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => onTap(4),
-        customBorder: const CircleBorder(),
-        splashColor: Colors.white.withValues(alpha: 0.3),
-        highlightColor: Colors.white.withValues(alpha: 0.1),
-        child: Container(
-          width: _centerButtonSize,
-          height: _centerButtonSize,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+  Widget _buildCenterActionButton(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Start trip',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onTap(4),
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: _centerButtonSize,
+            height: _centerButtonSize,
+            decoration: BoxDecoration(
+              gradient: context.colors.brandGradient,
+              borderRadius: AppRadius.brLg,
+              boxShadow: [
+                BoxShadow(
+                  color: context.colors.brand.withValues(alpha: 0.5),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6B9B5B).withValues(alpha: 0.5),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: Icon(
-            Icons.add_rounded,
-            color: Colors.white,
-            size: _centerButtonIconSize,
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
           ),
         ),
       ),

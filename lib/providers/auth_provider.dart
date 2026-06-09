@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
-import '../api/services/user_service.dart';
 import '../api/services/bus_service.dart';
 import '../services/token_storage.dart';
 import '../utils/buffer_manager.dart';
@@ -49,8 +48,17 @@ enum UserRole {
 /// Auth Provider - Manages authentication state and role-based access
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
-  final UserService _userService = UserService();
   final TokenStorage _tokenStorage = TokenStorage();
+
+  // Set once dispose() runs so deferred (post-frame) callbacks don't notify a
+  // disposed ChangeNotifier.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   // Auth state
   bool _isAuthenticated = false;
@@ -656,6 +664,13 @@ class AuthProvider extends ChangeNotifier {
         print('✅ Upload successful, new URL: $imageUrl');
       }
 
+      // The upload endpoint may not return a URL; keep the existing avatar in
+      // that case rather than blanking it (callers refresh the profile to pick
+      // up the new image).
+      final resolvedAvatar = imageUrl.isNotEmpty
+          ? imageUrl
+          : _currentUser!.avatar;
+
       // Update current user with new image
       _currentUser = api.User(
         id: _currentUser!.id,
@@ -663,9 +678,11 @@ class AuthProvider extends ChangeNotifier {
         phone: _currentUser!.phone,
         role: _currentUser!.role,
         email: _currentUser!.email,
-        avatar: imageUrl,
+        avatar: resolvedAvatar,
         licenseNumber: _currentUser!.licenseNumber,
         vehicleNumber: _currentUser!.vehicleNumber,
+        schoolId: _currentUser!.schoolId,
+        schoolName: _currentUser!.schoolName,
       );
 
       // Update in storage
@@ -675,7 +692,7 @@ class AuthProvider extends ChangeNotifier {
         phone: _currentUser!.phone,
         role: _currentUser!.role,
         email: _currentUser!.email,
-        avatar: imageUrl,
+        avatar: resolvedAvatar,
         schoolId: _currentUser!.schoolId,
         schoolName: _currentUser!.schoolName,
       );
@@ -685,7 +702,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       notifyListeners();
-      return imageUrl;
+      return resolvedAvatar;
     } on api.ApiException catch (e) {
       if (kDebugMode) {
         print('❌ API error during upload: ${e.message}');
@@ -724,6 +741,12 @@ class AuthProvider extends ChangeNotifier {
       );
       debugPrint('   Upload successful, avatarUrl: $avatarUrl');
 
+      // Keep the existing avatar when the endpoint returns no URL rather than
+      // blanking it.
+      final resolvedAvatar = avatarUrl.isNotEmpty
+          ? avatarUrl
+          : _currentUser!.avatar;
+
       // Update current user with new avatar
       _currentUser = api.User(
         id: _currentUser!.id,
@@ -731,9 +754,11 @@ class AuthProvider extends ChangeNotifier {
         phone: _currentUser!.phone,
         role: _currentUser!.role,
         email: _currentUser!.email,
-        avatar: avatarUrl,
+        avatar: resolvedAvatar,
         licenseNumber: _currentUser!.licenseNumber,
         vehicleNumber: _currentUser!.vehicleNumber,
+        schoolId: _currentUser!.schoolId,
+        schoolName: _currentUser!.schoolName,
       );
 
       // Update in storage
@@ -743,14 +768,14 @@ class AuthProvider extends ChangeNotifier {
         phone: _currentUser!.phone,
         role: _currentUser!.role,
         email: _currentUser!.email,
-        avatar: avatarUrl,
+        avatar: resolvedAvatar,
         schoolId: _currentUser!.schoolId,
         schoolName: _currentUser!.schoolName,
       );
 
       notifyListeners();
       debugPrint('   User data updated and listeners notified');
-      return avatarUrl;
+      return resolvedAvatar;
     } on api.ApiException catch (e) {
       debugPrint('   ApiException: ${e.message}');
       _setError(e.message);
@@ -774,17 +799,19 @@ class AuthProvider extends ChangeNotifier {
   // Helper methods
   void _setLoading(bool loading) {
     _isLoading = loading;
-    // Defer notifyListeners to avoid build-phase errors
+    // Defer notifyListeners to avoid build-phase errors, guarding against the
+    // notifier being disposed before the callback runs.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     });
   }
 
   void _setError(String message) {
     _errorMessage = message;
-    // Defer notifyListeners to avoid build-phase errors
+    // Defer notifyListeners to avoid build-phase errors, guarding against the
+    // notifier being disposed before the callback runs.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     });
   }
 

@@ -13,24 +13,15 @@ class StudentService {
   final TokenStorage _tokenStorage = TokenStorage();
 
   /// Get all students with buffer fallback
-  /// GET /api/students
+  /// GET /api/guardians/get/students
   Future<List<Student>> getAllStudents({int page = 1, int limit = 20}) async {
     return _buffer.withBuffer<List<Student>>(
       apiCall: () async {
-        final response = await _apiClient.get(
-          Endpoints.students,
-          queryParams: {'page': page.toString(), 'limit': limit.toString()},
-        );
+        // api.md's students endpoint is not paginated, so page/limit are not
+        // sent (they are kept on the signature only for caller compatibility).
+        final response = await _apiClient.get(Endpoints.students);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> studentsData;
-        if (response is List) {
-          studentsData = response;
-        } else if (response is Map && response['data'] != null) {
-          studentsData = response['data'] as List;
-        } else {
-          studentsData = [];
-        }
+        final studentsData = ApiClient.unwrapList(response);
 
         final students = studentsData
             .map((student) => Student.fromJson(student))
@@ -44,15 +35,15 @@ class StudentService {
   }
 
   /// Get student by ID with buffer fallback
-  /// GET /api/students/get/{id}
+  /// api.md exposes no get-by-id student endpoint; this filters guardian students.
   Future<Student?> getStudentById(String studentId) async {
     return _buffer.withOptionalBuffer<Student>(
       apiCall: () async {
-        final response = await _apiClient.get(
-          Endpoints.studentDetails(studentId),
-        );
-
-        return Student.fromJson(response['data'] ?? response);
+        final students = await getGuardianStudents();
+        for (final student in students) {
+          if (student.id == studentId) return student;
+        }
+        throw NotFoundException(message: 'Student not found');
       },
       bufferKey: BufferKeys.studentDetails(studentId),
       cacheDuration: const Duration(minutes: 15),
@@ -72,25 +63,43 @@ class StudentService {
     String? guardianPhoneNumber,
   }) async {
     try {
+      final resolvedGuardianPhone =
+          guardianPhoneNumber ?? await _tokenStorage.getUserPhone() ?? '';
+      if (resolvedGuardianPhone.isEmpty) {
+        throw ApiException(message: 'Guardian phone number is required');
+      }
+      if (schoolname == null || schoolname.isEmpty) {
+        throw ApiException(message: 'School name is required');
+      }
+
       final response = await _apiClient.post(
         Endpoints.createGuardianStudent,
         body: {
           'fullname': fullname,
-          if (schoolname != null && schoolname.isNotEmpty)
-            'schoolname': schoolname,
-          if (classname != null && classname.isNotEmpty) 'classname': classname,
-          if (route != null && route.isNotEmpty) 'route': route,
-          if (pickupLocation != null && pickupLocation.isNotEmpty)
-            'pickupLocation': pickupLocation,
-          if (photo != null && photo.isNotEmpty) 'profileImage': photo,
-          if (guardianPhoneNumber != null && guardianPhoneNumber.isNotEmpty)
-            'guardianPhoneNumber': guardianPhoneNumber,
+          'guardianPhoneNumber': resolvedGuardianPhone,
+          'studentRegNumber': 'STD-${DateTime.now().microsecondsSinceEpoch}',
+          'schoolname': schoolname,
+          'classname': classname ?? '',
+          'route': route ?? pickupLocation ?? '',
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
         },
       );
 
       // Handle both wrapped ({"data": {...}}) and unwrapped ({...}) responses
-      final studentData = response['data'] ?? response;
-      final student = Student.fromJson(studentData);
+      final student = response is Map
+          ? Student.fromJson(
+              Map<String, dynamic>.from(response['data'] ?? response),
+            )
+          : Student(
+              id: '',
+              name: fullname,
+              className: classname ?? '',
+              schoolName: schoolname,
+              guardianPhone: resolvedGuardianPhone,
+              createdAt: DateTime.now(),
+              route: route ?? pickupLocation,
+              studentRegNumber: 'STD-${DateTime.now().microsecondsSinceEpoch}',
+            );
 
       // Clear students cache to force refresh
       await _buffer.clearCategory('students');
@@ -104,7 +113,7 @@ class StudentService {
   }
 
   /// Update student
-  /// PUT /api/students/update/{id}
+  /// PUT /api/guardians/student/update
   Future<Student> updateStudent({
     required String studentId,
     String? name,
@@ -115,25 +124,57 @@ class StudentService {
     String? dropoffLocation,
     String? emergencyContact,
     String? emergencyPhone,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final body = <String, dynamic>{};
-      if (name != null) body['name'] = name;
-      if (className != null) body['class_name'] = className;
-      if (schoolId != null) body['school_id'] = schoolId;
-      if (photo != null) body['photo'] = photo;
-      if (pickupLocation != null) body['pickup_location'] = pickupLocation;
-      if (dropoffLocation != null) body['dropoff_location'] = dropoffLocation;
-      if (emergencyContact != null)
-        body['emergency_contact'] = emergencyContact;
-      if (emergencyPhone != null) body['emergency_phone'] = emergencyPhone;
+      final current = await getStudentById(studentId);
+      body['id'] = int.tryParse(studentId) ?? 0;
+      body['fullname'] = name ?? current?.name ?? '';
+      body['guardianPhoneNumber'] =
+          current?.guardianPhone ?? await _tokenStorage.getUserPhone() ?? '';
+      body['studentRegNumber'] = current?.studentRegNumber ?? '';
+      body['schoolname'] = schoolId ?? current?.schoolName ?? '';
+      body['transportOrg'] = current?.transportOrg ?? '';
+      body['classname'] = className ?? current?.className ?? '';
+      body['route'] = pickupLocation ?? current?.route ?? '';
+      body['latitude'] = latitude ?? current?.latitude ?? 0;
+      body['longitude'] = longitude ?? current?.longitude ?? 0;
+      body['profileImage'] = photo ?? current?.photo ?? '';
+      body['hasStudentPaid'] = false;
+      body['isStudentActive'] = current?.isActive ?? true;
+      body['isStudentDeleted'] = false;
+      body['expirelyDate'] = DateTime.now().toUtc().toIso8601String();
+      body['createdAt'] =
+          current?.createdAt.toUtc().toIso8601String() ??
+          DateTime.now().toUtc().toIso8601String();
+      body['updatedAt'] = DateTime.now().toUtc().toIso8601String();
 
       final response = await _apiClient.put(
-        Endpoints.updateStudent(studentId),
+        Endpoints.updateStudent,
         body: body,
       );
 
-      final student = Student.fromJson(response['data']);
+      final student = response is Map
+          ? Student.fromJson(
+              Map<String, dynamic>.from(response['data'] ?? response),
+            )
+          : Student(
+              id: studentId,
+              name: body['fullname']?.toString() ?? '',
+              className: body['classname']?.toString() ?? '',
+              schoolName: body['schoolname']?.toString(),
+              guardianPhone: body['guardianPhoneNumber']?.toString(),
+              photo: body['profileImage']?.toString(),
+              isActive: body['isStudentActive'] == true,
+              createdAt: current?.createdAt ?? DateTime.now(),
+              route: body['route']?.toString(),
+              studentRegNumber: body['studentRegNumber']?.toString(),
+              transportOrg: body['transportOrg']?.toString(),
+              latitude: (body['latitude'] as num?)?.toDouble() ?? 0,
+              longitude: (body['longitude'] as num?)?.toDouble() ?? 0,
+            );
 
       // Update buffers
       await _buffer.saveBuffer(
@@ -152,7 +193,7 @@ class StudentService {
   }
 
   /// Delete student
-  /// DELETE /api/students/delete/{id}
+  /// DELETE /api/guardians/student/delete/{id}
   Future<void> deleteStudent(String studentId) async {
     try {
       await _apiClient.delete(Endpoints.deleteStudent(studentId));
@@ -177,15 +218,7 @@ class StudentService {
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getGuardianStudents);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> studentsData;
-        if (response is List) {
-          studentsData = response;
-        } else if (response is Map && response['data'] != null) {
-          studentsData = response['data'] as List;
-        } else {
-          studentsData = [];
-        }
+        final studentsData = ApiClient.unwrapList(response);
 
         final students = studentsData
             .map((student) => Student.fromJson(student))
@@ -208,15 +241,7 @@ class StudentService {
           queryParams: {'phoneNumber': phoneNumber},
         );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> studentsData;
-        if (response is List) {
-          studentsData = response;
-        } else if (response is Map && response['data'] != null) {
-          studentsData = response['data'] as List;
-        } else {
-          studentsData = [];
-        }
+        final studentsData = ApiClient.unwrapList(response);
 
         final students = studentsData
             .map((student) => Student.fromJson(student))
@@ -237,12 +262,37 @@ class StudentService {
     required String imagePath,
   }) async {
     try {
+      final student = await getStudentById(studentId);
+      final fileName = imagePath.split(RegExp(r'[\\/]')).last;
       final response = await _apiClient.post(
         Endpoints.updateGuardianChildImage,
-        body: {'student_id': studentId, 'image_path': imagePath},
+        body: {
+          'guardianPhoneNumber':
+              student?.guardianPhone ??
+              await _tokenStorage.getUserPhone() ??
+              '',
+          'studentFullName': student?.name ?? studentId,
+          'imageUrl': fileName,
+          'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        },
       );
 
-      final imageUrl = response['data']['image_url']?.toString() ?? '';
+      String imageUrl = fileName;
+      if (response is String && response.isNotEmpty) {
+        imageUrl = response;
+      } else if (response is Map) {
+        final data = response['data'];
+        if (data is String && data.isNotEmpty) {
+          imageUrl = data;
+        } else if (data is Map) {
+          imageUrl =
+              data['imageUrl']?.toString() ??
+              data['image_url']?.toString() ??
+              imageUrl;
+        } else {
+          imageUrl = response['imageUrl']?.toString() ?? imageUrl;
+        }
+      }
 
       // Clear student detail cache to force refresh
       await _buffer.clearBuffer(BufferKeys.studentDetails(studentId));
@@ -257,19 +307,11 @@ class StudentService {
   }
 
   /// Get student attendance with buffer fallback
-  /// GET /api/students/{id}/attendance
+  /// No student attendance endpoint is defined in api.md.
   Future<List<AttendanceRecord>> getStudentAttendance(String studentId) async {
     return _buffer.withBuffer<List<AttendanceRecord>>(
       apiCall: () async {
-        final response = await _apiClient.get(
-          Endpoints.studentAttendance(studentId),
-        );
-
-        final records = (response['data'] as List? ?? [])
-            .map((r) => AttendanceRecord.fromJson(r))
-            .toList();
-
-        return records;
+        return <AttendanceRecord>[];
       },
       bufferKey: 'students/attendance_$studentId',
       fallbackData: <AttendanceRecord>[],
@@ -293,20 +335,9 @@ class StudentService {
     return _buffer.withBuffer<List<Student>>(
       apiCall: () async {
         // Get all students and filter by school
-        final response = await _apiClient.get(
-          Endpoints.students,
-          queryParams: {'school_id': schoolId},
-        );
+        final response = await _apiClient.get(Endpoints.students);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> studentsData;
-        if (response is List) {
-          studentsData = response;
-        } else if (response is Map && response['data'] != null) {
-          studentsData = response['data'] as List;
-        } else {
-          studentsData = [];
-        }
+        final studentsData = ApiClient.unwrapList(response);
 
         final students = studentsData
             .map((student) => Student.fromJson(student))
@@ -334,15 +365,17 @@ class StudentService {
     bool useCache = true,
   }) async {
     if (phoneNumbers.isEmpty) return [];
-    
+
     final uniquePhones = phoneNumbers.toSet().toList();
-    debugPrint('🚀 Parallel fetching students for ${uniquePhones.length} phone numbers');
-    
+    debugPrint(
+      '🚀 Parallel fetching students for ${uniquePhones.length} phone numbers',
+    );
+
     // Check cache first if enabled
     if (useCache) {
       final cachedStudents = <Student>[];
       final phonesToFetch = <String>[];
-      
+
       for (final phone in uniquePhones) {
         final bufferKey = '${BufferKeys.students()}_phone_$phone';
         final cached = await _buffer.getBuffer<List<dynamic>>(key: bufferKey);
@@ -353,26 +386,28 @@ class StudentService {
           phonesToFetch.add(phone);
         }
       }
-      
+
       // If all cached, return immediately
       if (phonesToFetch.isEmpty) {
         debugPrint('✅ All data from cache: ${cachedStudents.length} students');
         return cachedStudents;
       }
-      
+
       // Fetch missing data in parallel
       final freshStudents = await _fetchStudentsParallel(phonesToFetch);
       return [...cachedStudents, ...freshStudents];
     }
-    
+
     // No cache - fetch all in parallel
     return _fetchStudentsParallel(uniquePhones);
   }
-  
+
   /// Internal method to fetch students in parallel
-  Future<List<Student>> _fetchStudentsParallel(List<String> phoneNumbers) async {
+  Future<List<Student>> _fetchStudentsParallel(
+    List<String> phoneNumbers,
+  ) async {
     final stopwatch = Stopwatch()..start();
-    
+
     // Create all futures and run them in parallel
     final futures = phoneNumbers.map((phone) async {
       try {
@@ -382,18 +417,20 @@ class StudentService {
         return <Student>[];
       }
     }).toList();
-    
+
     // Wait for all to complete
     final results = await Future.wait(futures);
-    
+
     // Combine results
     final allStudents = <Student>[];
     for (final studentList in results) {
       allStudents.addAll(studentList);
     }
-    
+
     stopwatch.stop();
-    debugPrint('⚡ Parallel fetch completed: ${allStudents.length} students in ${stopwatch.elapsedMilliseconds}ms');
+    debugPrint(
+      '⚡ Parallel fetch completed: ${allStudents.length} students in ${stopwatch.elapsedMilliseconds}ms',
+    );
     return allStudents;
   }
 
@@ -404,15 +441,7 @@ class StudentService {
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getExtendedGuardians);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> guardiansData;
-        if (response is List) {
-          guardiansData = response;
-        } else if (response is Map && response['data'] != null) {
-          guardiansData = response['data'] as List;
-        } else {
-          guardiansData = [];
-        }
+        final guardiansData = ApiClient.unwrapList(response);
 
         final guardians = guardiansData
             .map((guardian) => Guardian.fromJson(guardian))
@@ -431,15 +460,15 @@ class StudentService {
     try {
       // First get the student details to get the primary guardian
       final student = await getStudentById(studentId);
-      
+
       // Get extended guardians
       final extendedGuardians = await getExtendedGuardians();
-      
+
       // Create a list to hold all guardians
       final List<Guardian> allGuardians = [];
-      
+
       // Add primary guardian if available
-      if (student != null && 
+      if (student != null &&
           (student.guardianName != null || student.guardianPhone != null)) {
         allGuardians.add(
           Guardian.fromStudentGuardian(
@@ -450,12 +479,12 @@ class StudentService {
           ),
         );
       }
-      
+
       // Add extended guardians (filter by student ID if API supports it)
       // Note: The API might return all extended guardians for the current user,
       // so we might need to filter based on student relationship
       allGuardians.addAll(extendedGuardians);
-      
+
       return allGuardians;
     } on ApiException {
       rethrow;
@@ -564,26 +593,23 @@ class Student {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'name': name,
-      'photo': photo,
-      'class_name': className,
-      'school_id': schoolId,
-      'school_name': schoolName,
-      'guardian_id': guardianId,
-      'guardian_name': guardianName,
-      'guardian_phone': guardianPhone,
-      'pickup_location': pickupLocation,
-      'dropoff_location': dropoffLocation,
-      'emergency_contact': emergencyContact,
-      'emergency_phone': emergencyPhone,
-      'is_active': isActive,
-      'created_at': createdAt.toIso8601String(),
-      'route': route,
-      'studentRegNumber': studentRegNumber,
-      'transportOrg': transportOrg,
+      'id': int.tryParse(id) ?? 0,
+      'fullname': name,
+      'guardianPhoneNumber': guardianPhone ?? '',
+      'studentRegNumber': studentRegNumber ?? '',
+      'schoolname': schoolName ?? schoolId ?? '',
+      'transportOrg': transportOrg ?? '',
+      'classname': className,
+      'route': route ?? pickupLocation ?? '',
       'latitude': latitude,
       'longitude': longitude,
+      'profileImage': photo ?? '',
+      'hasStudentPaid': false,
+      'isStudentActive': isActive,
+      'isStudentDeleted': false,
+      'expirelyDate': DateTime.now().toUtc().toIso8601String(),
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
     };
   }
 

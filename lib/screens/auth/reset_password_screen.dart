@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../widgets/ui/ui.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -19,8 +23,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
       TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -30,7 +32,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
   // Password strength
   double _passwordStrength = 0;
   String _strengthLabel = '';
-  Color _strengthColor = Colors.grey;
+  Color _strengthColor = AppPalette.textMutedLight;
 
   @override
   void initState() {
@@ -76,20 +78,19 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     final password = _passwordController.text;
     double strength = 0;
     String label = '';
-    Color color = Colors.grey;
+    Color color = AppPalette.textMutedLight;
 
     if (password.isEmpty) {
       strength = 0;
       label = '';
-      color = Colors.grey;
     } else if (password.length < 4) {
       strength = 0.15;
       label = 'Too short';
-      color = Colors.red;
+      color = AppPalette.error;
     } else if (password.length < 6) {
       strength = 0.3;
       label = 'Weak';
-      color = Colors.red;
+      color = AppPalette.error;
     } else {
       int score = 0;
       if (password.length >= 8) score++;
@@ -101,15 +102,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
       if (score <= 2) {
         strength = 0.5;
         label = 'Fair';
-        color = Colors.orange;
+        color = AppPalette.warning;
       } else if (score <= 3) {
         strength = 0.75;
         label = 'Good';
-        color = const Color(0xFF6B9B5B);
+        color = AppPalette.emerald;
       } else {
         strength = 1.0;
         label = 'Strong';
-        color = const Color(0xFF4CAF50);
+        color = AppPalette.success;
       }
     }
 
@@ -126,13 +127,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     HapticFeedback.lightImpact();
 
     if (_phoneNumber == null) {
-      _showError('Invalid session. Please go back and try again.');
+      AppSnackbar.error(context, 'Invalid session. Please go back and try again.');
       return;
     }
 
     final authProvider = context.read<AuthProvider>();
-
-    // Pass the OTP the user entered as the resetToken
     final success = await authProvider.resetPassword(
       phoneNumber: _phoneNumber!,
       resetToken: _otpController.text.trim(),
@@ -144,7 +143,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     if (success) {
       _showSuccessDialog();
     } else {
-      _showError(
+      AppSnackbar.error(
+        context,
         authProvider.errorMessage ??
             'Failed to reset password. Please try again.',
       );
@@ -152,100 +152,57 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
   }
 
   void _showSuccessDialog() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Dialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(AppSpacing.xxl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
+                  color: ctx.colors.brand.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.check_circle_rounded,
-                  color: Color(0xFF6B9B5B),
+                  color: ctx.colors.brand,
                   size: 56,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 'Password Reset\nSuccessful! 🎉',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                  height: 1.3,
-                ),
+                style: ctx.text.headlineSmall,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.sm),
               Text(
-                'Your password has been updated.\nYou can now log in with your new password.',
+                'Your password has been updated. You can now log in with '
+                'your new password.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDark ? Colors.white60 : const Color(0xFF666666),
-                  height: 1.5,
+                style: ctx.text.bodyMedium?.copyWith(
+                  color: ctx.colors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/login',
-                      (route) => false,
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Back to Login',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Back to Login',
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
+                },
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -253,39 +210,25 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF121212)
-          : const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent),
       body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
           child: Column(
             children: [
-              _buildHeader(isDark),
-              const SizedBox(height: 20),
+              _buildHeader(context),
+              const SizedBox(height: AppSpacing.lg),
               const BusIllustration(height: 130),
-              const SizedBox(height: 28),
+              const SizedBox(height: AppSpacing.xl),
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: _buildForm(authProvider, isDark),
+                  child: _buildForm(context, authProvider),
                 ),
               ),
-              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -293,27 +236,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Reset Password 🔐',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
+          Text('Reset Password 🔐', style: context.text.displaySmall),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Enter the OTP sent to your phone and create a new password.',
-            style: TextStyle(
-              fontSize: 16,
-              color: isDark ? Colors.white70 : const Color(0xFF666666),
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
             ),
           ),
         ],
@@ -321,220 +255,129 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     );
   }
 
-  Widget _buildForm(AuthProvider authProvider, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // OTP Field
-            Text(
-              'OTP Code',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+  Widget _buildForm(BuildContext context, AuthProvider authProvider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        shadow: context.colors.shadowMd,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('OTP Code', style: context.text.titleSmall),
+              const SizedBox(height: AppSpacing.xs),
+              TextFormField(
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: context.text.headlineSmall?.copyWith(letterSpacing: 8),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                decoration: InputDecoration(
+                  hintText: '• • • • • •',
+                  hintStyle: TextStyle(
+                    color: context.colors.textMuted,
+                    letterSpacing: 8,
+                    fontSize: 20,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.sms_outlined,
+                    color: context.colors.textSecondary,
+                    size: 20,
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter the OTP';
+                  }
+                  if (value.length < 4) return 'OTP must be at least 4 digits';
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _otpController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                label: 'New Password',
+                hint: 'Enter new password',
+                controller: _passwordController,
+                obscure: true,
+                prefixIcon: Icons.lock_outline_rounded,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  if (value.length < 4) {
+                    return 'Password must be at least 4 characters';
+                  }
+                  return null;
+                },
               ),
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
+              if (_passwordController.text.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _buildPasswordStrengthIndicator(context),
               ],
-              decoration: InputDecoration(
-                hintText: '• • • • • •',
-                hintStyle: TextStyle(
-                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-                  letterSpacing: 8,
-                  fontSize: 22,
-                ),
-                filled: true,
-                fillColor: isDark
-                    ? const Color(0xFF2C2C2C)
-                    : const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6B9B5B),
-                    width: 1.5,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 18,
-                ),
-                prefixIcon: Icon(
-                  Icons.sms_outlined,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                  size: 20,
-                ),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                label: 'Confirm Password',
+                hint: 'Re-enter new password',
+                controller: _confirmPasswordController,
+                obscure: true,
+                prefixIcon: Icons.lock_outline_rounded,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please confirm your password';
+                  }
+                  if (value != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                },
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter the OTP';
-                }
-                if (value.length < 4) {
-                  return 'OTP must be at least 4 digits';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            // New Password Field
-            _buildPasswordField(
-              'New Password',
-              _passwordController,
-              _obscurePassword,
-              () => setState(() => _obscurePassword = !_obscurePassword),
-              isDark: isDark,
-              hintText: 'Enter new password',
-            ),
-
-            // Password strength indicator
-            if (_passwordController.text.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _buildPasswordStrengthIndicator(isDark),
-            ],
-
-            const SizedBox(height: 20),
-
-            // Confirm Password Field
-            _buildPasswordField(
-              'Confirm Password',
-              _confirmPasswordController,
-              _obscureConfirmPassword,
-              () => setState(
-                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Reset Password',
+                icon: Icons.lock_reset_rounded,
+                loading: authProvider.isLoading,
+                onPressed: _resetPassword,
               ),
-              isDark: isDark,
-              hintText: 'Re-enter new password',
-              validator: (value) {
-                if (value == null || value.isEmpty)
-                  return 'Please confirm your password';
-                if (value != _passwordController.text)
-                  return 'Passwords do not match';
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 28),
-
-            // Reset Password Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _resetPassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: const Color(
-                    0xFF6B9B5B,
-                  ).withValues(alpha: 0.5),
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: context.colors.brandSoft,
+                  borderRadius: AppRadius.brSm,
                 ),
-                child: authProvider.isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 18,
+                      color: context.colors.onBrandSoft,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        'The OTP will expire in 5 minutes. If you didn\'t '
+                        'receive it, go back and request again.',
+                        style: context.text.labelMedium?.copyWith(
+                          color: context.colors.onBrandSoft,
                         ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock_reset_rounded, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Reset Password',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Security notice
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(
-                  0xFF6B9B5B,
-                ).withValues(alpha: isDark ? 0.08 : 0.06),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.shield_outlined,
-                    size: 18,
-                    color: const Color(0xFF6B9B5B),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'The OTP will expire in 5 minutes. If you didn\'t receive it, go back and request again.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? Colors.white54
-                            : const Color(0xFF888888),
-                        height: 1.4,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPasswordStrengthIndicator(bool isDark) {
+  Widget _buildPasswordStrengthIndicator(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -542,7 +385,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: _passwordStrength,
-            backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
+            backgroundColor: context.colors.surfaceSubtle,
             valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
             minHeight: 4,
           ),
@@ -550,92 +393,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
         const SizedBox(height: 6),
         Text(
           _strengthLabel,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: _strengthColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPasswordField(
-    String label,
-    TextEditingController controller,
-    bool obscureText,
-    VoidCallback onToggle, {
-    required bool isDark,
-    String hintText = 'Enter your password',
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          obscureText: obscureText,
-          style: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          validator:
-              validator ??
-              (value) {
-                if (value == null || value.isEmpty)
-                  return 'Please enter your password';
-                if (value.length < 4)
-                  return 'Password must be at least 4 characters';
-                return null;
-              },
-          decoration: InputDecoration(
-            hintText: hintText,
-            hintStyle: TextStyle(
-              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-            ),
-            filled: true,
-            fillColor: isDark
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFF5F5F5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF6B9B5B),
-                width: 1.5,
-              ),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-            prefixIcon: Icon(
-              Icons.lock_outline_rounded,
-              color: isDark ? Colors.white38 : Colors.grey.shade500,
-              size: 20,
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                obscureText
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: isDark ? Colors.white38 : Colors.grey.shade600,
-              ),
-              onPressed: onToggle,
-            ),
-          ),
+          style: context.text.labelMedium?.copyWith(color: _strengthColor),
         ),
       ],
     );

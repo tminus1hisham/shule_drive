@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' show sqrt, sin, cos, atan2, pi;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart' as geo;
+import '../mqtt_client.dart';
 import '../models/map_models.dart';
 import '../utils/mock_tracking_data.dart';
 
@@ -18,8 +19,8 @@ class TrackingService {
   factory TrackingService() => _instance;
   TrackingService._internal();
 
-  // MQTT Service for real-time updates (null when not available)
-  dynamic _mqttService;
+  // MQTT Service for real-time updates.
+  MqttService? _mqttService;
 
   // Mock data generator for testing without backend (disabled by default)
   final MockTrackingGenerator _mockGenerator = MockTrackingGenerator();
@@ -41,7 +42,8 @@ class TrackingService {
   Timer? _geofenceCheckTimer;
 
   // Subscriptions
-  final Map<String, StreamSubscription> _subscriptions = {};
+  final Map<String, void Function(String topic, String message)>
+      _mqttCallbacks = {};
 
   bool _isInitialized = false;
 
@@ -50,9 +52,7 @@ class TrackingService {
     if (_isInitialized) return;
 
     try {
-      // TODO: Initialize MQTT service when backend is ready
-      // _mqttService = MQTTService();
-      // await _mqttService.connect();
+      _mqttService = MqttService();
       _isInitialized = true;
       _startGeofenceChecker();
       debugPrint('TrackingService: Initialized');
@@ -71,10 +71,7 @@ class TrackingService {
       controller.close();
     }
     _allBusesController.close();
-    for (final sub in _subscriptions.values) {
-      sub.cancel();
-    }
-    _subscriptions.clear();
+    _mqttCallbacks.clear();
   }
 
   // ==================== BUS TRACKING ====================
@@ -90,9 +87,10 @@ class TrackingService {
           _locationControllers[busId]?.add(location);
         });
         _mockGenerator.startMockMode();
-      } else {
-        // Use MQTT when available
+      } else if (_mqttService != null) {
         _subscribeToBusLocation(busId);
+      } else {
+        debugPrint('TrackingService: MQTT unavailable for bus $busId');
       }
     }
     return _locationControllers[busId]!.stream;
@@ -117,32 +115,40 @@ class TrackingService {
 
   /// Subscribe to bus location via MQTT
   void _subscribeToBusLocation(String busId) {
-    final topic = 'bus/$busId/location';
+    final topics = ['bus/$busId/location', 'driver/$busId/location'];
 
-    final subscription = _mqttService.messageStream
-        .where((msg) => msg.topic == topic)
-        .listen((message) {
-          try {
-            final location = BusLocation.fromJson(message.payload);
-            _latestLocations[busId] = location;
-            _locationControllers[busId]?.add(location);
-            _notifyAllBusesUpdate();
+    for (final topic in topics) {
+      if (_mqttCallbacks.containsKey(topic)) continue;
 
-            // Check geofences
-            _checkGeofencesForBus(location);
-          } catch (e) {
-            debugPrint('TrackingService: Error parsing location: $e');
-          }
-        });
+      void callback(String topic, String message) {
+        try {
+          final payload = jsonDecode(message) as Map<String, dynamic>;
+          final location = BusLocation.fromJson(payload);
+          _latestLocations[busId] = location;
+          _locationControllers[busId]?.add(location);
+          _notifyAllBusesUpdate();
+          _checkGeofencesForBus(location);
+        } catch (e) {
+          debugPrint('TrackingService: Error parsing location: $e');
+        }
+      }
 
-    _subscriptions['location_$busId'] = subscription;
-    // _mqttService?.subscribe(topic);
+      _mqttCallbacks[topic] = callback;
+      final subscription = _mqttService?.subscribe(topic, callback);
+      subscription?.catchError((e) {
+        debugPrint('TrackingService: MQTT subscribe failed for $topic: $e');
+      });
+    }
   }
 
   void _unsubscribeFromBusLocation(String busId) {
-    _subscriptions['location_$busId']?.cancel();
-    _subscriptions.remove('location_$busId');
-    // _mqttService?.unsubscribe('bus/$busId/location');
+    final topics = ['bus/$busId/location', 'driver/$busId/location'];
+    for (final topic in topics) {
+      final callback = _mqttCallbacks.remove(topic);
+      if (callback != null) {
+        _mqttService?.unsubscribe(topic, callback);
+      }
+    }
   }
 
   void _notifyAllBusesUpdate() {

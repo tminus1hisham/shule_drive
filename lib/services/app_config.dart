@@ -60,7 +60,7 @@ class AppConfig {
     }
 
     // Pre-load commonly used values
-    _cachedMapboxToken = await _getMapboxToken();
+    _cachedMapboxToken = _getMapboxToken();
     _cachedApiBaseUrl = _getApiBaseUrl();
     _cachedEnvironment = _getEnvironment();
 
@@ -218,6 +218,7 @@ class AppConfig {
     _cachedMapboxToken = null;
     _cachedApiBaseUrl = null;
     _cachedEnvironment = null;
+    _initialized = false;
     await initialize();
   }
 

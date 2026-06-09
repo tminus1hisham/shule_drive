@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
 import '../screens/main/landing_screen.dart';
 import '../screens/main/home_screen.dart';
@@ -23,26 +22,26 @@ class MainScaffoldWithTabs extends StatefulWidget {
 class _MainScaffoldWithTabsState extends State<MainScaffoldWithTabs> {
   int _currentIndex = 0;
   late final List<Widget> _pages;
-  
+
   @override
   void initState() {
     super.initState();
     // Initialize pages based on user role
     final authProvider = context.read<AuthProvider>();
     final isDriver = authProvider.isDriver;
-    
+
     _pages = [
       isDriver ? const LandingScreen() : const HomeScreen(), // Main screen
-      const ChatListScreen(),                                // Chat
-      const NotificationsScreen(),                           // Notifications
-      const ProfileScreen(),                                 // Settings/Profile
-      if (isDriver) const StartTripScreen(),                 // Start trip (driver only)
+      const ChatListScreen(), // Chat
+      const NotificationsScreen(), // Notifications
+      const ProfileScreen(), // Settings/Profile
+      if (isDriver) const StartTripScreen(), // Start trip (driver only)
     ];
   }
 
   void _onTabTapped(int index) {
     if (index == _currentIndex) return;
-    
+
     setState(() {
       _currentIndex = index;
     });
@@ -52,13 +51,13 @@ class _MainScaffoldWithTabsState extends State<MainScaffoldWithTabs> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final isDriver = authProvider.isDriver;
-    
+
     // Calculate actual tab index (excluding center button for guardians)
     int actualIndex = _currentIndex;
     if (!isDriver && _currentIndex >= 4) {
       actualIndex = _currentIndex - 1;
     }
-    
+
     return Scaffold(
       drawer: const SideMenu(),
       body: IndexedStack(
@@ -94,10 +93,9 @@ class TabAwareScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: title != null ? AppBar(
-        title: Text(title!),
-        actions: actions,
-      ) : null,
+      appBar: title != null
+          ? AppBar(title: Text(title!), actions: actions)
+          : null,
       body: child,
       floatingActionButton: floatingActionButton,
     );

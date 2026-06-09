@@ -39,7 +39,7 @@ class MasterTrip {
 
   factory MasterTrip.fromJson(Map<String, dynamic> json) {
     return MasterTrip(
-      id: json['id'] ?? 0,
+      id: _parseInt(json['id']),
       tripName: json['tripName'] ?? '',
       tripTime: json['tripTime'] ?? '',
       tripType: json['tripType'] ?? '',
@@ -86,6 +86,11 @@ class MasterTrip {
       debugPrint('Failed to parse date: $value');
       return null;
     }
+  }
+
+  static int _parseInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }
 
@@ -156,10 +161,10 @@ class TripStudent {
 
   factory TripStudent.fromJson(Map<String, dynamic> json) {
     return TripStudent(
-      id: json['id'] ?? 0,
-      masterTripId: json['masterTripId'] ?? 0,
+      id: _parseInt(json['id']),
+      masterTripId: _parseInt(json['masterTripId']),
       fullname: json['fullname'] ?? '',
-      studentId: json['studentId'] ?? 0,
+      studentId: _parseInt(json['studentId']),
       guardianPhoneNumber: json['guardianPhoneNumber'] ?? '',
       studentRegNumber: json['studentRegNumber'] ?? '',
       schoolname: json['schoolname'] ?? '',
@@ -232,6 +237,11 @@ class TripStudent {
       return null;
     }
   }
+
+  static int _parseInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 }
 
 /// Trip Guardian Model
@@ -279,7 +289,7 @@ class TripGuardian {
 
   factory TripGuardian.fromJson(Map<String, dynamic> json) {
     return TripGuardian(
-      id: json['id'] ?? 0,
+      id: _parseInt(json['id']),
       userId: json['userId'] ?? '',
       fullname: json['fullname'] ?? '',
       phoneNumber: json['phoneNumber'] ?? '',
@@ -332,5 +342,10 @@ class TripGuardian {
       debugPrint('Failed to parse date: $value');
       return null;
     }
+  }
+
+  static int _parseInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }

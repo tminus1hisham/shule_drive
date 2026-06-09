@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
@@ -10,8 +9,8 @@ import '../../api/services/student_service.dart';
 /// Guardian Map Screen - Shows driver location, child status, and trip progress
 ///
 /// Features:
-/// - Full screen Mapbox map
-/// - Real-time driver location with green bus marker
+/// - Full screen Mapbox map (native SDK)
+/// - Real-time driver location with bus marker
 /// - Child's pickup/dropoff location marker
 /// - Route display from driver to child's location
 /// - Status information: Waiting, Picked up, Dropped off
@@ -37,7 +36,13 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   final TripService _tripService = TripService();
   final StudentService _studentService = StudentService();
 
-  final MapController _mapController = MapController();
+  // Mapbox
+  MapboxMap? _mapboxMap;
+  PointAnnotationManager? _pointAnnotationManager;
+  PolylineAnnotationManager? _polylineAnnotationManager;
+  PointAnnotation? _driverAnnotation;
+  PointAnnotation? _studentAnnotation;
+  PolylineAnnotation? _routeAnnotation;
 
   Timer? _locationPollTimer;
   static const Duration _pollInterval = Duration(seconds: 10);
@@ -54,6 +59,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   @override
   void initState() {
     super.initState();
+    MapboxOptions.setAccessToken(MapConfig.mapboxAccessToken);
     _loadInitialData();
     _startLocationPolling();
   }
@@ -61,11 +67,9 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   @override
   void dispose() {
     _locationPollTimer?.cancel();
-    _mapController.dispose();
+    _mapboxMap?.dispose();
     super.dispose();
   }
-
-  // MapConfig mapbox token is injected directly in TileLayer.
 
   void _startLocationPolling() {
     _locationPollTimer = Timer.periodic(_pollInterval, (_) {
@@ -77,19 +81,16 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Load trip details
       final trip = await _tripService.getTripDetails(widget.tripId);
       if (trip != null) {
         setState(() => _trip = trip);
       }
 
-      // Load student details
       final student = await _studentService.getStudentById(widget.studentId);
       if (student != null) {
         setState(() => _student = student);
       }
 
-      // Fetch driver location
       await _fetchDriverLocation();
 
       setState(() => _isLoading = false);
@@ -103,8 +104,6 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
 
   Future<void> _fetchDriverLocation() async {
     try {
-      // TODO: Replace with actual driver location API
-      // For now, simulate driver movement
       await _simulateDriverLocation();
     } catch (e) {
       debugPrint('Error fetching driver location: $e');
@@ -113,21 +112,17 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
 
   /// Simulate driver location (replace with real API)
   Future<void> _simulateDriverLocation() async {
-    // Default to Nairobi if no student location
     double studentLat = MapConfig.defaultLatitude;
     double studentLng = MapConfig.defaultLongitude;
 
-    // Use student location if available
     if (_student != null && _student!.hasValidLocation()) {
       studentLat = _student!.latitude;
       studentLng = _student!.longitude;
     }
 
-    // Simulate driver approaching student
     final now = DateTime.now();
     final random = now.millisecond / 1000;
 
-    // Simulate driver within 1km of student
     final driverLat = studentLat + (random - 0.5) * 0.01;
     final driverLng = studentLng + (random - 0.5) * 0.01;
 
@@ -141,7 +136,6 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
       );
     });
 
-    // Calculate route and ETA
     await _calculateRoute();
   }
 
@@ -155,15 +149,18 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
     ]);
 
     if (result.success) {
-      setState(() {
-        _routeResult = result;
-      });
+      setState(() => _routeResult = result);
       _updateMapAnnotations();
     }
   }
 
-  void _onMapReady() {
-    // Camera centers automatically via MapOptions.initialCenter
+  void _onMapCreated(MapboxMap mapboxMap) async {
+    _mapboxMap = mapboxMap;
+    _pointAnnotationManager =
+        await mapboxMap.annotations.createPointAnnotationManager();
+    _polylineAnnotationManager =
+        await mapboxMap.annotations.createPolylineAnnotationManager();
+    _updateMapAnnotations();
   }
 
   void _updateMapAnnotations() {
@@ -171,14 +168,80 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
     _updateRouteLine();
   }
 
-  void _updateMarkers() {
-    if (mounted) {
-      setState(() {});
+  Future<void> _updateMarkers() async {
+    if (_pointAnnotationManager == null) return;
+
+    // Driver (bus) marker
+    if (_driverLocation != null) {
+      final driverPoint = Point(
+        coordinates: Position(
+          _driverLocation!.longitude,
+          _driverLocation!.latitude,
+        ),
+      );
+
+      if (_driverAnnotation != null) {
+        _driverAnnotation!.geometry = driverPoint;
+        _driverAnnotation!.iconRotate = _driverLocation!.heading;
+        await _pointAnnotationManager!.update(_driverAnnotation!);
+      } else {
+        _driverAnnotation = await _pointAnnotationManager!.create(
+          PointAnnotationOptions(
+            geometry: driverPoint,
+            textField: '🚌',
+            textSize: 28,
+            iconRotate: _driverLocation!.heading,
+            ),
+        );
+      }
+    }
+
+    // Student marker
+    if (_student != null && _student!.hasValidLocation()) {
+      final studentPoint = Point(
+        coordinates: Position(_student!.longitude, _student!.latitude),
+      );
+      final emoji = _getStudentStatusEmoji();
+
+      if (_studentAnnotation != null) {
+        _studentAnnotation!.geometry = studentPoint;
+        _studentAnnotation!.textField = emoji;
+        await _pointAnnotationManager!.update(_studentAnnotation!);
+      } else {
+        _studentAnnotation = await _pointAnnotationManager!.create(
+          PointAnnotationOptions(
+            geometry: studentPoint,
+            textField: emoji,
+            textSize: 24,
+            ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateRouteLine() async {
+    if (_polylineAnnotationManager == null) return;
+    if (_routeResult?.coordinates == null) return;
+
+    final coords = _routeResult!.coordinates!
+        .map((p) => Position(p.longitude, p.latitude))
+        .toList();
+
+    if (_routeAnnotation != null) {
+      _routeAnnotation!.geometry = LineString(coordinates: coords);
+      await _polylineAnnotationManager!.update(_routeAnnotation!);
+    } else {
+      _routeAnnotation = await _polylineAnnotationManager!.create(
+        PolylineAnnotationOptions(
+          geometry: LineString(coordinates: coords),
+          lineColor: 0xFF6B9B5B,
+          lineWidth: MapConfig.routeLineWidth,
+        ),
+      );
     }
   }
 
   String _getStudentStatusEmoji() {
-    // Check trip student status if available
     final tripStudent = _trip?.students.firstWhere(
       (s) => s.id == widget.studentId,
       orElse: () => StudentPickup(id: '', name: '', status: 'pending'),
@@ -190,12 +253,6 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
       if (tripStudent.status == 'absent') return '❌';
     }
     return '👤';
-  }
-
-  void _updateRouteLine() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   String _getStudentStatus() {
@@ -251,59 +308,17 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
       body: Stack(
         children: [
           // Map
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: LatLng(
-                MapConfig.defaultLatitude,
-                MapConfig.defaultLongitude,
+          MapWidget(
+            onMapCreated: _onMapCreated,
+            cameraOptions: CameraOptions(
+              center: Point(
+                coordinates: Position(
+                  MapConfig.defaultLongitude,
+                  MapConfig.defaultLatitude,
+                ),
               ),
-              initialZoom: 13,
-              onMapReady: _onMapReady,
+              zoom: 13,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: MapConfig.mapboxTileUrl,
-              ),
-              PolylineLayer(
-                polylines: [
-                  if (_routeResult?.coordinates != null)
-                    Polyline(
-                      points: _routeResult!.coordinates!
-                          .map((p) => LatLng(p.latitude, p.longitude))
-                          .toList(),
-                      color: const Color(0xFF6B9B5B),
-                      strokeWidth: MapConfig.routeLineWidth,
-                    ),
-                ],
-              ),
-              MarkerLayer(
-                markers: [
-                  // Student marker
-                  if (_student != null && _student!.hasValidLocation())
-                    Marker(
-                      point: LatLng(_student!.latitude, _student!.longitude),
-                      width: 40,
-                      height: 40,
-                      child: Text(
-                        _getStudentStatusEmoji(),
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                    ),
-                  // Driver marker
-                  if (_driverLocation != null)
-                    Marker(
-                      point: LatLng(
-                        _driverLocation!.latitude,
-                        _driverLocation!.longitude,
-                      ),
-                      width: 40,
-                      height: 40,
-                      child: const Text('🚌', style: TextStyle(fontSize: 28)),
-                    ),
-                ],
-              ),
-            ],
           ),
 
           // Loading
@@ -328,11 +343,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: Colors.red,
-                    ),
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
                     const SizedBox(height: 16),
@@ -355,8 +366,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             ),
 
           // Legend
-          if (!_isLoading)
-            Positioned(top: 80, right: 16, child: _buildLegend()),
+          if (!_isLoading) Positioned(top: 80, right: 16, child: _buildLegend()),
         ],
       ),
     );
@@ -410,10 +420,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.green.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -483,10 +490,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: _getStatusColor().withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -550,14 +554,8 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
       children: [
         Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
       ],
     );
   }

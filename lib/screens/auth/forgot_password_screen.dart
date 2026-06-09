@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../widgets/ui/ui.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -56,8 +59,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     HapticFeedback.lightImpact();
 
     final authProvider = context.read<AuthProvider>();
-
-    // Request password reset - sends OTP to phone
     final success = await authProvider.requestPasswordReset(
       _completePhoneNumber,
     );
@@ -65,81 +66,41 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     if (!mounted) return;
 
     if (success) {
-      // Navigate directly to reset password screen
       Navigator.pushNamed(
         context,
         '/reset-password',
         arguments: {'phone': _completePhoneNumber},
       );
     } else {
-      _showError(
+      AppSnackbar.error(
+        context,
         authProvider.errorMessage ?? 'Failed to send OTP. Please try again.',
       );
     }
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF121212)
-          : const Color(0xFFF5F5F0),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent),
       body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
           child: Column(
             children: [
-              // Welcome Text
-              _buildHeader(),
-
-              const SizedBox(height: 20),
-
-              // Bus Illustration
+              _buildHeader(context),
+              const SizedBox(height: AppSpacing.lg),
               const BusIllustration(height: 160),
-
-              const SizedBox(height: 32),
-
-              // Form
+              const SizedBox(height: AppSpacing.xxl),
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: _buildForm(authProvider),
+                  child: _buildForm(context, authProvider),
                 ),
               ),
-              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -147,28 +108,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildHeader() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text('Forgot Password? 🔐', style: context.text.displaySmall),
+          const SizedBox(height: AppSpacing.xs),
           Text(
-            'Forgot Password? 🔐',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Enter your phone number and we\'ll send you an OTP to reset your password.',
-            style: TextStyle(
-              fontSize: 16,
-              color: isDark ? Colors.white70 : const Color(0xFF666666),
+            'Enter your phone number and we\'ll send you an OTP to reset '
+            'your password.',
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
             ),
           ),
         ],
@@ -176,154 +128,60 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildForm(AuthProvider authProvider) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Phone Field
-            _buildPhoneField(),
-
-            const SizedBox(height: 24),
-
-            // Send OTP Button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _sendOTP,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: const Color(
-                    0xFF6B9B5B,
-                  ).withValues(alpha: 0.5),
+  Widget _buildForm(BuildContext context, AuthProvider authProvider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        shadow: context.colors.shadowMd,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Phone Number', style: context.text.titleSmall),
+              const SizedBox(height: AppSpacing.xs),
+              IntlPhoneField(
+                controller: _phoneController,
+                decoration: const InputDecoration(hintText: '712 345 678'),
+                initialCountryCode: 'KE',
+                disableLengthCheck: true,
+                flagsButtonPadding: const EdgeInsets.only(left: AppSpacing.sm),
+                dropdownIcon: Icon(
+                  Icons.arrow_drop_down,
+                  color: context.colors.textSecondary,
                 ),
-                child: authProvider.isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-                    : const Text(
-                        'Send OTP',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                dropdownTextStyle: context.text.bodyLarge,
+                style: context.text.bodyLarge,
+                onChanged: (phone) => _completePhoneNumber = phone.completeNumber,
+                validator: (phone) {
+                  if (phone == null || phone.number.isEmpty) {
+                    return 'Please enter your phone number';
+                  }
+                  if (phone.number.length < 9) {
+                    return 'Please enter a valid phone number';
+                  }
+                  return null;
+                },
               ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Back to Login
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Back to Login',
-                  style: TextStyle(
-                    color: Color(0xFF6B9B5B),
-                    fontWeight: FontWeight.w600,
-                  ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Send OTP',
+                icon: Icons.send_rounded,
+                loading: authProvider.isLoading,
+                onPressed: _sendOTP,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Back to Login'),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildPhoneField() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Phone Number',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-        ),
-        const SizedBox(height: 8),
-        IntlPhoneField(
-          controller: _phoneController,
-          decoration: InputDecoration(
-            hintText: '712 345 678',
-            hintStyle: TextStyle(
-              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-            ),
-            filled: true,
-            fillColor: isDark
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFF5F5F5),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-          ),
-          initialCountryCode: 'KE',
-          disableLengthCheck: true,
-          flagsButtonPadding: const EdgeInsets.only(left: 12),
-          dropdownIcon: Icon(
-            Icons.arrow_drop_down,
-            color: isDark ? Colors.white70 : const Color(0xFF666666),
-          ),
-          dropdownTextStyle: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          style: TextStyle(
-            fontSize: 16,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
-          onChanged: (phone) {
-            _completePhoneNumber = phone.completeNumber;
-          },
-          validator: (phone) {
-            if (phone == null || phone.number.isEmpty) {
-              return 'Please enter your phone number';
-            }
-            if (phone.number.length < 9) {
-              return 'Please enter a valid phone number';
-            }
-            return null;
-          },
-        ),
-      ],
     );
   }
 }

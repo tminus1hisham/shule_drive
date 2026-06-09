@@ -609,11 +609,13 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         routeId: _routeId!,
         vehicleId: _vehicleId!,
         studentIds: studentIds,
+        masterTripId: _selectedMasterTrip?.id,
         route: _routeName ?? '',
         tripName: _selectedMasterTrip?.tripName ?? 'Trip',
         driverName: driverName,
         numberPlate: numberPlate,
         driverPhoneNumber: driverPhone,
+        attendantName: _attendant,
       );
 
       if (!mounted) return;
@@ -690,7 +692,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         if (mounted) {
           Navigator.pushReplacementNamed(
             context,
-            '/driver-map',
+            '/osm-tracking',
             arguments: {
               'tripId': mergedTrip.id,
               'preloadedData': _preloadedData,

@@ -32,12 +32,14 @@ class _ContactScreenState extends State<ContactScreen> {
     // Try to launch using geo URI scheme for better map app support
     final query = Uri.encodeComponent(address);
     final geoUri = Uri.parse('geo:0,0?q=$query');
-    
+
     if (await canLaunchUrl(geoUri)) {
       await launchUrl(geoUri);
     } else {
       // Fallback to Google Maps web URL
-      final mapsUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+      final mapsUri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$query',
+      );
       if (await canLaunchUrl(mapsUri)) {
         await launchUrl(mapsUri, mode: LaunchMode.externalApplication);
       }
@@ -99,7 +101,10 @@ class _ContactScreenState extends State<ContactScreen> {
                     'Nairobi Office',
                     () => _launchPhone('+254750003304'),
                   ),
-                  Divider(height: 32, color: provider.textMutedColor.withOpacity(0.2)),
+                  Divider(
+                    height: 32,
+                    color: provider.textMutedColor.withValues(alpha: 0.2),
+                  ),
                   _buildContactItem(
                     provider,
                     Icons.phone,
@@ -107,7 +112,10 @@ class _ContactScreenState extends State<ContactScreen> {
                     'Customer Support - Always Active',
                     () => _launchPhone('+254712345678'),
                   ),
-                  Divider(height: 32, color: provider.textMutedColor.withOpacity(0.2)),
+                  Divider(
+                    height: 32,
+                    color: provider.textMutedColor.withValues(alpha: 0.2),
+                  ),
                   _buildContactItem(
                     provider,
                     Icons.phone,
@@ -124,7 +132,9 @@ class _ContactScreenState extends State<ContactScreen> {
                     Icons.location_on,
                     'Westlands Heights, Kiambu Road',
                     'Nairobi, Kenya',
-                    () => _launchMaps('Westlands Heights, Kiambu Road, Nairobi, Kenya'),
+                    () => _launchMaps(
+                      'Westlands Heights, Kiambu Road, Nairobi, Kenya',
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(left: 40, top: 8),
@@ -171,16 +181,12 @@ class _ContactScreenState extends State<ContactScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: provider.isDarkMode 
-                  ? const Color(0xFF2C4A2C) 
+              color: provider.isDarkMode
+                  ? const Color(0xFF2C4A2C)
                   : const Color(0xFFE8F5E9),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF6B9B5B),
-              size: 22,
-            ),
+            child: Icon(icon, color: const Color(0xFF6B9B5B), size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -206,10 +212,7 @@ class _ContactScreenState extends State<ContactScreen> {
               ],
             ),
           ),
-          Icon(
-            Icons.chevron_right,
-            color: provider.textMutedColor,
-          ),
+          Icon(Icons.chevron_right, color: provider.textMutedColor),
         ],
       ),
     );

@@ -37,8 +37,9 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Future<void> _loadTripDetails() async {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
     if (args != null && args['history'] != null) {
       setState(() {
         _tripHistory = args['history'] as TripHistory;
@@ -47,14 +48,14 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     } else if (args != null && args['tripId'] != null) {
       // Load from history service
       final authProvider = context.read<AuthProvider>();
-      final driverId = authProvider.userData?['id'] ?? '';
+      final driverId = authProvider.userData['id'] ?? '';
       final history = await TripHistoryService().getTripHistory(driverId);
-      
+
       final tripHistory = history.firstWhere(
         (h) => h.trip.id == args['tripId'],
         orElse: () => throw Exception('Trip not found'),
       );
-      
+
       if (mounted) {
         setState(() {
           _tripHistory = tripHistory;
@@ -68,14 +69,26 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
 
   String _formatDate(DateTime date) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   String _formatTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : (date.hour == 0 ? 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final period = date.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
@@ -109,7 +122,11 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: provider.textMutedColor),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: provider.textMutedColor,
+              ),
               const SizedBox(height: 16),
               Text(
                 'Trip not found',
@@ -138,28 +155,28 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
           children: [
             // Trip Header Card
             _buildTripHeaderCard(provider, trip, history),
-            
+
             const SizedBox(height: 20),
-            
+
             // Trip Stats
             _buildTripStats(provider, trip),
-            
+
             const SizedBox(height: 24),
-            
+
             // Students Section
             _buildStudentsSection(provider, trip),
-            
+
             const SizedBox(height: 24),
-            
+
             // Trip Timeline (if stops available)
             if (trip.stops.isNotEmpty) ...[
               _buildTimelineSection(provider, trip),
               const SizedBox(height: 24),
             ],
-            
+
             // Driver Info
             _buildDriverInfoCard(provider, history),
-            
+
             const SizedBox(height: 32),
           ],
         ),
@@ -215,9 +232,13 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     );
   }
 
-  Widget _buildTripHeaderCard(AppProvider provider, Trip trip, TripHistory history) {
+  Widget _buildTripHeaderCard(
+    AppProvider provider,
+    Trip trip,
+    TripHistory history,
+  ) {
     final isCompleted = trip.isCompleted;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -242,7 +263,10 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -424,10 +448,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: provider.textMutedColor,
-              ),
+              style: TextStyle(fontSize: 11, color: provider.textMutedColor),
               textAlign: TextAlign.center,
             ),
           ],
@@ -446,7 +467,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         print('   First student: ${trip.students.first}');
       }
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -470,7 +491,11 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.check_circle, color: Color(0xFF6B9B5B), size: 16),
+                  const Icon(
+                    Icons.check_circle,
+                    color: Color(0xFF6B9B5B),
+                    size: 16,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${trip.pickedCount}/${trip.students.length}',
@@ -491,10 +516,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 'No students in this trip',
-                style: TextStyle(
-                  color: provider.textMutedColor,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: provider.textMutedColor, fontSize: 14),
               ),
             ),
           )
@@ -506,23 +528,6 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             separatorBuilder: (context, index) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final student = trip.students[index];
-              // Defensive check for student type
-              if (student is! StudentPickup) {
-                if (kDebugMode) {
-                  print('❌ Invalid student type at index $index: ${student.runtimeType}');
-                }
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withAlpha(20),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Error: Invalid student data',
-                    style: TextStyle(color: Colors.red.shade700),
-                  ),
-                );
-              }
               return _buildStudentItem(provider, student);
             },
           ),
@@ -534,15 +539,16 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     Color statusColor;
     IconData statusIcon;
     String statusText;
-    
+
     // Handle corrupted data
-    final studentName = student.name.isNotEmpty && student.name != 'string' 
-        ? student.name 
+    final studentName = student.name.isNotEmpty && student.name != 'string'
+        ? student.name
         : 'Unknown Student';
-    final parentPhone = student.parentPhone != null && student.parentPhone != 'string'
+    final parentPhone =
+        student.parentPhone != null && student.parentPhone != 'string'
         ? student.parentPhone
         : null;
-    
+
     switch (student.status) {
       case 'picked':
         statusColor = const Color(0xFF4CAF50);
@@ -570,17 +576,14 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
       decoration: BoxDecoration(
         color: provider.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: statusColor.withAlpha(50),
-          width: 1,
-        ),
+        border: Border.all(color: statusColor.withAlpha(50), width: 1),
       ),
       child: Row(
         children: [
           // Student Avatar
           _buildStudentAvatar(student),
           const SizedBox(width: 12),
-          
+
           // Student Info
           Expanded(
             child: Column(
@@ -607,7 +610,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               ],
             ),
           ),
-          
+
           // Status Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -637,12 +640,13 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Widget _buildStudentAvatar(StudentPickup student) {
-    final photoUrl = student.photo != null && 
-                     student.photo!.isNotEmpty && 
-                     student.photo != 'string'
+    final photoUrl =
+        student.photo != null &&
+            student.photo!.isNotEmpty &&
+            student.photo != 'string'
         ? student.photo
         : null;
-    
+
     if (photoUrl != null) {
       return CircleAvatar(
         radius: 24,
@@ -650,7 +654,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         onBackgroundImageError: (_, __) {},
       );
     }
-    
+
     return CircleAvatar(
       radius: 24,
       backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
@@ -681,7 +685,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             children: trip.stops.map((stop) {
               final index = trip.stops.indexOf(stop);
               final isLast = index == trip.stops.length - 1;
-              
+
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -784,7 +788,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     final provider = context.read<AppProvider>();
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -793,10 +797,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
           const SizedBox(width: 12),
           Text(
             '$label: ',
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
+            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
           ),
           Expanded(
             child: Text(

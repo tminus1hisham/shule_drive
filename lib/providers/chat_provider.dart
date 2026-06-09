@@ -53,7 +53,9 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Fetch all conversations
-  Future<List<ChatConversation>> getConversations({bool forceRefresh = false}) async {
+  Future<List<ChatConversation>> getConversations({
+    bool forceRefresh = false,
+  }) async {
     if (!forceRefresh && _conversations.isNotEmpty) {
       return _conversations;
     }
@@ -71,7 +73,9 @@ class ChatProvider extends ChangeNotifier {
         return _conversations;
       }
 
-      _conversations = await _fetchChatContactsFromApi(senderPhone: currentUserPhone);
+      _conversations = await _fetchChatContactsFromApi(
+        senderPhone: currentUserPhone,
+      );
       debugPrint('✅ Loaded ${_conversations.length} conversations');
     } catch (e) {
       _conversationsError = 'Error loading conversations: $e';
@@ -92,11 +96,13 @@ class ChatProvider extends ChangeNotifier {
         Endpoints.getChatContacts,
         queryParams: {'senderId': senderPhone},
       );
-      
+
       debugPrint('🔷 Fetching chat contacts: $url');
-      final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
-      final List<dynamic> contactsData = response is List ? response : (response['data'] ?? []);
-      
+      final response = await _apiClient.get(
+        url.replaceFirst(Endpoints.baseUrl, ''),
+      );
+      final contactsData = ApiClient.unwrapList(response);
+
       debugPrint('📥 Received ${contactsData.length} contacts from API');
 
       return contactsData.map((json) {
@@ -104,20 +110,23 @@ class ChatProvider extends ChangeNotifier {
         final otherUserName = json['receiverName']?.toString() ?? 'Unknown';
         final lastMessageText = json['message']?.toString() ?? '';
         final lastMessageTime = json['createdAt']?.toString() ?? '';
-        
+
         return ChatConversation(
           id: '${senderPhone}_$otherUserPhone',
           otherUserPhone: otherUserPhone,
           otherUserName: otherUserName,
           otherUserAvatar: json['avatar']?.toString(),
-          lastMessage: lastMessageText.isNotEmpty ? ChatMessage(
-            id: json['id']?.toString() ?? '',
-            senderId: json['senderId']?.toString() ?? '',
-            recipientId: otherUserPhone,
-            content: lastMessageText,
-            timestamp: DateTime.tryParse(lastMessageTime) ?? DateTime.now(),
-            status: MessageStatus.sent,
-          ) : null,
+          lastMessage: lastMessageText.isNotEmpty
+              ? ChatMessage(
+                  id: json['id']?.toString() ?? '',
+                  senderId: json['senderId']?.toString() ?? '',
+                  recipientId: otherUserPhone,
+                  content: lastMessageText,
+                  timestamp:
+                      DateTime.tryParse(lastMessageTime) ?? DateTime.now(),
+                  status: MessageStatus.sent,
+                )
+              : null,
           unreadCount: 0,
           lastActivity: DateTime.tryParse(lastMessageTime),
         );
@@ -153,21 +162,21 @@ class ChatProvider extends ChangeNotifier {
       try {
         final driversResponse = await _apiClient.get(
           Endpoints.getActiveDrivers,
-          queryParams: {'limit': '1000', 'page': '1'},
         );
-        final driversData = driversResponse is List ? driversResponse : 
-                           (driversResponse['data'] ?? []);
-        
+        final driversData = ApiClient.unwrapList(driversResponse);
+
         for (final d in driversData) {
           final phone = d['phoneNumber']?.toString() ?? d['phone']?.toString();
           if (phone != null && phone.isNotEmpty) {
-            allUsers.add(ChatUser(
-              id: d['userId']?.toString() ?? d['id']?.toString() ?? '',
-              phone: phone,
-              name: d['fullname'] ?? d['name'] ?? 'Unknown Driver',
-              avatar: d['avatar'] ?? d['profileImage'],
-              role: 'Driver',
-            ));
+            allUsers.add(
+              ChatUser(
+                id: d['userId']?.toString() ?? d['id']?.toString() ?? '',
+                phone: phone,
+                name: d['fullname'] ?? d['name'] ?? 'Unknown Driver',
+                avatar: d['avatar'] ?? d['profileImage'],
+                role: 'Driver',
+              ),
+            );
           }
         }
       } catch (e) {
@@ -178,21 +187,21 @@ class ChatProvider extends ChangeNotifier {
       try {
         final guardiansResponse = await _apiClient.get(
           Endpoints.getAllGuardians,
-          queryParams: {'limit': '1000', 'page': '1'},
         );
-        final guardiansData = guardiansResponse is List ? guardiansResponse :
-                             (guardiansResponse['data'] ?? []);
-        
+        final guardiansData = ApiClient.unwrapList(guardiansResponse);
+
         for (final g in guardiansData) {
           final phone = g['phoneNumber']?.toString() ?? g['phone']?.toString();
           if (phone != null && phone.isNotEmpty) {
-            allUsers.add(ChatUser(
-              id: g['userId']?.toString() ?? g['id']?.toString() ?? '',
-              phone: phone,
-              name: g['fullname'] ?? g['name'] ?? 'Unknown Guardian',
-              avatar: g['avatar'] ?? g['profileImage'],
-              role: 'Guardian',
-            ));
+            allUsers.add(
+              ChatUser(
+                id: g['userId']?.toString() ?? g['id']?.toString() ?? '',
+                phone: phone,
+                name: g['fullname'] ?? g['name'] ?? 'Unknown Guardian',
+                avatar: g['avatar'] ?? g['profileImage'],
+                role: 'Guardian',
+              ),
+            );
           }
         }
       } catch (e) {
@@ -206,7 +215,7 @@ class ChatProvider extends ChangeNotifier {
           uniqueUsers[user.phone] = user;
         }
       }
-      
+
       _availableUsers = uniqueUsers.values.toList();
       _availableUsers.sort((a, b) => a.name.compareTo(b.name));
     } catch (e) {
@@ -220,7 +229,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Initialize chat with another user
-  Future<void> initialize(String currentUserPhone, String otherUserPhone) async {
+  Future<void> initialize(
+    String currentUserPhone,
+    String otherUserPhone,
+  ) async {
     _isConnecting = true;
     _error = null;
     _currentChatUserId = otherUserPhone;
@@ -232,14 +244,14 @@ class ChatProvider extends ChangeNotifier {
       _isConnected = true;
 
       debugPrint('💬 Starting chat with phone: $otherUserPhone');
-      
+
       // Subscribe to incoming messages
       await _chatService.startChat(otherUserPhone, (message) {
         if (!_messages.any((m) => m.id == message.id)) {
           _messages.add(message);
           _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
           notifyListeners();
-          
+
           if (message.senderId == otherUserPhone) {
             _chatService.markAsDelivered(message.id, message.senderId);
           }
@@ -250,10 +262,12 @@ class ChatProvider extends ChangeNotifier {
       await _loadMessageHistory(currentUserPhone, otherUserPhone);
 
       _typingSubscription?.cancel();
-      _typingSubscription = _chatService.onTypingIndicator(otherUserPhone).listen((isTyping) {
-        _otherUserTyping = isTyping;
-        notifyListeners();
-      });
+      _typingSubscription = _chatService
+          .onTypingIndicator(otherUserPhone)
+          .listen((isTyping) {
+            _otherUserTyping = isTyping;
+            notifyListeners();
+          });
 
       _isConnecting = false;
       notifyListeners();
@@ -266,7 +280,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Load message history from API
-  Future<void> _loadMessageHistory(String currentUserPhone, String otherUserPhone) async {
+  Future<void> _loadMessageHistory(
+    String currentUserPhone,
+    String otherUserPhone,
+  ) async {
     try {
       debugPrint('📥 Loading message history from API...');
       final url = Endpoints.buildUrl(
@@ -276,24 +293,31 @@ class ChatProvider extends ChangeNotifier {
           'receiverId': otherUserPhone,
         },
       );
-      
-      final response = await _apiClient.get(url.replaceFirst(Endpoints.baseUrl, ''));
-      final List<dynamic> messagesData = response is List ? response : (response['data'] ?? []);
-      
+
+      final response = await _apiClient.get(
+        url.replaceFirst(Endpoints.baseUrl, ''),
+      );
+      final messagesData = ApiClient.unwrapList(response);
+
       debugPrint('📥 Received ${messagesData.length} messages from API');
 
-      _messages = messagesData.map((json) => ChatMessage(
-        id: json['id']?.toString() ?? '',
-        senderId: json['senderId']?.toString() ?? '',
-        recipientId: json['receiverId']?.toString() ?? '',
-        content: json['message']?.toString() ?? '',
-        timestamp: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
-        status: MessageStatus.sent,
-      )).toList();
+      _messages = messagesData
+          .map(
+            (json) => ChatMessage(
+              id: json['id']?.toString() ?? '',
+              senderId: json['senderId']?.toString() ?? '',
+              recipientId: json['receiverId']?.toString() ?? '',
+              content: json['message']?.toString() ?? '',
+              timestamp:
+                  DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+              status: MessageStatus.sent,
+            ),
+          )
+          .toList();
 
       // Sort ascending - oldest first
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      
+
       debugPrint('📥 Total messages loaded: ${_messages.length}');
       notifyListeners();
     } catch (e) {
@@ -302,7 +326,11 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Send a text message
-  Future<void> sendMessage(String content, {String? senderName, String? recipientName}) async {
+  Future<void> sendMessage(
+    String content, {
+    String? senderName,
+    String? recipientName,
+  }) async {
     if (!_isConnected) {
       _error = 'Not connected to chat server';
       notifyListeners();
@@ -336,14 +364,14 @@ class ChatProvider extends ChangeNotifier {
         recipientName: recipientName,
       );
       message.status = MessageStatus.sent;
-      
+
       // Update conversation
       await _updateConversationAfterSend(
         recipientPhone: _currentChatUserId!,
         recipientName: recipientName ?? 'Unknown',
         message: message,
       );
-      
+
       notifyListeners();
     } catch (e) {
       message.status = MessageStatus.failed;
@@ -359,9 +387,9 @@ class ChatProvider extends ChangeNotifier {
     required ChatMessage message,
   }) async {
     final existingIndex = _conversations.indexWhere(
-      (c) => c.otherUserPhone == recipientPhone
+      (c) => c.otherUserPhone == recipientPhone,
     );
-    
+
     if (existingIndex >= 0) {
       final existing = _conversations[existingIndex];
       _conversations[existingIndex] = ChatConversation(
@@ -375,16 +403,18 @@ class ChatProvider extends ChangeNotifier {
         isOnline: existing.isOnline,
       );
     } else {
-      _conversations.add(ChatConversation(
-        id: '${message.senderId}_$recipientPhone',
-        otherUserPhone: recipientPhone,
-        otherUserName: recipientName,
-        lastMessage: message,
-        unreadCount: 0,
-        lastActivity: message.timestamp,
-      ));
+      _conversations.add(
+        ChatConversation(
+          id: '${message.senderId}_$recipientPhone',
+          otherUserPhone: recipientPhone,
+          otherUserName: recipientName,
+          lastMessage: message,
+          unreadCount: 0,
+          lastActivity: message.timestamp,
+        ),
+      );
     }
-    
+
     _conversations.sort((a, b) {
       if (a.lastActivity == null && b.lastActivity == null) return 0;
       if (a.lastActivity == null) return 1;
@@ -396,7 +426,7 @@ class ChatProvider extends ChangeNotifier {
   /// Send typing indicator
   Future<void> sendTypingIndicator(bool isTyping) async {
     if (!_isConnected || _currentChatUserId == null) return;
-    
+
     try {
       await _chatService.sendTypingIndicator(_currentChatUserId!, isTyping);
     } catch (e) {
@@ -407,9 +437,10 @@ class ChatProvider extends ChangeNotifier {
   /// Mark all messages as read
   Future<void> markMessagesAsRead() async {
     if (_currentChatUserId == null) return;
-    
+
     for (final message in _messages) {
-      if (message.senderId == _currentChatUserId && message.status != MessageStatus.read) {
+      if (message.senderId == _currentChatUserId &&
+          message.status != MessageStatus.read) {
         await _chatService.markAsRead(message.id, message.senderId);
         message.status = MessageStatus.read;
       }

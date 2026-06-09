@@ -13,6 +13,19 @@ class AuthService {
   final TokenStorage _tokenStorage = TokenStorage();
   final BufferManager _buffer = BufferManager();
 
+  /// Normalize a phone number to the single format the API expects: E.164
+  /// digits without the leading '+'. Used identically by login, OTP
+  /// verification and password flows so a number is keyed consistently
+  /// across requests (e.g. the OTP is verified against the same string login
+  /// registered it under).
+  static String _normalizePhone(String phoneNumber) {
+    var normalized = phoneNumber.trim();
+    if (normalized.startsWith('+')) {
+      normalized = normalized.substring(1);
+    }
+    return normalized;
+  }
+
   /// Login with phone number and password
   /// POST /api/auth/login
   Future<LoginResponse> login({
@@ -20,15 +33,15 @@ class AuthService {
     required String password,
   }) async {
     try {
-      // Normalize phone number - remove '+' prefix if present
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
+      final normalizedPhone = _normalizePhone(phoneNumber);
 
       final response = await _apiClient.post(
         Endpoints.login,
-        body: {'PhoneNumber': normalizedPhone, 'Password': password},
+        body: {
+          'phoneNumber': normalizedPhone,
+          'password': password,
+          'firebaseToken': '',
+        },
         requiresAuth: false,
       );
 
@@ -40,27 +53,23 @@ class AuthService {
     }
   }
 
-  /// Verify OTP
-  /// POST /api/auth/verify-otp
+  /// Verify two-factor code.
+  /// POST /api/auth/verify/two/factor
   Future<VerifyOtpResponse> verifyOtp(String phoneNumber, String otp) async {
     try {
-      // Use same normalization as login
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
-      // Try local format if E.164 doesn't work
-      if (normalizedPhone.startsWith('254') && normalizedPhone.length == 12) {
-        normalizedPhone = '0${normalizedPhone.substring(3)}';
-      }
+      // Use the same normalization as login so the OTP is verified against
+      // the exact phone string login registered it under.
+      final normalizedPhone = _normalizePhone(phoneNumber);
 
       final response = await _apiClient.post(
         Endpoints.verifyOtp,
-        body: {'PhoneNumber': normalizedPhone, 'OTP': otp},
+        body: {'email': normalizedPhone, 'code': otp},
         requiresAuth: false,
       );
 
-      final verifyResponse = VerifyOtpResponse.fromJson(response);
+      final verifyResponse = response is Map<String, dynamic>
+          ? VerifyOtpResponse.fromJson(response)
+          : VerifyOtpResponse(success: true, message: response.toString());
 
       // Save auth tokens and user data
       if (verifyResponse.token != null) {
@@ -95,14 +104,15 @@ class AuthService {
   Future<RefreshTokenResponse> refreshToken() async {
     try {
       final refreshToken = await _tokenStorage.getRefreshToken();
+      final accessToken = await _tokenStorage.getAccessToken();
 
-      if (refreshToken == null) {
+      if (accessToken == null || refreshToken == null) {
         throw UnauthorizedException(message: 'No refresh token available');
       }
 
       final response = await _apiClient.post(
         Endpoints.refreshToken,
-        body: {'refresh_token': refreshToken},
+        body: {'token': accessToken, 'refreshToken': refreshToken},
         requiresAuth: false,
       );
 
@@ -190,7 +200,7 @@ class AuthService {
   }
 
   /// Update user profile
-  /// PUT /api/user/profile
+  /// No text-profile update endpoint is defined in api.md.
   Future<User> updateProfile({
     required String userId,
     String? name,
@@ -198,16 +208,33 @@ class AuthService {
     String? email,
   }) async {
     try {
-      final response = await _apiClient.put(
-        '${Endpoints.updateProfile}/$userId',
-        body: {
-          if (name != null) 'Name': name,
-          if (phone != null) 'PhoneNumber': phone,
-          if (email != null) 'Email': email,
-        },
+      final current = await getCurrentUser();
+      final updatedUser = User(
+        id: userId,
+        name: User._cleanName(name ?? current?.name ?? ''),
+        phone: phone ?? current?.phone ?? '',
+        email: email ?? current?.email,
+        avatar: current?.avatar,
+        role: current?.role ?? 'unknown',
+        licenseNumber: current?.licenseNumber,
+        vehicleNumber: current?.vehicleNumber,
+        schoolId: current?.schoolId,
+        schoolName: current?.schoolName,
       );
 
-      return User.fromJson(response);
+      await _tokenStorage.saveUserData(
+        userId: updatedUser.id,
+        name: updatedUser.name,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        email: updatedUser.email,
+        avatar: updatedUser.avatar,
+        schoolId: updatedUser.schoolId,
+        schoolName: updatedUser.schoolName,
+      );
+      await cacheCurrentUser(updatedUser);
+
+      return updatedUser;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -220,11 +247,7 @@ class AuthService {
   /// Returns a resetToken in the response that must be passed to resetPassword
   Future<PasswordResetResponse> requestPasswordReset(String phoneNumber) async {
     try {
-      // Normalize phone number
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
+      final normalizedPhone = _normalizePhone(phoneNumber);
 
       final response = await _apiClient.post(
         Endpoints.forgotPassword,
@@ -236,7 +259,9 @@ class AuthService {
         print('📡 Forgot password response: $response');
       }
 
-      return PasswordResetResponse.fromJson(response);
+      return response is Map<String, dynamic>
+          ? PasswordResetResponse.fromJson(response)
+          : PasswordResetResponse(success: true, message: response.toString());
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -244,26 +269,20 @@ class AuthService {
     }
   }
 
-  /// Verify password reset OTP
-  /// POST /api/auth/verify-reset-otp
+  /// Verify password reset OTP.
+  /// api.md exposes forgot/reset password endpoints, but no separate reset OTP
+  /// verification endpoint. The OTP is carried forward as the resetToken.
   Future<PasswordResetResponse> verifyPasswordResetOtp({
     required String phoneNumber,
     required String otp,
   }) async {
     try {
-      // Normalize phone number
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
-
-      final response = await _apiClient.post(
-        Endpoints.verifyResetOtp,
-        body: {'PhoneNumber': normalizedPhone, 'OTP': otp},
-        requiresAuth: false,
+      final resetToken = otp.trim();
+      return PasswordResetResponse(
+        success: resetToken.isNotEmpty,
+        message: resetToken.isNotEmpty ? 'OTP accepted' : 'OTP is required',
+        resetToken: resetToken,
       );
-
-      return PasswordResetResponse.fromJson(response);
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -280,11 +299,7 @@ class AuthService {
     required String newPassword,
   }) async {
     try {
-      // Normalize phone number
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
+      final normalizedPhone = _normalizePhone(phoneNumber);
 
       if (kDebugMode) {
         print('📡 Resetting password for: $normalizedPhone');
@@ -300,7 +315,9 @@ class AuthService {
         requiresAuth: false,
       );
 
-      return PasswordResetResponse.fromJson(response);
+      return response is Map<String, dynamic>
+          ? PasswordResetResponse.fromJson(response)
+          : PasswordResetResponse(success: true, message: response.toString());
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -317,11 +334,7 @@ class AuthService {
     required String newPassword,
   }) async {
     try {
-      // Normalize phone number
-      String normalizedPhone = phoneNumber.trim();
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
-      }
+      final normalizedPhone = _normalizePhone(phoneNumber);
 
       final response = await _apiClient.post(
         Endpoints.changePassword,
@@ -332,7 +345,9 @@ class AuthService {
         },
       );
 
-      return ChangePasswordResponse.fromJson(response);
+      return response is Map<String, dynamic>
+          ? ChangePasswordResponse.fromJson(response)
+          : ChangePasswordResponse(success: true, message: response.toString());
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -352,8 +367,7 @@ class AuthService {
         print('📤 Uploading profile picture:');
         print('  User ID: $userId');
         print('  Image Path: $imagePath');
-        print('  Primary endpoint: ${Endpoints.uploadAvatar}');
-        print('  Fallback endpoint: ${Endpoints.updateProfilePicture}');
+        print('  Endpoint: ${Endpoints.updateProfilePicture}');
       }
 
       // Read file as bytes and encode to base64
@@ -366,33 +380,10 @@ class AuthService {
         print('  Base64 length: ${base64Image.length}');
       }
 
-      // Send as JSON payload (not multipart)
-      // Try the user avatar endpoint first
-      dynamic response;
-      try {
-        if (kDebugMode) {
-          print('📤 Trying endpoint: ${Endpoints.uploadAvatar}');
-          print('📤 UserId: $userId');
-        }
-
-        response = await _apiClient.post(
-          Endpoints.uploadAvatar,
-          body: {'userId': userId, 'image': base64Image},
-        );
-      } on ApiException catch (e) {
-        // If uploadAvatar fails, try updateProfilePicture endpoint
-        if (kDebugMode) {
-          print('⚠️ uploadAvatar failed: ${e.message}');
-          print(
-            '📤 Falling back to endpoint: ${Endpoints.updateProfilePicture}',
-          );
-        }
-
-        response = await _apiClient.post(
-          Endpoints.updateProfilePicture,
-          body: {'image': base64Image},
-        );
-      }
+      final response = await _apiClient.post(
+        Endpoints.updateProfilePicture,
+        body: {'image': base64Image},
+      );
 
       if (kDebugMode) {
         print('📥 Upload response: $response');
@@ -449,14 +440,11 @@ class AuthService {
         print('🖼️ Extracted image URL: $imageUrl');
       }
 
-      if (imageUrl.isEmpty) {
-        throw ApiException(
-          message:
-              'Failed to get image URL from response. Response: ${response.toString()}',
-        );
-      }
-
-      return imageUrl.toString();
+      // api.md's update/profile/picture returns GenericResponseModel (no image
+      // URL). When the server doesn't echo a URL back, return empty rather than
+      // persisting the raw base64 payload as the avatar "URL". Callers keep the
+      // existing avatar and can refresh the profile to surface the new image.
+      return imageUrl;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -551,6 +539,10 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    if (json['data'] is Map<String, dynamic>) {
+      json = json['data'] as Map<String, dynamic>;
+    }
+
     // Debug: print the raw response to understand structure
     debugPrint('LoginResponse raw: $json');
 
@@ -715,8 +707,8 @@ class VerifyOtpResponse {
     return VerifyOtpResponse(
       success: json['success'] ?? false,
       message: json['message'] ?? '',
-      token: json['token'],
-      refreshToken: json['refresh_token'],
+      token: json['token'] ?? json['accessToken'],
+      refreshToken: json['refreshToken'] ?? json['refresh_token'],
       user: json['user'] != null ? User.fromJson(json['user']) : null,
     );
   }
@@ -731,10 +723,11 @@ class RefreshTokenResponse {
   RefreshTokenResponse({required this.success, this.token, this.refreshToken});
 
   factory RefreshTokenResponse.fromJson(Map<String, dynamic> json) {
+    final token = json['token'] ?? json['accessToken'];
     return RefreshTokenResponse(
-      success: json['success'] ?? false,
-      token: json['token'],
-      refreshToken: json['refresh_token'],
+      success: json['success'] ?? token != null,
+      token: token,
+      refreshToken: json['refreshToken'] ?? json['refresh_token'],
     );
   }
 }

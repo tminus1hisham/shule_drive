@@ -24,15 +24,7 @@ class GuardianService {
           queryParams: queryParams.isNotEmpty ? queryParams : null,
         );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> guardiansData;
-        if (response is List) {
-          guardiansData = response;
-        } else if (response is Map && response['data'] != null) {
-          guardiansData = response['data'] as List;
-        } else {
-          guardiansData = [];
-        }
+        final guardiansData = ApiClient.unwrapList(response);
 
         final guardians = guardiansData
             .map((guardian) => Guardian.fromJson(guardian))
@@ -56,15 +48,7 @@ class GuardianService {
           queryParams: {'schoolId': schoolId},
         );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> guardiansData;
-        if (response is List) {
-          guardiansData = response;
-        } else if (response is Map && response['data'] != null) {
-          guardiansData = response['data'] as List;
-        } else {
-          guardiansData = [];
-        }
+        final guardiansData = ApiClient.unwrapList(response);
 
         final guardians = guardiansData
             .map((guardian) => Guardian.fromJson(guardian))
@@ -82,12 +66,10 @@ class GuardianService {
   /// GET /api/guardians/get/{id}
   Future<Guardian?> getGuardianById(String id) async {
     try {
-      final response = await _apiClient.get(
-        Endpoints.getGuardianById(id),
-      );
+      final response = await _apiClient.get(Endpoints.getGuardianById(id));
 
-      final guardianData = response['data'] ?? response;
-      if (guardianData is Map<String, dynamic>) {
+      final guardianData = ApiClient.unwrapObject(response);
+      if (guardianData != null) {
         return Guardian.fromJson(guardianData);
       }
       return null;
@@ -140,13 +122,16 @@ class Guardian {
       email: json['email'],
       phone: json['phone'] ?? json['phoneNumber'],
       phoneNumber: json['phoneNumber'] ?? json['phone'],
-      companyOrgId: json['companyOrgId'] ?? 
-                    json['company_org_id'] ?? 
-                    json['school_id'] ?? 
-                    json['schoolId'],
+      companyOrgId:
+          json['companyOrgId'] ??
+          json['company_org_id'] ??
+          json['school_id'] ??
+          json['schoolId'],
       schoolId: json['school_id'] ?? json['schoolId'],
-      schoolName: json['school_name'] ?? json['schoolName'],
-      isActive: json['isActive'] ?? json['is_active'] ?? true,
+      schoolName:
+          json['schoolname'] ?? json['school_name'] ?? json['schoolName'],
+      isActive:
+          json['userActive'] ?? json['isActive'] ?? json['is_active'] ?? true,
       createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
       updatedAt: _parseDateTime(json['updatedAt'] ?? json['updated_at']),
     );
@@ -162,9 +147,9 @@ class Guardian {
       'companyOrgId': companyOrgId,
       'school_id': schoolId,
       'school_name': schoolName,
-      'is_active': isActive,
-      'created_at': createdAt?.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
+      'userActive': isActive,
+      'createdAt': createdAt?.toUtc().toIso8601String(),
+      'updatedAt': updatedAt?.toUtc().toIso8601String(),
     };
   }
 

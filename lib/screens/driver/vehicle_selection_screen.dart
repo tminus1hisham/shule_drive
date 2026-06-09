@@ -211,7 +211,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2196F3).withOpacity(0.3),
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -379,8 +379,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.05)
-                    : const Color(0xFF2196F3).withOpacity(0.1),
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFF2196F3).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -542,7 +542,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF2196F3).withOpacity(0.2),
+                    color: const Color(0xFF2196F3).withValues(alpha: 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -584,7 +584,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3).withOpacity(0.1),
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -676,7 +676,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isActive
-            ? const Color(0xFF4CAF50).withOpacity(0.1)
+            ? const Color(0xFF4CAF50).withValues(alpha: 0.1)
             : isDarkMode
             ? const Color(0xFF2C2C2C)
             : const Color(0xFFF5F5F5),

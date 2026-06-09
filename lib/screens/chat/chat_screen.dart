@@ -12,7 +12,7 @@ import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
 class ChatScreen extends StatefulWidget {
-  final String? receiverPhone;  // Phone number of the receiver (used as chat ID)
+  final String? receiverPhone; // Phone number of the receiver (used as chat ID)
   final String? receiverName;
   final String? receiverAvatar;
   final String? receiverRole;
@@ -71,7 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final tripProvider = context.read<TripProvider>();
       // Get fresh trip data
       await tripProvider.fetchActiveTrip();
-      
+
       // Check if the trip is still active
       final activeTrip = tripProvider.activeTrip;
       if (activeTrip != null && activeTrip.id == widget.tripId) {
@@ -80,9 +80,7 @@ class _ChatScreenState extends State<ChatScreen> {
         // Check if trip exists but is completed
         final allTrips = tripProvider.trips;
         try {
-          final trip = allTrips.firstWhere(
-            (t) => t.id == widget.tripId,
-          );
+          final trip = allTrips.firstWhere((t) => t.id == widget.tripId);
           setState(() => _isTripActive = trip.status == 'active');
         } catch (e) {
           // Trip not found in list
@@ -102,7 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.position.pixels;
       final showButton = maxScroll - currentScroll > 200;
-      
+
       if (showButton != _showScrollToBottom) {
         setState(() => _showScrollToBottom = showButton);
       }
@@ -124,7 +122,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final authProvider = context.read<AuthProvider>();
       // Get current user's phone number for chat
       final currentUserPhone = authProvider.userPhone;
-      
+
       if (currentUserPhone == null) {
         if (mounted) {
           setState(() {
@@ -176,16 +174,16 @@ class _ChatScreenState extends State<ChatScreen> {
     // Clear text and update UI immediately
     _messageController.clear();
     setState(() => _hasText = false);
-    
+
     HapticFeedback.lightImpact();
-    
+
     // Send message
     await chatProvider.sendMessage(
       content,
       senderName: authProvider.userName ?? 'Unknown',
       recipientName: widget.receiverName ?? 'Unknown',
     );
-    
+
     // Scroll to bottom to show new message
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animated: true);
@@ -205,7 +203,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final appProvider = Provider.of<AppProvider>(context);
     final isDarkMode = appProvider.isDarkMode;
     final receiverName = widget.receiverName ?? 'Chat';
-    final bool isReadOnly = widget.isTripChat && !_isTripActive && !_isLoadingTripStatus;
+    final bool isReadOnly =
+        widget.isTripChat && !_isTripActive && !_isLoadingTripStatus;
 
     if (_isInitializing) {
       return _buildLoadingScreen(isDarkMode);
@@ -218,9 +217,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return MainScaffold(
       titleWidget: _buildAppBarTitle(receiverName, isDarkMode),
       showBackButton: true,
-      actions: [
-        _buildVoiceCallButton(isDarkMode),
-      ],
+      actions: [_buildVoiceCallButton(isDarkMode)],
       body: Stack(
         children: [
           // Original themed background
@@ -229,7 +226,9 @@ class _ChatScreenState extends State<ChatScreen> {
               isDarkMode ? 'assets/dark_chat_bg.jpg' : 'assets/chat_bg.jpg',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
-                color: isDarkMode ? const Color(0xFF121212) : const Color(0xFFE8E8E8),
+                color: isDarkMode
+                    ? const Color(0xFF121212)
+                    : const Color(0xFFE8E8E8),
               ),
             ),
           ),
@@ -237,10 +236,9 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               _buildErrorBanner(),
               // Trip status banner
-              if (widget.isTripChat) _buildTripStatusBanner(isDarkMode, isReadOnly),
-              Expanded(
-                child: _buildMessagesList(isDarkMode),
-              ),
+              if (widget.isTripChat)
+                _buildTripStatusBanner(isDarkMode, isReadOnly),
+              Expanded(child: _buildMessagesList(isDarkMode)),
               if (isReadOnly)
                 _buildReadOnlyBanner(isDarkMode)
               else
@@ -293,8 +291,8 @@ class _ChatScreenState extends State<ChatScreen> {
           Icon(
             _isTripActive ? Icons.circle : Icons.history,
             size: 10,
-            color: _isTripActive 
-                ? const Color(0xFF22C55E) 
+            color: _isTripActive
+                ? const Color(0xFF22C55E)
                 : const Color(0xFFF59E0B),
           ),
           const SizedBox(width: 8),
@@ -305,8 +303,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   : 'Trip ended - Chat read-only',
               style: TextStyle(
                 fontSize: 13,
-                color: _isTripActive 
-                    ? const Color(0xFF166534) 
+                color: _isTripActive
+                    ? const Color(0xFF166534)
                     : const Color(0xFF92400E),
               ),
             ),
@@ -339,8 +337,8 @@ class _ChatScreenState extends State<ChatScreen> {
         color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
         border: Border(
           top: BorderSide(
-            color: isDarkMode 
-                ? const Color(0xFF2C2C2E) 
+            color: isDarkMode
+                ? const Color(0xFF2C2C2E)
                 : const Color(0xFFE5E5EA),
           ),
         ),
@@ -352,16 +350,16 @@ class _ChatScreenState extends State<ChatScreen> {
             Icon(
               Icons.lock_outline,
               size: 16,
-              color: isDarkMode 
-                  ? const Color(0xFF8E8E93) 
+              color: isDarkMode
+                  ? const Color(0xFF8E8E93)
                   : const Color(0xFF8E8E93),
             ),
             const SizedBox(width: 8),
             Text(
               'This chat is archived',
               style: TextStyle(
-                color: isDarkMode 
-                    ? const Color(0xFF8E8E93) 
+                color: isDarkMode
+                    ? const Color(0xFF8E8E93)
                     : const Color(0xFF8E8E93),
                 fontSize: 13,
               ),
@@ -392,11 +390,14 @@ class _ChatScreenState extends State<ChatScreen> {
           itemBuilder: (context, index) {
             final message = messages[index];
             final isMe = message.senderId == currentUserPhone;
-            final showDate = index == 0 || !_isSameDay(messages[index - 1].timestamp, message.timestamp);
+            final showDate =
+                index == 0 ||
+                !_isSameDay(messages[index - 1].timestamp, message.timestamp);
 
             return Column(
               children: [
-                if (showDate) _buildDateSeparator(message.timestamp, isDarkMode),
+                if (showDate)
+                  _buildDateSeparator(message.timestamp, isDarkMode),
                 _buildMessageBubble(message, isMe, isDarkMode),
               ],
             );
@@ -419,8 +420,8 @@ class _ChatScreenState extends State<ChatScreen> {
           color: isMe
               ? const Color(0xFF007AFF) // iOS blue - professional
               : isDarkMode
-                  ? const Color(0xFF2C2C2E)
-                  : const Color(0xFFF2F2F7), // iOS light gray
+              ? const Color(0xFF2C2C2E)
+              : const Color(0xFFF2F2F7), // iOS light gray
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -434,11 +435,11 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               message.content,
               style: TextStyle(
-                color: isMe 
-                    ? Colors.white 
-                    : isDarkMode 
-                        ? Colors.white 
-                        : const Color(0xFF1C1C1E),
+                color: isMe
+                    ? Colors.white
+                    : isDarkMode
+                    ? Colors.white
+                    : const Color(0xFF1C1C1E),
                 fontSize: 16,
                 height: 1.3,
               ),
@@ -451,10 +452,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   DateFormat('h:mm a').format(message.timestamp),
                   style: TextStyle(
                     color: isMe
-                        ? Colors.white.withOpacity(0.7)
+                        ? Colors.white.withValues(alpha: 0.7)
                         : isDarkMode
-                            ? Colors.white.withOpacity(0.5)
-                            : const Color(0xFF8E8E93),
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : const Color(0xFF8E8E93),
                     fontSize: 11,
                   ),
                 ),
@@ -478,26 +479,22 @@ class _ChatScreenState extends State<ChatScreen> {
           height: 12,
           child: CircularProgressIndicator(
             strokeWidth: 1.5,
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
           ),
         );
       case MessageStatus.failed:
-        return Icon(
-          Icons.error_outline,
-          size: 14,
-          color: Colors.red.shade200,
-        );
+        return Icon(Icons.error_outline, size: 14, color: Colors.red.shade200);
       case MessageStatus.read:
         return Icon(
           Icons.done_all,
           size: 14,
-          color: Colors.white.withOpacity(0.9),
+          color: Colors.white.withValues(alpha: 0.9),
         );
       default:
         return Icon(
           Icons.done,
           size: 14,
-          color: Colors.white.withOpacity(0.6),
+          color: Colors.white.withValues(alpha: 0.6),
         );
     }
   }
@@ -509,7 +506,9 @@ class _ChatScreenState extends State<ChatScreen> {
         color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
         border: Border(
           top: BorderSide(
-            color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+            color: isDarkMode
+                ? const Color(0xFF2C2C2E)
+                : const Color(0xFFE5E5EA),
             width: 0.5,
           ),
         ),
@@ -522,7 +521,9 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                  color: isDarkMode
+                      ? const Color(0xFF2C2C2E)
+                      : const Color(0xFFF2F2F7),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: TextField(
@@ -534,12 +535,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   decoration: InputDecoration(
                     hintText: 'Message about the trip...',
                     hintStyle: TextStyle(
-                      color: isDarkMode 
-                          ? const Color(0xFF8E8E93) 
+                      color: isDarkMode
+                          ? const Color(0xFF8E8E93)
                           : const Color(0xFF8E8E93),
                       fontSize: 16,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     border: InputBorder.none,
                   ),
                   maxLines: 6,
@@ -562,11 +566,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       padding: const EdgeInsets.all(10),
                       child: Icon(
                         Icons.arrow_upward,
-                        color: canSend 
+                        color: canSend
                             ? const Color(0xFF007AFF)
-                            : isDarkMode 
-                                ? const Color(0xFF3A3A3C) 
-                                : const Color(0xFFBDBDBD),
+                            : isDarkMode
+                            ? const Color(0xFF3A3A3C)
+                            : const Color(0xFFBDBDBD),
                         size: 24,
                       ),
                     ),
@@ -587,16 +591,16 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: BoxDecoration(
-          color: isDarkMode 
-              ? const Color(0xFF2C2C2E) 
-              : const Color(0xFFE5E5EA).withOpacity(0.7),
+          color: isDarkMode
+              ? const Color(0xFF2C2C2E)
+              : const Color(0xFFE5E5EA).withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           _formatDate(date),
           style: TextStyle(
-            color: isDarkMode 
-                ? const Color(0xFF8E8E93) 
+            color: isDarkMode
+                ? const Color(0xFF8E8E93)
                 : const Color(0xFF8E8E93),
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -614,16 +618,16 @@ class _ChatScreenState extends State<ChatScreen> {
           Icon(
             Icons.chat_bubble_outline,
             size: 48,
-            color: isDarkMode 
-                ? const Color(0xFF3A3A3C) 
+            color: isDarkMode
+                ? const Color(0xFF3A3A3C)
                 : const Color(0xFFC7C7CC),
           ),
           const SizedBox(height: 16),
           Text(
             'No messages yet',
             style: TextStyle(
-              color: isDarkMode 
-                  ? const Color(0xFF8E8E93) 
+              color: isDarkMode
+                  ? const Color(0xFF8E8E93)
                   : const Color(0xFF8E8E93),
               fontSize: 16,
               fontWeight: FontWeight.w400,
@@ -636,7 +640,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildLoadingScreen(bool isDarkMode) {
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF000000)
+          : const Color(0xFFFFFFFF),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -651,8 +657,8 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               'Connecting...',
               style: TextStyle(
-                color: isDarkMode 
-                    ? const Color(0xFF8E8E93) 
+                color: isDarkMode
+                    ? const Color(0xFF8E8E93)
                     : const Color(0xFF8E8E93),
                 fontSize: 15,
               ),
@@ -665,19 +671,25 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildErrorScreen(bool isDarkMode, String receiverName) {
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF000000)
+          : const Color(0xFFFFFFFF),
       appBar: AppBar(
-        backgroundColor: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
+        backgroundColor: isDarkMode
+            ? const Color(0xFF1C1C1E)
+            : const Color(0xFFFFFFFF),
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            Icons.arrow_back_ios, 
-            color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+            Icons.arrow_back_ios,
+            color: isDarkMode
+                ? const Color(0xFF0A84FF)
+                : const Color(0xFF007AFF),
           ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          receiverName, 
+          receiverName,
           style: TextStyle(
             color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
           ),
@@ -690,16 +702,16 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.error_outline, 
-                size: 48, 
+                Icons.error_outline,
+                size: 48,
                 color: const Color(0xFFFF3B30),
               ),
               const SizedBox(height: 16),
               Text(
                 'Connection Failed',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E), 
-                  fontSize: 18, 
+                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -707,8 +719,8 @@ class _ChatScreenState extends State<ChatScreen> {
               Text(
                 _initError!,
                 style: TextStyle(
-                  color: isDarkMode 
-                      ? const Color(0xFF8E8E93) 
+                  color: isDarkMode
+                      ? const Color(0xFF8E8E93)
                       : const Color(0xFF8E8E93),
                 ),
                 textAlign: TextAlign.center,
@@ -725,8 +737,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Text(
                   'Try Again',
                   style: TextStyle(
-                    color: isDarkMode 
-                        ? const Color(0xFF0A84FF) 
+                    color: isDarkMode
+                        ? const Color(0xFF0A84FF)
                         : const Color(0xFF007AFF),
                   ),
                 ),
@@ -747,25 +759,25 @@ class _ChatScreenState extends State<ChatScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF3B30).withOpacity(0.1),
+            color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: const Color(0xFFFF3B30).withOpacity(0.2),
+              color: const Color(0xFFFF3B30).withValues(alpha: 0.2),
             ),
           ),
           child: Row(
             children: [
               const Icon(
-                Icons.error_outline, 
-                color: Color(0xFFFF3B30), 
+                Icons.error_outline,
+                color: Color(0xFFFF3B30),
                 size: 18,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  chatProvider.error!, 
+                  chatProvider.error!,
                   style: const TextStyle(
-                    color: Color(0xFFFF3B30), 
+                    color: Color(0xFFFF3B30),
                     fontSize: 13,
                   ),
                 ),
@@ -773,8 +785,8 @@ class _ChatScreenState extends State<ChatScreen> {
               GestureDetector(
                 onTap: () => chatProvider.clearError(),
                 child: const Icon(
-                  Icons.close, 
-                  color: Color(0xFFFF3B30), 
+                  Icons.close,
+                  color: Color(0xFFFF3B30),
                   size: 18,
                 ),
               ),
@@ -788,13 +800,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildScrollToBottomButton(bool isDarkMode) {
     return Container(
       decoration: BoxDecoration(
-        color: isDarkMode 
-            ? const Color(0xFF2C2C2E) 
-            : Colors.white,
+        color: isDarkMode ? const Color(0xFF2C2C2E) : Colors.white,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -810,8 +820,8 @@ class _ChatScreenState extends State<ChatScreen> {
             padding: const EdgeInsets.all(12),
             child: Icon(
               Icons.keyboard_arrow_down,
-              color: isDarkMode 
-                  ? const Color(0xFF0A84FF) 
+              color: isDarkMode
+                  ? const Color(0xFF0A84FF)
                   : const Color(0xFF007AFF),
               size: 24,
             ),
@@ -828,7 +838,8 @@ class _ChatScreenState extends State<ChatScreen> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     if (_isSameDay(date, now)) return 'Today';
-    if (_isSameDay(date, now.subtract(const Duration(days: 1)))) return 'Yesterday';
+    if (_isSameDay(date, now.subtract(const Duration(days: 1))))
+      return 'Yesterday';
     if (now.difference(date).inDays < 7) return DateFormat('EEEE').format(date);
     return DateFormat('MMMM d, yyyy').format(date);
   }
@@ -838,10 +849,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final role = widget.receiverRole;
     final roleText = role != null && role.isNotEmpty
         ? role.toLowerCase() == 'driver'
-            ? 'Driver'
-            : role.toLowerCase() == 'guardian'
-                ? 'Guardian'
-                : role
+              ? 'Driver'
+              : role.toLowerCase() == 'guardian'
+              ? 'Guardian'
+              : role
         : 'User';
 
     return Row(
@@ -852,7 +863,9 @@ class _ChatScreenState extends State<ChatScreen> {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF3A3A3C) : const Color(0xFF007AFF),
+            color: isDarkMode
+                ? const Color(0xFF3A3A3C)
+                : const Color(0xFF007AFF),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -884,8 +897,8 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               roleText,
               style: TextStyle(
-                color: isDarkMode 
-                    ? const Color(0xFF8E8E93) 
+                color: isDarkMode
+                    ? const Color(0xFF8E8E93)
                     : const Color(0xFF8E8E93),
                 fontSize: 12,
               ),
@@ -904,15 +917,9 @@ class _ChatScreenState extends State<ChatScreen> {
         onTap: () async {
           final phoneNumber = widget.receiverPhone;
           if (phoneNumber != null && phoneNumber.isNotEmpty) {
-            final Uri launchUri = Uri(
-              scheme: 'tel',
-              path: phoneNumber,
-            );
+            final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
             try {
-              await launchUrl(
-                launchUri,
-                mode: LaunchMode.externalApplication,
-              );
+              await launchUrl(launchUri, mode: LaunchMode.externalApplication);
             } catch (e) {
               debugPrint('Could not launch phone dialer: $e');
             }
@@ -922,7 +929,9 @@ class _ChatScreenState extends State<ChatScreen> {
           padding: const EdgeInsets.all(10),
           child: Icon(
             Icons.phone,
-            color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+            color: isDarkMode
+                ? const Color(0xFF0A84FF)
+                : const Color(0xFF007AFF),
             size: 22,
           ),
         ),

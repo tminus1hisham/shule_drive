@@ -110,7 +110,7 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF6B9B5B),
+                        Color(0xFF1FA971),
                       ),
                     ),
                   ),

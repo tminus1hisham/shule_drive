@@ -69,7 +69,7 @@ enum NotificationBackend {
 /// Notification Service - Handles push notifications through multiple backends
 /// 
 /// Supports: Firebase, OneSignal, MQTT, or Local-only mode
-/// Default: Firebase (if configured), falls back to Local-only
+/// Default: Local-only until a push backend is explicitly configured.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -119,7 +119,7 @@ class NotificationService {
   /// [preferredBackend] - Preferred notification backend. If not available,
   /// falls back to local-only mode.
   Future<void> initialize({
-    NotificationBackend preferredBackend = NotificationBackend.firebase,
+    NotificationBackend preferredBackend = NotificationBackend.localOnly,
   }) async {
     if (_initialized) return;
 

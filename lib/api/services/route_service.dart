@@ -16,15 +16,7 @@ class RouteService {
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getAllRoutes);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> routesData;
-        if (response is List) {
-          routesData = response;
-        } else if (response is Map && response['data'] != null) {
-          routesData = response['data'] as List;
-        } else {
-          routesData = [];
-        }
+        final routesData = ApiClient.unwrapList(response);
 
         if (kDebugMode && routesData.isNotEmpty) {
           print('🛣️ First route raw data: ${routesData.first}');
@@ -48,15 +40,7 @@ class RouteService {
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getRoutesByUser);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> routesData;
-        if (response is List) {
-          routesData = response;
-        } else if (response is Map && response['data'] != null) {
-          routesData = response['data'] as List;
-        } else {
-          routesData = [];
-        }
+        final routesData = ApiClient.unwrapList(response);
 
         final routes = routesData
             .map((route) => BusRoute.fromJson(route))
@@ -74,9 +58,11 @@ class RouteService {
   Future<BusRoute?> getRouteById(String routeId) async {
     return _buffer.withOptionalBuffer<BusRoute>(
       apiCall: () async {
-        // Using endpoints helper - assuming there's a get route by id endpoint
-        final response = await _apiClient.get('/api/routes/get/$routeId');
-        return BusRoute.fromJson(response['data'] ?? response);
+        final routes = await getAllRoutes();
+        for (final route in routes) {
+          if (route.id == routeId) return route;
+        }
+        throw NotFoundException(message: 'Route not found');
       },
       bufferKey: BufferKeys.routeDetails(routeId),
       cacheDuration: const Duration(minutes: 20),
@@ -92,17 +78,27 @@ class RouteService {
     String? schoolId,
   }) async {
     try {
+      final schoolname = schoolId ?? description;
+      if (schoolname.isEmpty) {
+        throw ApiException(message: 'School name is required');
+      }
+
       final response = await _apiClient.post(
         Endpoints.createRoute,
-        body: {
-          'name': name,
-          'description': description,
-          'stops': stops.map((s) => s.toJson()).toList(),
-          if (schoolId != null) 'school_id': schoolId,
-        },
+        body: {'schoolname': schoolname, 'routeName': name},
       );
 
-      final route = BusRoute.fromJson(response['data']);
+      final route = response is Map
+          ? BusRoute.fromJson(
+              Map<String, dynamic>.from(response['data'] ?? response),
+            )
+          : BusRoute(
+              id: '',
+              name: name,
+              schoolName: schoolname,
+              stops: stops,
+              createdAt: DateTime.now(),
+            );
 
       // Clear routes cache to force refresh
       await _buffer.clearCategory('routes');
@@ -125,16 +121,34 @@ class RouteService {
   }) async {
     try {
       final body = <String, dynamic>{};
-      if (name != null) body['name'] = name;
-      if (description != null) body['description'] = description;
-      if (stops != null) body['stops'] = stops.map((s) => s.toJson()).toList();
+      final current = await getRouteById(routeId);
+      body['id'] = int.tryParse(routeId) ?? 0;
+      body['routeName'] = name ?? current?.name ?? '';
+      body['schoolName'] = description ?? current?.schoolName ?? '';
+      body['adminUserId'] = current?.schoolId ?? '';
+      body['createdAt'] =
+          current?.createdAt.toUtc().toIso8601String() ??
+          DateTime.now().toUtc().toIso8601String();
+      body['updatedAt'] = DateTime.now().toUtc().toIso8601String();
 
       final response = await _apiClient.put(
         Endpoints.updateRoute(routeId),
         body: body,
       );
 
-      final route = BusRoute.fromJson(response['data']);
+      final route = response is Map
+          ? BusRoute.fromJson(
+              Map<String, dynamic>.from(response['data'] ?? response),
+            )
+          : BusRoute(
+              id: routeId,
+              name: body['routeName']?.toString() ?? '',
+              schoolId: body['adminUserId']?.toString(),
+              schoolName: body['schoolName']?.toString(),
+              stops: current?.stops ?? [],
+              createdAt: current?.createdAt ?? DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
 
       // Update buffers
       await _buffer.saveBuffer(
@@ -171,21 +185,16 @@ class RouteService {
 
   /// Get routes by school ID or school name
   /// Filters routes by the school ID or school name to ensure school-scoped data
-  Future<List<BusRoute>> getRoutesBySchool(String schoolId, {String? schoolName}) async {
+  Future<List<BusRoute>> getRoutesBySchool(
+    String schoolId, {
+    String? schoolName,
+  }) async {
     return _buffer.withBuffer<List<BusRoute>>(
       apiCall: () async {
         // First try to get all routes and filter by school
         final response = await _apiClient.get(Endpoints.getAllRoutes);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> routesData;
-        if (response is List) {
-          routesData = response;
-        } else if (response is Map && response['data'] != null) {
-          routesData = response['data'] as List;
-        } else {
-          routesData = [];
-        }
+        final routesData = ApiClient.unwrapList(response);
 
         // Filter routes by school ID or school name
         final routes = routesData
@@ -197,13 +206,17 @@ class RouteService {
               }
               // Fallback to school name matching
               if (schoolName != null && route.schoolName != null) {
-                return route.schoolName!.toLowerCase().contains(schoolName.toLowerCase()) ||
-                       schoolName.toLowerCase().contains(route.schoolName!.toLowerCase());
+                return route.schoolName!.toLowerCase().contains(
+                      schoolName.toLowerCase(),
+                    ) ||
+                    schoolName.toLowerCase().contains(
+                      route.schoolName!.toLowerCase(),
+                    );
               }
               return false;
             })
             .toList();
-        
+
         return routes;
       },
       bufferKey: '${BufferKeys.routes}_school_$schoolId',
@@ -257,8 +270,13 @@ class BusRoute {
       name: json['routeName'] ?? json['name'] ?? '',
       description: json['description'],
       // Use adminUserId as schoolId since that's how the API returns it
-      schoolId: json['school_id'] ?? json['schoolId'] ?? json['adminUserId'] ?? json['school']['id']?.toString(),
-      schoolName: json['schoolName'] ?? json['school_name'] ?? json['school']?['name'],
+      schoolId:
+          json['school_id'] ??
+          json['schoolId'] ??
+          json['adminUserId'] ??
+          json['school']?['id']?.toString(),
+      schoolName:
+          json['schoolName'] ?? json['school_name'] ?? json['school']?['name'],
       stops:
           (json['stops'] as List?)
               ?.map((s) => RouteStop.fromJson(s))

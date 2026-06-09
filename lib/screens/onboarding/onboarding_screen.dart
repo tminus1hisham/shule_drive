@@ -27,8 +27,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       title: 'Safe School Transport',
       description:
           "Track your child's school bus in real-time. Know exactly when they board, travel, and arrive safely.",
-      primaryColor: const Color(0xFF6B9B5B),
-      secondaryColor: const Color(0xFF8BC48A),
+      primaryColor: const Color(0xFF1FA971),
+      secondaryColor: const Color(0xFF34C98B),
       illustration: const BusIllustration(),
     ),
     OnboardingData(
@@ -135,7 +135,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0A0A0F) : const Color(0xFFF8F9FA),
+      backgroundColor: isDark
+          ? const Color(0xFF0A0A0F)
+          : const Color(0xFFF8F9FA),
       body: Stack(
         children: [
           // Animated background particles
@@ -146,7 +148,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 size: size,
                 painter: ParticlePainter(
                   animation: _particleController.value,
-                  color: _pages[_currentIndex].primaryColor.withOpacity(0.1),
+                  color: _pages[_currentIndex].primaryColor.withValues(
+                    alpha: 0.1,
+                  ),
                 ),
               );
             },
@@ -164,8 +168,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    _pages[_currentIndex].primaryColor.withOpacity(0.3),
-                    _pages[_currentIndex].primaryColor.withOpacity(0.0),
+                    _pages[_currentIndex].primaryColor.withValues(alpha: 0.3),
+                    _pages[_currentIndex].primaryColor.withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -183,8 +187,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    _pages[_currentIndex].secondaryColor.withOpacity(0.2),
-                    _pages[_currentIndex].secondaryColor.withOpacity(0.0),
+                    _pages[_currentIndex].secondaryColor.withValues(alpha: 0.2),
+                    _pages[_currentIndex].secondaryColor.withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -204,10 +208,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       // Page counter
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: (isDark ? Colors.white : Colors.black)
-                              .withOpacity(0.05),
+                              .withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -225,9 +231,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               ' / 03',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: isDark
-                                    ? Colors.white38
-                                    : Colors.black38,
+                                color: isDark ? Colors.white38 : Colors.black38,
                               ),
                             ),
                           ],
@@ -253,7 +257,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                           ),
                         ),
                     ],
@@ -285,8 +291,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                 // Bottom controls
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 24,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -311,9 +319,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: _pages[_currentIndex]
-                                    .primaryColor
-                                    .withOpacity(0.4),
+                                color: _pages[_currentIndex].primaryColor
+                                    .withValues(alpha: 0.4),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
@@ -381,17 +388,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          page.primaryColor.withOpacity(0.15),
-                          page.secondaryColor.withOpacity(0.05),
+                          page.primaryColor.withValues(alpha: 0.15),
+                          page.secondaryColor.withValues(alpha: 0.05),
                         ],
                       ),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: page.primaryColor.withOpacity(0.1),
+                          color: page.primaryColor.withValues(alpha: 0.1),
                           blurRadius: 40,
                           offset: const Offset(0, 20),
                         ),
@@ -405,7 +412,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           Positioned.fill(
                             child: CustomPaint(
                               painter: GridPatternPainter(
-                                color: page.primaryColor.withOpacity(0.1),
+                                color: page.primaryColor.withValues(alpha: 0.1),
                               ),
                             ),
                           ),
@@ -432,7 +439,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               height: 60,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: page.primaryColor.withOpacity(0.2),
+                                color: page.primaryColor.withValues(alpha: 0.2),
                               ),
                             ),
                           ),
@@ -444,7 +451,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               height: 40,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: page.secondaryColor.withOpacity(0.3),
+                                color: page.secondaryColor.withValues(
+                                  alpha: 0.3,
+                                ),
                               ),
                             ),
                           ),
@@ -467,25 +476,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 Text(
                   page.title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                    letterSpacing: -0.5,
-                  ),
+                  style: Theme.of(context).textTheme.displayMedium,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   page.description,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     height: 1.7,
-                    color: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.color
-                        ?.withOpacity(0.6),
+                    color: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.color?.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -499,29 +500,26 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildPageIndicator() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(
-        _pages.length,
-        (index) {
-          final isActive = index == _currentIndex;
-          final distance = (index - _currentIndex).abs();
-          final scale = math.max(0.5, 1 - (distance * 0.3));
+      children: List.generate(_pages.length, (index) {
+        final isActive = index == _currentIndex;
+        final distance = (index - _currentIndex).abs();
+        final scale = math.max(0.5, 1 - (distance * 0.3));
 
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            width: isActive ? 32 : 8,
-            height: 8,
-            transform: Matrix4.identity()..scale(scale, 1.0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: isActive
-                  ? _pages[_currentIndex].primaryColor
-                  : (_pages[_currentIndex].primaryColor.withOpacity(0.2)),
-            ),
-          );
-        },
-      ),
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          width: isActive ? 32 : 8,
+          height: 8,
+          transform: Matrix4.identity()..scale(scale, 1.0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: isActive
+                ? _pages[_currentIndex].primaryColor
+                : (_pages[_currentIndex].primaryColor.withValues(alpha: 0.2)),
+          ),
+        );
+      }),
     );
   }
 }
@@ -551,9 +549,7 @@ class BusIllustration extends StatelessWidget {
     return SizedBox(
       width: 200,
       height: 200,
-      child: CustomPaint(
-        painter: BusPainter(),
-      ),
+      child: CustomPaint(painter: BusPainter()),
     );
   }
 }
@@ -566,9 +562,7 @@ class MapIllustration extends StatelessWidget {
     return SizedBox(
       width: 200,
       height: 200,
-      child: CustomPaint(
-        painter: MapPainter(),
-      ),
+      child: CustomPaint(painter: MapPainter()),
     );
   }
 }
@@ -581,9 +575,7 @@ class ChatIllustration extends StatelessWidget {
     return SizedBox(
       width: 200,
       height: 200,
-      child: CustomPaint(
-        painter: ChatPainter(),
-      ),
+      child: CustomPaint(painter: ChatPainter()),
     );
   }
 }
@@ -593,11 +585,11 @@ class BusPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF6B9B5B)
+      ..color = const Color(0xFF1FA971)
       ..style = PaintingStyle.fill;
 
     final shadowPaint = Paint()
-      ..color = const Color(0xFF6B9B5B).withOpacity(0.2)
+      ..color = const Color(0xFF1FA971).withValues(alpha: 0.2)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
 
     // Shadow
@@ -628,7 +620,7 @@ class BusPainter extends CustomPainter {
 
     // Windows
     final windowPaint = Paint()
-      ..color = Colors.white.withOpacity(0.9)
+      ..color = Colors.white.withValues(alpha: 0.9)
       ..style = PaintingStyle.fill;
 
     // Front window
@@ -645,7 +637,11 @@ class BusPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(
-              size.width / 2 - 15 + (i * 25), size.height / 2 - 25, 20, 30),
+            size.width / 2 - 15 + (i * 25),
+            size.height / 2 - 25,
+            20,
+            30,
+          ),
           const Radius.circular(6),
         ),
         windowPaint,
@@ -690,7 +686,7 @@ class MapPainter extends CustomPainter {
       ..strokeWidth = 3;
 
     final fillPaint = Paint()
-      ..color = const Color(0xFF5B8B9B).withOpacity(0.1)
+      ..color = const Color(0xFF5B8B9B).withValues(alpha: 0.1)
       ..style = PaintingStyle.fill;
 
     // Map grid lines
@@ -709,16 +705,8 @@ class MapPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     // Vertical lines
-    canvas.drawLine(
-      const Offset(80, 40),
-      const Offset(80, 150),
-      paint,
-    );
-    canvas.drawLine(
-      const Offset(120, 70),
-      const Offset(120, 160),
-      paint,
-    );
+    canvas.drawLine(const Offset(80, 40), const Offset(80, 150), paint);
+    canvas.drawLine(const Offset(120, 70), const Offset(120, 160), paint);
 
     // Location pin
     final pinPaint = Paint()
@@ -726,15 +714,11 @@ class MapPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final pinShadow = Paint()
-      ..color = const Color(0xFFE74C3C).withOpacity(0.3)
+      ..color = const Color(0xFFE74C3C).withValues(alpha: 0.3)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     // Pin shadow
-    canvas.drawCircle(
-      const Offset(100, 100),
-      20,
-      pinShadow,
-    );
+    canvas.drawCircle(const Offset(100, 100), 20, pinShadow);
 
     // Pin body
     final pinPath = Path()
@@ -759,7 +743,7 @@ class MapPainter extends CustomPainter {
       const Offset(100, 100),
       35,
       Paint()
-        ..color = const Color(0xFFE74C3C).withOpacity(0.2)
+        ..color = const Color(0xFFE74C3C).withValues(alpha: 0.2)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -784,7 +768,7 @@ class ChatPainter extends CustomPainter {
 
     // Shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.1)
+      ..color = Colors.black.withValues(alpha: 0.1)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     // First bubble shadow
@@ -843,7 +827,7 @@ class ChatPainter extends CustomPainter {
     canvas.drawCircle(
       const Offset(155, 55),
       12,
-      Paint()..color = const Color(0xFF6B9B5B),
+      Paint()..color = const Color(0xFF1FA971),
     );
 
     // Typing indicator dots
@@ -851,7 +835,7 @@ class ChatPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(75 + (i * 12), 127),
         4,
-        Paint()..color = const Color(0xFF9B5B8B).withOpacity(0.5),
+        Paint()..color = const Color(0xFF9B5B8B).withValues(alpha: 0.5),
       );
     }
   }
@@ -877,8 +861,8 @@ class ParticlePainter extends CustomPainter {
 
     for (int i = 0; i < 20; i++) {
       final x = (random.nextDouble() * size.width);
-      final y = ((random.nextDouble() * size.height) +
-          (animation * 100)) %
+      final y =
+          ((random.nextDouble() * size.height) + (animation * 100)) %
           size.height;
       final radius = random.nextDouble() * 4 + 2;
       final opacity = (1 - (y / size.height)) * 0.5;
@@ -886,7 +870,7 @@ class ParticlePainter extends CustomPainter {
       canvas.drawCircle(
         Offset(x, y),
         radius,
-        paint..color = color.withOpacity(opacity),
+        paint..color = color.withValues(alpha: opacity),
       );
     }
   }

@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/trip_provider.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme_extension.dart';
+import 'ui/ui.dart';
 
 class SideMenu extends StatefulWidget {
   const SideMenu({super.key});
@@ -38,7 +41,6 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
         );
     _animationController.forward();
 
-    // Pulse animation for active trip indicator
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -61,12 +63,11 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
     final tripProvider = context.watch<TripProvider>();
-    final isDarkMode = provider.isDarkMode;
     final isDriver = authProvider.isDriver;
     final hasActiveTrip = tripProvider.activeTrip != null;
 
     return Drawer(
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: context.scheme.surface,
       elevation: 0,
       child: SafeArea(
         child: SlideTransition(
@@ -75,85 +76,63 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
             opacity: _fadeAnimation,
             child: Column(
               children: [
-                // Header with Logo
-                _buildHeader(isDarkMode),
-
-                const SizedBox(height: 24),
-
-                // Menu Items
+                _buildHeader(context),
+                const SizedBox(height: AppSpacing.lg),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
                     children: [
-                      // Active Trip Shortcut - pulsing green when trip is live
-                      if (isDriver && hasActiveTrip)
+                      if (isDriver && hasActiveTrip) ...[
                         _buildActiveTripMenuItem(
+                          context,
                           tripProvider.activeTrip!.routeName,
                           () => _navigateTo(context, '/active-trip'),
                         ),
-
-                      if (isDriver && hasActiveTrip) const SizedBox(height: 8),
-
-                      // Profile - Highlighted
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
                       _buildHighlightedMenuItem(
-                        Icons.person,
+                        context,
+                        Icons.person_rounded,
                         'Profile',
                         () => _navigateTo(context, '/profile'),
                       ),
-
-                      const SizedBox(height: 8),
-
-                      // Trips - Different views for drivers vs guardians
+                      const SizedBox(height: AppSpacing.xs),
                       _buildMenuItem(
+                        context,
                         Icons.directions_bus_outlined,
                         isDriver ? 'Trip History' : 'My Trips',
                         () => _navigateTo(context, '/trips'),
-                        isDarkMode: isDarkMode,
                       ),
-
-                      // Manage Trips - For admins/drivers to create/edit trips
                       if (isDriver)
                         _buildMenuItem(
-                          Icons.edit_note,
+                          context,
+                          Icons.edit_note_rounded,
                           'Manage Trips',
                           () => _navigateTo(context, '/manage-master-trips'),
-                          isDarkMode: isDarkMode,
                         ),
-
-                      // About Us
                       _buildMenuItem(
+                        context,
                         Icons.description_outlined,
                         'About Us',
                         () => _navigateTo(context, '/about'),
-                        isDarkMode: isDarkMode,
                       ),
-
-                      // Contact
                       _buildMenuItem(
+                        context,
                         Icons.phone_in_talk_outlined,
                         'Contact',
                         () => _navigateTo(context, '/contact'),
-                        isDarkMode: isDarkMode,
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // Theme Toggle
-                      _buildThemeToggle(provider, isDarkMode),
-
-                      const SizedBox(height: 32),
-
-                      // Social Media Icons
-                      _buildSocialMediaLinks(isDarkMode),
+                      const SizedBox(height: AppSpacing.md),
+                      _buildThemeToggle(context, provider),
+                      const SizedBox(height: AppSpacing.xxl),
+                      _buildSocialMediaLinks(context),
                     ],
                   ),
                 ),
-
-                // Logout Button
-                _buildLogoutButton(isDarkMode),
-
-                // App Version
-                _buildAppVersion(isDarkMode),
+                _buildLogoutButton(context),
+                _buildAppVersion(context),
               ],
             ),
           ),
@@ -162,51 +141,29 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildHeader(bool isDarkMode) {
+  Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          // Logo Icon
           Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
+              color: context.colors.brandSoft,
+              borderRadius: AppRadius.brSm,
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.directions_bus,
-                  color: Color(0xFF6B9B5B),
-                  size: 24,
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF6B9B5B),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+            child: Icon(
+              Icons.directions_bus_rounded,
+              color: context.colors.brand,
+              size: 24,
             ),
           ),
-          const SizedBox(width: 12),
-          // App Name
+          const SizedBox(width: AppSpacing.sm),
           Text(
             'ShuleDrive',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? Colors.white : const Color(0xFF6B9B5B),
-              letterSpacing: -0.5,
+            style: context.text.headlineSmall?.copyWith(
+              color: context.colors.brand,
             ),
           ),
         ],
@@ -215,28 +172,22 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   }
 
   Widget _buildHighlightedMenuItem(
+    BuildContext context,
     IconData icon,
     String title,
     VoidCallback onTap,
   ) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.scale(scale: 0.95 + (0.05 * value), child: child);
-      },
-      child: GestureDetector(
+    final brand = context.colors.brand;
+    return Material(
+      color: context.colors.brandSoft,
+      borderRadius: AppRadius.brMd,
+      child: InkWell(
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
-              width: 1,
-            ),
+        borderRadius: AppRadius.brMd,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
           ),
           child: Row(
             children: [
@@ -244,19 +195,15 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
+                  color: brand.withValues(alpha: 0.18),
+                  borderRadius: AppRadius.brSm,
                 ),
-                child: Icon(icon, color: const Color(0xFF6B9B5B), size: 20),
+                child: Icon(icon, color: brand, size: 20),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: AppSpacing.md),
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF6B9B5B),
-                ),
+                style: context.text.titleMedium?.copyWith(color: brand),
               ),
             ],
           ),
@@ -266,125 +213,85 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   }
 
   Widget _buildMenuItem(
+    BuildContext context,
     IconData icon,
     String title,
-    VoidCallback onTap, {
-    required bool isDarkMode,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
-                  size: 24,
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode ? Colors.white : const Color(0xFF333333),
-                  ),
-                ),
-              ],
-            ),
+    VoidCallback onTap,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.brMd,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: context.colors.textSecondary, size: 24),
+              const SizedBox(width: AppSpacing.md),
+              Text(title, style: context.text.titleMedium),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildThemeToggle(AppProvider provider, bool isDarkMode) {
+  Widget _buildThemeToggle(BuildContext context, AppProvider provider) {
+    final isDarkMode = context.isDark;
     final isSystemDefault = provider.manualDarkMode == null;
+    final brand = context.colors.brand;
 
-    // Determine display label and icon
-    final String themeLabel;
-    final IconData themeIcon;
-    if (isSystemDefault) {
-      themeLabel = 'System (${isDarkMode ? 'Dark' : 'Light'})';
-      themeIcon = isDarkMode
-          ? Icons.dark_mode_outlined
-          : Icons.light_mode_outlined;
-    } else {
-      themeLabel = isDarkMode ? 'Dark Mode' : 'Light Mode';
-      themeIcon = isDarkMode
-          ? Icons.dark_mode_outlined
-          : Icons.light_mode_outlined;
-    }
+    final themeLabel = isSystemDefault
+        ? 'System (${isDarkMode ? 'Dark' : 'Light'})'
+        : (isDarkMode ? 'Dark Mode' : 'Light Mode');
+    final themeIcon = isDarkMode
+        ? Icons.dark_mode_outlined
+        : Icons.light_mode_outlined;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: [
-          Icon(
-            themeIcon,
-            color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
-            size: 24,
-          ),
-          const SizedBox(width: 16),
+          Icon(themeIcon, color: context.colors.textSecondary, size: 24),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Theme',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: isDarkMode ? Colors.white : const Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 2),
+                Text('Theme', style: context.text.titleMedium),
                 Text(
                   themeLabel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDarkMode
-                        ? Colors.white54
-                        : const Color(0xFF999999),
+                  style: context.text.bodySmall?.copyWith(
+                    color: context.colors.textMuted,
                   ),
                 ),
               ],
             ),
           ),
-          // Theme toggle button
           GestureDetector(
-            onTap: () {
-              if (isSystemDefault) {
-                // Switch to manual override (opposite of current system)
-                provider.toggleTheme();
-              } else {
-                // Toggle between light and dark manually
-                provider.toggleTheme();
-              }
-            },
-            onLongPress: () {
-              // Long press to reset to system default
-              provider.useSystemTheme();
-            },
+            onTap: provider.toggleTheme,
+            onLongPress: provider.useSystemTheme,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 6,
+              ),
               decoration: BoxDecoration(
                 color: isSystemDefault
-                    ? (isDarkMode ? Colors.white24 : Colors.grey.shade200)
-                    : const Color(0xFF6B9B5B).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
+                    ? context.colors.surfaceSubtle
+                    : brand.withValues(alpha: 0.15),
+                borderRadius: AppRadius.brPill,
                 border: Border.all(
                   color: isSystemDefault
                       ? Colors.transparent
-                      : const Color(0xFF6B9B5B).withValues(alpha: 0.3),
-                  width: 1,
+                      : brand.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -393,27 +300,16 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   Icon(
                     isDarkMode ? Icons.nights_stay : Icons.wb_sunny,
                     size: 16,
-                    color: isDarkMode
-                        ? (isSystemDefault
-                              ? Colors.white70
-                              : const Color(0xFF6B9B5B))
-                        : (isSystemDefault
-                              ? const Color(0xFF666666)
-                              : const Color(0xFF6B9B5B)),
+                    color: isSystemDefault ? context.colors.textSecondary : brand,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     isDarkMode ? 'Dark' : 'Light',
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: context.text.labelMedium?.copyWith(
+                      color: isSystemDefault
+                          ? context.colors.textSecondary
+                          : brand,
                       fontWeight: FontWeight.w600,
-                      color: isDarkMode
-                          ? (isSystemDefault
-                                ? Colors.white70
-                                : const Color(0xFF6B9B5B))
-                          : (isSystemDefault
-                                ? const Color(0xFF666666)
-                                : const Color(0xFF6B9B5B)),
                     ),
                   ),
                 ],
@@ -425,58 +321,30 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSocialMediaLinks(bool isDarkMode) {
-    final socialLinks = [
-      _SocialLink(
-        icon: Icons.facebook,
-        color: const Color(0xFF6B9B5B),
-        url: 'https://facebook.com/shuledrive',
-      ),
-      _SocialLink(
-        icon: Icons.close, // Using close as X icon
-        color: const Color(0xFF6B9B5B),
-        url: 'https://twitter.com/shuledrive',
-      ),
-      _SocialLink(
-        icon: Icons.camera_alt_outlined, // Using camera for Instagram
-        color: const Color(0xFF6B9B5B),
-        url: 'https://instagram.com/shuledrive',
-      ),
-      _SocialLink(
-        icon: Icons.business_center_outlined, // Using for LinkedIn
-        color: const Color(0xFF6B9B5B),
-        url: 'https://linkedin.com/company/shuledrive',
-      ),
+  Widget _buildSocialMediaLinks(BuildContext context) {
+    final icons = [
+      Icons.facebook,
+      Icons.close,
+      Icons.camera_alt_outlined,
+      Icons.business_center_outlined,
     ];
+    final brand = context.colors.brand;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: socialLinks.asMap().entries.map((entry) {
-        final index = entry.key;
-        final link = entry.value;
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 400 + (index * 100)),
-          curve: Curves.easeOutBack,
-          builder: (context, value, child) {
-            return Transform.scale(scale: value, child: child);
-          },
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            child: Material(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(50),
-              child: InkWell(
-                onTap: () {},
-                borderRadius: BorderRadius.circular(50),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Icon(link.icon, color: link.color, size: 20),
-                ),
+      children: icons.map((icon) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Material(
+            color: brand.withValues(alpha: 0.1),
+            borderRadius: AppRadius.brPill,
+            child: InkWell(
+              onTap: () {},
+              borderRadius: AppRadius.brPill,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(icon, color: brand, size: 20),
               ),
             ),
           ),
@@ -485,41 +353,29 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLogoutButton(bool isDarkMode) {
+  Widget _buildLogoutButton(BuildContext context) {
+    final error = context.colors.error;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.9, end: 1),
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        builder: (context, value, child) {
-          return Transform.scale(scale: value, child: child);
-        },
-        child: GestureDetector(
-          onTap: () => _showLogoutConfirmation(context),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFEBEE),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFFCDD2), width: 1),
-            ),
-            child: const Row(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs,
+      ),
+      child: Material(
+        color: error.withValues(alpha: 0.1),
+        borderRadius: AppRadius.brMd,
+        child: InkWell(
+          onTap: () => _confirmLogout(context),
+          borderRadius: AppRadius.brMd,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.power_settings_new,
-                  color: Color(0xFFE53935),
-                  size: 22,
-                ),
-                SizedBox(width: 10),
+                Icon(Icons.power_settings_new_rounded, color: error, size: 22),
+                const SizedBox(width: AppSpacing.xs),
                 Text(
                   'Logout',
-                  style: TextStyle(
-                    color: Color(0xFFE53935),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: context.text.titleMedium?.copyWith(color: error),
                 ),
               ],
             ),
@@ -529,43 +385,42 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildAppVersion(bool isDarkMode) {
+  Widget _buildAppVersion(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16, top: 8),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md, top: AppSpacing.xs),
       child: Text(
         'App Version 1.1.1',
-        style: TextStyle(
-          fontSize: 12,
-          color: isDarkMode ? Colors.white38 : const Color(0xFFAAAAAA),
-          fontWeight: FontWeight.w500,
+        style: context.text.labelSmall?.copyWith(
+          color: context.colors.textMuted,
         ),
       ),
     );
   }
 
-  /// Active trip menu item with pulsing green indicator
-  Widget _buildActiveTripMenuItem(String routeName, VoidCallback onTap) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+  /// Active trip menu item with pulsing brand indicator.
+  Widget _buildActiveTripMenuItem(
+    BuildContext context,
+    String routeName,
+    VoidCallback onTap,
+  ) {
+    final brand = context.colors.brand;
     return Material(
-      color: Colors.transparent,
+      color: context.colors.brandSoft,
+      borderRadius: AppRadius.brMd,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: AppRadius.brMd,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF6B9B5B).withAlpha(isDarkMode ? 40 : 25),
-                const Color(0xFF6B9B5B).withAlpha(isDarkMode ? 20 : 10),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF6B9B5B).withAlpha(60)),
+            borderRadius: AppRadius.brMd,
+            border: Border.all(color: brand.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
-              // Pulsing green dot
               AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (context, child) {
@@ -573,15 +428,13 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: const Color(
-                        0xFF6B9B5B,
-                      ).withAlpha((_pulseAnimation.value * 255).toInt()),
+                      color: brand.withValues(alpha: _pulseAnimation.value),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(
-                            0xFF6B9B5B,
-                          ).withAlpha((_pulseAnimation.value * 100).toInt()),
+                          color: brand.withValues(
+                            alpha: _pulseAnimation.value * 0.4,
+                          ),
                           blurRadius: 6,
                           spreadRadius: 2,
                         ),
@@ -590,26 +443,21 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   );
                 },
               ),
-              const SizedBox(width: 12),
-              const Icon(Icons.navigation, color: Color(0xFF6B9B5B), size: 22),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.navigation_rounded, color: brand, size: 22),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Active Trip',
-                      style: TextStyle(
-                        color: Color(0xFF6B9B5B),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                      style: context.text.titleSmall?.copyWith(color: brand),
                     ),
                     Text(
                       routeName,
-                      style: TextStyle(
-                        color: const Color(0xFF6B9B5B).withAlpha(180),
-                        fontSize: 12,
+                      style: context.text.bodySmall?.copyWith(
+                        color: brand.withValues(alpha: 0.8),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -617,11 +465,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                color: Color(0xFF6B9B5B),
-                size: 14,
-              ),
+              Icon(Icons.arrow_forward_ios_rounded, color: brand, size: 14),
             ],
           ),
         ),
@@ -634,51 +478,18 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     Navigator.pushNamed(context, route);
   }
 
-  void _showLogoutConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Logout',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0xFF666666)),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Perform logout
-              final authProvider = context.read<AuthProvider>();
-              await authProvider.logout();
-              // Navigation will be handled by AuthWrapper automatically
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE53935),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmLabel: 'Logout',
+      icon: Icons.power_settings_new_rounded,
+      destructive: true,
     );
+    if (!confirmed || !context.mounted) return;
+    Navigator.pop(context); // close drawer
+    await context.read<AuthProvider>().logout();
+    // Navigation handled by AuthWrapper automatically.
   }
-}
-
-class _SocialLink {
-  final IconData icon;
-  final Color color;
-  final String url;
-
-  _SocialLink({required this.icon, required this.color, required this.url});
 }

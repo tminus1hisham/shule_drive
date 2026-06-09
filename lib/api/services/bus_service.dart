@@ -18,27 +18,19 @@ class BusService {
         // Retry logic with longer timeout for staging API
         const maxRetries = 2;
         const timeout = Duration(seconds: 30);
-        
+
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
             if (kDebugMode && attempt > 0) {
               print('🔄 Buses retry attempt ${attempt + 1}/$maxRetries');
             }
-            
+
             final response = await _apiClient.get(
               Endpoints.getAllBuses,
               timeout: timeout,
             );
 
-            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-            List<dynamic> busesData;
-            if (response is List) {
-              busesData = response;
-            } else if (response is Map && response['data'] != null) {
-              busesData = response['data'] as List;
-            } else {
-              busesData = [];
-            }
+            final busesData = ApiClient.unwrapList(response);
 
             if (kDebugMode && busesData.isNotEmpty) {
               final first = busesData.first as Map<String, dynamic>;
@@ -52,16 +44,18 @@ class BusService {
 
             final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
             return buses;
-          } on TimeoutException catch (e) {
+          } on TimeoutException {
             if (attempt == maxRetries - 1) {
               // Last attempt failed, rethrow
-              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+              throw ApiException(
+                message: 'Request timed out after $maxRetries attempts',
+              );
             }
             // Wait before retrying
             await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
-        
+
         return [];
       },
       bufferKey: BufferKeys.buses,
@@ -78,40 +72,36 @@ class BusService {
         // Retry logic with longer timeout for staging API
         const maxRetries = 2;
         const timeout = Duration(seconds: 30);
-        
+
         for (int attempt = 0; attempt < maxRetries; attempt++) {
           try {
             if (kDebugMode && attempt > 0) {
-              print('🔄 Buses by user retry attempt ${attempt + 1}/$maxRetries');
+              print(
+                '🔄 Buses by user retry attempt ${attempt + 1}/$maxRetries',
+              );
             }
-            
+
             final response = await _apiClient.get(
               Endpoints.getBusesByUser,
               timeout: timeout,
             );
 
-            // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-            List<dynamic> busesData;
-            if (response is List) {
-              busesData = response;
-            } else if (response is Map && response['data'] != null) {
-              busesData = response['data'] as List;
-            } else {
-              busesData = [];
-            }
+            final busesData = ApiClient.unwrapList(response);
 
             final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
             return buses;
-          } on TimeoutException catch (e) {
+          } on TimeoutException {
             if (attempt == maxRetries - 1) {
               // Last attempt failed, rethrow
-              throw ApiException(message: 'Request timed out after $maxRetries attempts');
+              throw ApiException(
+                message: 'Request timed out after $maxRetries attempts',
+              );
             }
             // Wait before retrying
             await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
           }
         }
-        
+
         return [];
       },
       bufferKey: '${BufferKeys.buses}_by_user',
@@ -127,9 +117,9 @@ class BusService {
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getActiveBuses);
 
-        final buses = (response['data'] as List? ?? [])
-            .map((bus) => Bus.fromJson(bus))
-            .toList();
+        final busesData = ApiClient.unwrapList(response);
+
+        final buses = busesData.map((bus) => Bus.fromJson(bus)).toList();
 
         return buses;
       },
@@ -147,7 +137,11 @@ class BusService {
     return _buffer.withOptionalBuffer<Bus>(
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getBusById(busId));
-        return Bus.fromJson(response['data'] ?? response);
+        final data = ApiClient.unwrapObject(response);
+        if (data == null) {
+          throw NotFoundException(message: 'Bus not found');
+        }
+        return Bus.fromJson(data);
       },
       bufferKey: BufferKeys.busDetails(busId),
       cacheDuration: const Duration(minutes: 20),
@@ -161,10 +155,10 @@ class BusService {
     required Function(List<Bus>) onRefresh,
   }) async {
     const bufferKey = BufferKeys.buses;
-    
+
     // Try to get cached data first (as List<Bus> since that's what we store)
     final cachedBuses = await _buffer.getBuffer<List<Bus>>(key: bufferKey);
-    
+
     // Fetch fresh data in background
     Future<void> fetchFresh() async {
       try {
@@ -183,10 +177,10 @@ class BusService {
         }
       }
     }
-    
+
     // Start background fetch
     fetchFresh();
-    
+
     // Return cached data immediately if available
     if (cachedBuses != null && cachedBuses.isNotEmpty) {
       if (kDebugMode) {
@@ -194,7 +188,7 @@ class BusService {
       }
       return cachedBuses;
     }
-    
+
     // No cache, wait for fresh data
     if (kDebugMode) {
       print('📡 No cache available, fetching fresh bus data...');
@@ -226,15 +220,7 @@ class BusService {
         // The API doesn't have a direct endpoint for getting buses by school
         final response = await _apiClient.get(Endpoints.getAllBuses);
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> busesData;
-        if (response is List) {
-          busesData = response;
-        } else if (response is Map && response['data'] != null) {
-          busesData = response['data'] as List;
-        } else {
-          busesData = [];
-        }
+        final busesData = ApiClient.unwrapList(response);
 
         // Filter buses by school ID (companyOrgId field)
         final buses = busesData
@@ -319,17 +305,16 @@ class Bus {
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'registration_number': registrationNumber,
-      'model': model,
-      'capacity': capacity,
-      'school_id': schoolId,
-      'school_name': schoolName,
-      'driver_id': driverId,
-      'driver_name': driverName,
-      'is_active': isActive,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
+      'id': int.tryParse(id) ?? 0,
+      'numberPlate': registrationNumber,
+      'seatingCapacity': int.tryParse(capacity ?? '') ?? 0,
+      'companyOrgId': schoolId ?? '',
+      'latitude': 0.0,
+      'longitude': 0.0,
+      'isBusActive': isActive,
+      'isBusDeleted': false,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'updatedAt': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
   }
 

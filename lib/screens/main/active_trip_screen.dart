@@ -54,6 +54,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   bool _followBus = true;
   bool _isEndingTrip = false;
   bool _isMapInitialized = false;
+  bool _isUpdatingStudentStatus = false;
   int _pickedCount = 0;
   int _totalCount = 0;
   bool _hasLocationPermission = false;
@@ -1245,7 +1246,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     if (success && mounted) {
       // Background refresh of the actual trip data
-      TripProvider provider = context.read<TripProvider>();
       final authProvider = context.read<AuthProvider>();
       if (authProvider.isDriver) {
         // Just refresh the provider so context readers see it
@@ -1312,7 +1312,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     if (success && mounted) {
       // Background refresh of the actual trip data
-      TripProvider provider = context.read<TripProvider>();
       final authProvider = context.read<AuthProvider>();
       if (authProvider.isDriver) {
         // Just refresh the provider so context readers see it
@@ -1368,24 +1367,58 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
-  /// Update student status locally and refresh UI
-  void _updateStudentStatus(String studentId, String newStatus) {
+  /// Update student status via provider/API, then refresh local UI state.
+  Future<void> _updateStudentStatus(String studentId, String newStatus) async {
+    if (_tripId == null || _isUpdatingStudentStatus) return;
+
+    setState(() => _isUpdatingStudentStatus = true);
+
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+
+    final tripProvider = context.read<TripProvider>();
+    final success = await tripProvider.updateStudentStatus(
+      tripId: _tripId!,
+      studentId: studentId,
+      status: newStatus,
+    );
+
+    if (!mounted) return;
+
     setState(() {
-      // Update in preloaded students list
-      for (var student in _preloadedStudents) {
-        if (student['id'] == studentId) {
-          student['status'] = newStatus;
-          break;
+      _isUpdatingStudentStatus = false;
+      if (success) {
+        for (final student in _preloadedStudents) {
+          if (student['id'] == studentId) {
+            student['status'] = newStatus;
+            break;
+          }
+        }
+
+        _activeTrip = tripProvider.activeTrip ?? _activeTrip;
+        if (_preloadedStudents.isNotEmpty) {
+          _totalCount = _preloadedStudents.length;
+          _pickedCount = _preloadedStudents
+              .where((s) => s['status'] == 'picked')
+              .length;
+        } else if (_activeTrip != null) {
+          _totalCount = _activeTrip!.students.length;
+          _pickedCount = _activeTrip!.pickedCount;
         }
       }
-
-      // Recalculate counts
-      _pickedCount = _preloadedStudents
-          .where((s) => s['status'] == 'picked')
-          .length;
     });
 
-    Navigator.pop(context);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tripProvider.errorMessage ?? 'Failed to update status'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     // Enhanced haptic feedback based on action
     if (newStatus == 'picked') {
@@ -1398,10 +1431,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     // Show confirmation
     final statusText = newStatus == 'picked'
-        ? 'Γ£à Picked up'
+        ? 'Picked up'
         : newStatus == 'absent'
-        ? 'ΓÜá∩╕Å Marked absent'
-        : '≡ƒÅá Dropped off';
+        ? 'Marked absent'
+        : 'Dropped off';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1699,10 +1732,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'id': s.id.toString(),
         'name': s.fullname,
         'stopName': s.route,
-        'status': s.isStudentPicked
-            ? 'picked'
-            : s.isStudentDropped
+        'status': s.isStudentDropped
             ? 'dropped'
+            : s.isStudentPicked
+            ? 'picked'
+            : !s.isStudentActive
+            ? 'absent'
             : 'pending',
         'guardianPhone': s.guardianPhoneNumber,
         'guardianId': s.guardianPhoneNumber,
@@ -3489,3 +3524,4 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
     );
   }
 }
+

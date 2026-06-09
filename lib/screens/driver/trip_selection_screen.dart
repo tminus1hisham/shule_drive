@@ -249,7 +249,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B9B5B).withOpacity(0.3),
+                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -404,8 +404,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? Colors.white.withOpacity(0.05)
-                    : const Color(0xFF6B9B5B).withOpacity(0.1),
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -520,7 +520,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF6B9B5B).withOpacity(0.2),
+                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -577,7 +577,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withOpacity(0.1),
+                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -620,7 +620,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           Icons.access_time,
                           size: 14,
                           color: isDarkMode
-                              ? Colors.white.withOpacity(0.4)
+                              ? Colors.white.withValues(alpha: 0.4)
                               : const Color(0xFF999999),
                         ),
                         const SizedBox(width: 4),
@@ -638,7 +638,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           Icons.calendar_today,
                           size: 14,
                           color: isDarkMode
-                              ? Colors.white.withOpacity(0.4)
+                              ? Colors.white.withValues(alpha: 0.4)
                               : const Color(0xFF999999),
                         ),
                         const SizedBox(width: 4),
@@ -662,7 +662,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                             Icons.confirmation_number,
                             size: 14,
                             color: isDarkMode
-                                ? Colors.white.withOpacity(0.4)
+                                ? Colors.white.withValues(alpha: 0.4)
                                 : const Color(0xFF999999),
                           ),
                           const SizedBox(width: 4),

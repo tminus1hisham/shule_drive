@@ -52,6 +52,7 @@ import 'services/notification_service.dart';
 import 'services/offline_sync_manager.dart';
 import 'services/app_config.dart';
 import 'widgets/route_guard.dart';
+import 'theme/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // ============================================================================ 
@@ -62,17 +63,14 @@ Future<void> main() async {
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
   
-  // Allow bad SSL certificates for staging environment (avatars, etc.)
-  // TODO: Remove this for production builds
-  HttpOverrides.global = _DevHttpOverrides();
-  
   // Initialize AppConfig (loads .env, dart-define, etc.)
   // This must happen before runApp()
   await AppConfig().initialize();
-  
-  // Render a frame immediately with the splash background color
-  // This prevents the blank screen between native splash and Flutter UI
-  binding.renderView.automaticSystemUiAdjustment = false;
+
+  // Allow bad SSL certificates only for local debug builds.
+  if (kDebugMode) {
+    HttpOverrides.global = _DevHttpOverrides();
+  }
   
   // Schedule the actual initialization after the first frame is rendered
   binding.addPostFrameCallback((_) async {
@@ -182,139 +180,13 @@ class ShuleDriveApp extends StatelessWidget {
             title: 'ShuleDrive',
             debugShowCheckedModeBanner: false,
             themeMode: appProvider.themeMode,
-            theme: _buildLightTheme(),
-            darkTheme: _buildDarkTheme(),
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
             home: const SplashWithTransition(),
             navigatorObservers: [routeObserver],
             onGenerateRoute: _buildPageRoute,
           );
         },
-      ),
-    );
-  }
-
-  ThemeData _buildLightTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      primaryColor: const Color(0xFF6B9B5B),
-      scaffoldBackgroundColor: const Color(0xFFF5F5F0),
-      fontFamily: 'Inter',
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
-      ),
-      colorScheme: const ColorScheme.light(
-        primary: Color(0xFF6B9B5B),
-        secondary: Color(0xFF6B9B5B),
-        surface: Colors.white,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: Color(0xFF1A1A1A),
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF5F5F0),
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: Color(0xFF1A1A1A)),
-        titleTextStyle: TextStyle(
-          color: Color(0xFF1A1A1A),
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF6B9B5B),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFFF5F5F5),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-      ),
-    );
-  }
-
-  ThemeData _buildDarkTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      primaryColor: const Color(0xFF6B9B5B),
-      scaffoldBackgroundColor: const Color(0xFF121212),
-      fontFamily: 'Inter',
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
-      ),
-      colorScheme: const ColorScheme.dark(
-        primary: Color(0xFF6B9B5B),
-        secondary: Color(0xFF6B9B5B),
-        surface: Color(0xFF1E1E1E),
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: Colors.white,
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF121212),
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: Colors.white),
-        titleTextStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF6B9B5B),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: const Color(0xFF1E1E1E),
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFF2C2C2C),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
       ),
     );
   }
@@ -674,11 +546,7 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool _initialized = false;
   bool? _hasSeenOnboarding;
-  
-  // TODO: Set to false for production - currently true for testing to always show onboarding
-  static const bool _alwaysShowOnboarding = true;
 
   @override
   void initState() {
@@ -694,24 +562,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   /// Check if user has completed onboarding
   Future<void> _checkOnboardingStatus() async {
-    // TESTING: Always show onboarding during testing phase
-    if (_alwaysShowOnboarding) {
-      if (mounted) {
-        setState(() {
-          _hasSeenOnboarding = false; // Force show onboarding
-          _initialized = true;
-        });
-      }
-      return;
-    }
-    
     final prefs = await SharedPreferences.getInstance();
     final hasSeen = prefs.getBool('has_seen_onboarding') ?? false;
     
     if (mounted) {
       setState(() {
         _hasSeenOnboarding = hasSeen;
-        _initialized = true;
       });
     }
   }

@@ -105,9 +105,9 @@ Endpoints.paymentPlans             // GET /payment-plans
 
 ### Reports
 ```dart
-Endpoints.reports                  // GET /reports
-Endpoints.tripReports              // GET /reports/trips
-Endpoints.paymentReports           // GET /reports/payments
+// api.md exposes a single Reports endpoint.
+Endpoints.getTripsFromUniqueTripReport
+// GET /api/attendants/get/unique/trips/from/trip?tripUniqueIdentity=...
 ```
 
 ## Query Parameter Helpers

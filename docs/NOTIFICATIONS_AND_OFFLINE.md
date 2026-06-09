@@ -100,7 +100,7 @@ When offline, the following operations are queued for later sync:
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Create a new project (or use existing)
-3. Add Android app with package name `com.example.crossroad`
+3. Add Android app with package name `com.example.shuledrive`
 4. Download `google-services.json`
 5. Replace `android/app/google-services.json` with your file
 

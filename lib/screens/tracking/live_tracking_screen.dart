@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import '../../config/map_config.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/tracking_provider.dart';
 import '../../models/map_models.dart';
@@ -21,22 +21,142 @@ class LiveTrackingScreen extends StatefulWidget {
 }
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
+  TrackingProvider? _trackingProvider;
+
+  // Mapbox
+  MapboxMap? _mapboxMap;
+  PointAnnotationManager? _pointAnnotationManager;
+  PointAnnotation? _busAnnotation;
+  final Map<String, PointAnnotation> _stopAnnotations = {};
+
   @override
   void initState() {
     super.initState();
-    _initializeTracking();
+    MapboxOptions.setAccessToken(MapConfig.mapboxAccessToken);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _trackingProvider = context.read<TrackingProvider>();
+      _trackingProvider!.addListener(_onProviderChange);
+      _initializeTracking();
+    });
+  }
+
+  @override
+  void dispose() {
+    _trackingProvider?.removeListener(_onProviderChange);
+    _trackingProvider?.stopTracking();
+    _mapboxMap?.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeTracking() async {
+    if (!mounted) return;
     final provider = context.read<TrackingProvider>();
     await provider.initialize();
 
+    if (!mounted) return;
     if (widget.tripId != null && widget.busId != null) {
       await provider.startTrackingTrip(
         tripId: widget.tripId!,
         busId: widget.busId!,
         routeId: widget.routeId,
       );
+    }
+  }
+
+  void _onMapCreated(MapboxMap mapboxMap) async {
+    _mapboxMap = mapboxMap;
+    _pointAnnotationManager =
+        await mapboxMap.annotations.createPointAnnotationManager();
+    // Sync any data already loaded before the map was ready
+    _onProviderChange();
+  }
+
+  void _onProviderChange() {
+    final provider = _trackingProvider;
+    if (provider == null || _mapboxMap == null || _pointAnnotationManager == null) {
+      return;
+    }
+
+    _updateBusAnnotation(provider);
+    _updateStopAnnotations(provider);
+
+    if (provider.shouldCenterOnBus) {
+      provider.clearCenterRequest();
+      final loc = provider.currentBusLocation;
+      if (loc != null) {
+        _mapboxMap!.setCamera(
+          CameraOptions(
+            center: Point(
+              coordinates: Position(
+                loc.position.longitude,
+                loc.position.latitude,
+              ),
+            ),
+            zoom: 16,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateBusAnnotation(TrackingProvider provider) async {
+    final location = provider.currentBusLocation;
+    if (location == null || _pointAnnotationManager == null) return;
+
+    final point = Point(
+      coordinates: Position(
+        location.position.longitude,
+        location.position.latitude,
+      ),
+    );
+
+    if (_busAnnotation != null) {
+      _busAnnotation!.geometry = point;
+      _busAnnotation!.iconRotate = location.heading;
+      await _pointAnnotationManager!.update(_busAnnotation!);
+    } else {
+      _busAnnotation = await _pointAnnotationManager!.create(
+        PointAnnotationOptions(
+          geometry: point,
+          textField: '🚌',
+          textSize: 28,
+          iconRotate: location.heading,
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateStopAnnotations(TrackingProvider provider) async {
+    if (_pointAnnotationManager == null) return;
+
+    final nextStopId = provider.currentBusLocation?.nextStopId;
+
+    for (final stop in provider.stops) {
+      final isNext = stop.id == nextStopId;
+      final color = isNext ? 0xFF2196F3 : 0xFFFF5722;
+
+      if (_stopAnnotations.containsKey(stop.id)) {
+        final ann = _stopAnnotations[stop.id]!;
+        ann.iconColor = color;
+        await _pointAnnotationManager!.update(ann);
+      } else {
+        final ann = await _pointAnnotationManager!.create(
+          PointAnnotationOptions(
+            geometry: Point(
+              coordinates: Position(
+                stop.position.longitude,
+                stop.position.latitude,
+              ),
+            ),
+            iconColor: color,
+            textField: stop.name,
+            textSize: 10,
+            textOffset: [0.0, 1.5],
+          ),
+        );
+        _stopAnnotations[stop.id] = ann;
+      }
     }
   }
 
@@ -65,23 +185,18 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
       body: Stack(
         children: [
           // Map
-          FlutterMap(
-            mapController: provider.mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(
-                -1.286389,
-                36.817223,
-              ), // Nairobi default
-              initialZoom: 12,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.shuledrive.app',
+          MapWidget(
+            key: const ValueKey('live-tracking-map'),
+            onMapCreated: _onMapCreated,
+            cameraOptions: CameraOptions(
+              center: Point(
+                coordinates: Position(
+                  MapConfig.defaultLongitude,
+                  MapConfig.defaultLatitude,
+                ),
               ),
-              PolylineLayer(polylines: provider.polylines),
-              MarkerLayer(markers: provider.markers),
-            ],
+              zoom: 12,
+            ),
           ),
 
           // Loading indicator
@@ -245,10 +360,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: _getStatusColor(location?.status).withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -340,9 +452,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: isNext
-                                ? FontWeight.w600
-                                : FontWeight.normal,
+                            fontWeight:
+                                isNext ? FontWeight.w600 : FontWeight.normal,
                             color: isDarkMode ? Colors.white : Colors.black,
                           ),
                         ),

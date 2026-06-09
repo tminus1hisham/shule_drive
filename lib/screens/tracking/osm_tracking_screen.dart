@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
@@ -27,7 +28,8 @@ class OsmTrackingScreen extends StatefulWidget {
   State<OsmTrackingScreen> createState() => _OsmTrackingScreenState();
 }
 
-class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
+class _OsmTrackingScreenState extends State<OsmTrackingScreen>
+    with SingleTickerProviderStateMixin {
   // Services
   final MapboxService _mapboxService = MapboxService();
   final TripService _tripService = TripService();
@@ -36,10 +38,20 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _pointAnnotationManager;
   PolylineAnnotationManager? _polylineAnnotationManager;
+  PointAnnotation? _busAnnotation;
 
   // Location
   geo.Position? _currentPosition;
+  geo.Position? _previousPosition;
   StreamSubscription<geo.Position>? _positionStream;
+
+  // Animation for smooth bus movement
+  late AnimationController _animationController;
+  Animation<double>? _latAnimation;
+  Animation<double>? _lngAnimation;
+  Animation<double>? _bearingAnimation;
+
+  Uint8List? _busIconBytes;
 
   // Data
   Trip? _trip;
@@ -54,6 +66,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2), // Smooth 2s interpolation
+    )..addListener(_onAnimationUpdate);
+
     _initializeMapbox();
     _initializeLocation();
     _loadTripData();
@@ -61,9 +78,37 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
 
   @override
   void dispose() {
+    _animationController.dispose();
     _positionStream?.cancel();
     _mapboxMap?.dispose();
     super.dispose();
+  }
+
+  void _onAnimationUpdate() {
+    if (_busAnnotation != null && _pointAnnotationManager != null) {
+      final lat = _latAnimation?.value ?? _currentPosition?.latitude ?? 0.0;
+      final lng = _lngAnimation?.value ?? _currentPosition?.longitude ?? 0.0;
+      final bearing =
+          _bearingAnimation?.value ?? _currentPosition?.heading ?? 0.0;
+
+      // Update annotation geometry and rotation
+      _busAnnotation!.geometry = Point(coordinates: Position(lng, lat));
+      // Mapbox iconRotate is in degrees, positive is clockwise. heading in Geolocator is also in degrees 0-359
+      _busAnnotation!.iconRotate = bearing;
+
+      _pointAnnotationManager?.update(_busAnnotation!);
+    }
+  }
+
+  // Helper to get shortest rotation path (prevents spinning 360)
+  double _getShortestAngle(double from, double to) {
+    double difference = (to - from) % 360.0;
+    if (difference > 180.0) {
+      difference -= 360.0;
+    } else if (difference < -180.0) {
+      difference += 360.0;
+    }
+    return from + difference;
   }
 
   /// Initialize Mapbox with access token
@@ -72,8 +117,22 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   }
 
   /// Called when map is created
-  void _onMapCreated(MapboxMap mapboxMap) {
+  void _onMapCreated(MapboxMap mapboxMap) async {
     _mapboxMap = mapboxMap;
+
+    // Load custom image into Mapbox style
+    try {
+      final byteData = await DefaultAssetBundle.of(
+        context,
+      ).load('assets/images/bus_marker.png');
+      final Uint8List list = byteData.buffer.asUint8List();
+      _busIconBytes = list;
+    } catch (e) {
+      developer.log(
+        'Error loading bus marker image: $e',
+        name: 'TrackingScreen',
+      );
+    }
 
     mapboxMap.annotations.createPointAnnotationManager().then((manager) {
       _pointAnnotationManager = manager;
@@ -111,7 +170,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
       }
 
       final position = await geo.Geolocator.getCurrentPosition();
-      setState(() => _currentPosition = position);
+      setState(() {
+        _currentPosition = position;
+        _previousPosition = position;
+      });
 
       _positionStream = geo.Geolocator.getPositionStream(
         locationSettings: const geo.LocationSettings(
@@ -125,7 +187,42 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   }
 
   void _onLocationUpdate(geo.Position position) {
-    setState(() => _currentPosition = position);
+    if (!mounted) return;
+
+    setState(() {
+      _previousPosition = _currentPosition ?? position;
+      _currentPosition = position;
+    });
+
+    // Start interpolation animation
+    _latAnimation =
+        Tween<double>(
+          begin: _previousPosition!.latitude,
+          end: position.latitude,
+        ).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.linear),
+        );
+
+    _lngAnimation =
+        Tween<double>(
+          begin: _previousPosition!.longitude,
+          end: position.longitude,
+        ).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.linear),
+        );
+
+    _bearingAnimation =
+        Tween<double>(
+          begin: _previousPosition!.heading,
+          end: _getShortestAngle(_previousPosition!.heading, position.heading),
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeInOut,
+          ),
+        );
+
+    _animationController.forward(from: 0.0);
     _updateDriverMarker();
   }
 
@@ -264,18 +361,20 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
   Future<void> _updateDriverMarker() async {
     if (_pointAnnotationManager == null || _currentPosition == null) return;
 
-    await _pointAnnotationManager!.create(
-      PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(
-            _currentPosition!.longitude,
-            _currentPosition!.latitude,
+    if (_busAnnotation == null) {
+      _busAnnotation = await _pointAnnotationManager!.create(
+        PointAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(
+              _currentPosition!.longitude,
+              _currentPosition!.latitude,
+            ),
           ),
+          iconSize: 1.0,
+          image: _busIconBytes,
         ),
-        textField: '🚌',
-        textSize: 24,
-      ),
-    );
+      );
+    }
   }
 
   /// Add student marker to map
@@ -441,29 +540,65 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
 
   Widget _buildInfoPanel() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white.withValues(alpha: 0.9), // Glassmorphism base
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 20),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
         ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Drag Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
           // Driver/Bus info
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                height: 56,
+                width: 56,
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withAlpha(30),
-                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6B9B5B), Color(0xFF86ba74)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: const Text('🚌', style: TextStyle(fontSize: 24)),
+                child: const Center(
+                  child: Text('🚌', style: TextStyle(fontSize: 28)),
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,47 +606,67 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
                     Text(
                       _trip?.vehicleNumber ?? 'Bus ${_trip?.vehicleId ?? ''}',
                       style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     if (_currentPosition != null)
-                      Text(
-                        '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.speed,
+                            size: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
                       ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withAlpha(30),
-                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 6,
-                      height: 6,
+                      width: 8,
+                      height: 8,
                       decoration: const BoxDecoration(
                         color: Colors.green,
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: Colors.green, blurRadius: 4),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     const Text(
                       'LIVE',
                       style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
                         color: Colors.green,
                       ),
                     ),
@@ -521,28 +676,35 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
             ],
           ),
 
-          const Divider(height: 24),
+          const SizedBox(height: 24),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+          const SizedBox(height: 24),
 
           // Students summary
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildStat(
-                icon: Icons.people,
+                icon: Icons.people_outline_rounded,
                 value: '${_students.length}',
-                label: 'Students',
+                label: 'Total',
               ),
+              Container(width: 1, height: 40, color: const Color(0xFFEEEEEE)),
               _buildStat(
-                icon: Icons.check_circle,
+                icon: Icons.check_circle_outline_rounded,
                 value: '${_students.where((s) => s.isStudentPicked).length}',
                 label: 'Picked',
+                iconColor: Colors.green,
               ),
-              if (_routeResult != null)
+              if (_routeResult != null) ...[
+                Container(width: 1, height: 40, color: const Color(0xFFEEEEEE)),
                 _buildStat(
-                  icon: Icons.access_time,
+                  icon: Icons.access_time_rounded,
                   value: _routeResult!.formattedDuration,
                   label: 'ETA',
+                  iconColor: Colors.blue,
                 ),
+              ],
             ],
           ),
         ],
@@ -554,18 +716,41 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen> {
     required IconData icon,
     required String value,
     required String label,
+    Color? iconColor,
   }) {
     return Column(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
-        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: (iconColor ?? const Color(0xFF6B9B5B)).withValues(
+              alpha: 0.1,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            size: 22,
+            color: iconColor ?? const Color(0xFF6B9B5B),
+          ),
+        ),
+        const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            letterSpacing: -0.5,
+          ),
         ),
+        const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+          ),
         ),
       ],
     );

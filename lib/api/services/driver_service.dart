@@ -12,13 +12,11 @@ class DriverService {
   /// GET /api/drivers/get/by/{id}
   Future<Driver?> getDriverById(String driverId) async {
     try {
-      final response = await _apiClient.get(
-        Endpoints.getDriverById(driverId),
-      );
+      final response = await _apiClient.get(Endpoints.getDriverById(driverId));
 
       // Handle both wrapped ({"data": {...}}) and unwrapped ({...}) responses
-      final driverData = response['data'] ?? response;
-      if (driverData is Map<String, dynamic>) {
+      final driverData = ApiClient.unwrapObject(response);
+      if (driverData != null) {
         return Driver.fromJson(driverData);
       }
       return null;
@@ -37,13 +35,13 @@ class DriverService {
       if (kDebugMode) {
         print('🚗 Fetching driver details for user: $userId');
       }
-      
+
       // Use /api/drivers/get/by/user to get the driver's own record
       final response = await _apiClient.get(Endpoints.getDriversByUser);
-      
+
       // Handle both wrapped ({"data": {...}}) and unwrapped ({...}) responses
-      final driverData = response['data'] ?? response;
-      if (driverData is Map<String, dynamic>) {
+      final driverData = ApiClient.unwrapObject(response);
+      if (driverData != null) {
         final driver = Driver.fromJson(driverData);
         if (kDebugMode) {
           print('✅ Driver found:');
@@ -53,7 +51,7 @@ class DriverService {
         }
         return driver;
       }
-      
+
       return null;
     } catch (e) {
       if (kDebugMode) {
@@ -72,20 +70,12 @@ class DriverService {
           Endpoints.getDriversBySchool(schoolId),
         );
 
-        // Handle both wrapped ({"data": [...]}) and unwrapped ([...]) responses
-        List<dynamic> driversData;
-        if (response is List) {
-          driversData = response;
-        } else if (response is Map && response['data'] != null) {
-          driversData = response['data'] as List;
-        } else {
-          driversData = [];
-        }
+        final driversData = ApiClient.unwrapList(response);
 
         final drivers = driversData
             .map((driver) => Driver.fromJson(driver))
             .toList();
-        
+
         return drivers;
       },
       bufferKey: 'drivers_school_$schoolId',
@@ -136,16 +126,22 @@ class Driver {
       phone: json['phone'] ?? json['phoneNumber'],
       licenseNumber: json['licenseNumber'] ?? json['license_number'],
       // Try multiple possible fields for school ID
-      schoolId: json['school_id'] ?? 
-                json['schoolId'] ?? 
-                json['companyOrgId'] ??
-                json['school']?['id']?.toString(),
-      schoolName: json['school_name'] ?? 
-                  json['schoolName'] ?? 
-                  json['companyOrgName'] ??
-                  json['school']?['name'],
+      schoolId:
+          json['school_id'] ??
+          json['schoolId'] ??
+          json['companyOrgId'] ??
+          json['school']?['id']?.toString(),
+      schoolName:
+          json['school_name'] ??
+          json['schoolName'] ??
+          json['companyOrgName'] ??
+          json['school']?['name'],
       companyOrgId: json['companyOrgId'],
-      isActive: json['isActive'] ?? json['is_active'] ?? true,
+      isActive:
+          json['isDriverActive'] ??
+          json['isActive'] ??
+          json['is_active'] ??
+          true,
       createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
       updatedAt: _parseDateTime(json['updatedAt'] ?? json['updated_at']),
     );

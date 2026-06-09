@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/map_models.dart';
 import '../services/tracking_service.dart';
+import '../api/services/trip_service.dart';
 
 /// Tracking Provider - Manages real-time bus tracking state
 class TrackingProvider extends ChangeNotifier {
@@ -20,6 +20,9 @@ class TrackingProvider extends ChangeNotifier {
   String? _selectedBusId;
   String? get selectedBusId => _selectedBusId;
 
+  // Trip data from API
+  Trip? _trip;
+
   // Location data
   BusLocation? _currentBusLocation;
   BusLocation? get currentBusLocation => _currentBusLocation;
@@ -27,23 +30,9 @@ class TrackingProvider extends ChangeNotifier {
   List<RouteStop> _stops = [];
   List<RouteStop> get stops => _stops;
 
-  RoutePath? _routePath;
-  RoutePath? get routePath => _routePath;
-
-  // Map markers and polylines
-  final List<Marker> _markers = [];
-  List<Marker> get markers => _markers;
-
-  final List<Polyline> _polylines = [];
-  List<Polyline> get polylines => _polylines;
-
   // Geofence alerts
   final List<GeofenceAlert> _alerts = [];
   List<GeofenceAlert> get alerts => List.unmodifiable(_alerts);
-
-  // Map controller
-  MapController? _mapController;
-  MapController? get mapController => _mapController;
 
   // Stream subscriptions
   StreamSubscription<BusLocation>? _locationSubscription;
@@ -58,6 +47,14 @@ class TrackingProvider extends ChangeNotifier {
 
   bool _showTraffic = false;
   bool get showTraffic => _showTraffic;
+
+  // Camera control — screen checks this flag and calls clearCenterRequest() after acting
+  bool _shouldCenterOnBus = false;
+  bool get shouldCenterOnBus => _shouldCenterOnBus;
+
+  void clearCenterRequest() {
+    _shouldCenterOnBus = false;
+  }
 
   /// Initialize the provider
   Future<void> initialize() async {
@@ -90,23 +87,37 @@ class TrackingProvider extends ChangeNotifier {
     await stopTracking();
 
     try {
-      // Load route data if routeId provided
-      if (routeId != null) {
-        _routePath = await _trackingService.loadRoutePath(routeId);
-        _stops = await _trackingService.loadRouteStops(routeId);
-        _updatePolylines();
-        _updateStopMarkers();
+      // Load trip details from API to populate stops and trip info
+      final trip = await TripService().getTripDetails(tripId);
+      if (trip != null) {
+        _trip = trip;
+        _stops = trip.stops
+            .where((s) =>
+                s.latitude != null &&
+                s.longitude != null &&
+                s.latitude != 0 &&
+                s.longitude != 0)
+            .map(
+              (s) => RouteStop(
+                id: s.id,
+                name: s.name,
+                position: LatLng(s.latitude!, s.longitude!),
+                address: s.address,
+                order: s.order,
+                type: StopType.fromString(s.type ?? 'pickup'),
+                studentIds: [],
+              ),
+            )
+            .toList();
       }
 
-      // Start listening to bus location
-      _locationSubscription = _trackingService
-          .trackBus(busId)
-          .listen(
-            _onLocationUpdate,
-            onError: (error) {
-              debugPrint('TrackingProvider: Location stream error: $error');
-            },
-          );
+      // Start listening to bus location via MQTT
+      _locationSubscription = _trackingService.trackBus(busId).listen(
+        _onLocationUpdate,
+        onError: (error) {
+          debugPrint('TrackingProvider: Location stream error: $error');
+        },
+      );
 
       // Monitor geofences for all stops
       for (final stop in _stops) {
@@ -143,102 +154,30 @@ class TrackingProvider extends ChangeNotifier {
   /// Handle location updates
   void _onLocationUpdate(BusLocation location) {
     _currentBusLocation = location;
-    _updateBusMarker();
-
-    if (_followBus && _mapController != null) {
-      _mapController!.move(location.position, _mapController!.camera.zoom);
-    }
-
+    _shouldCenterOnBus = _followBus;
     notifyListeners();
   }
 
   /// Handle geofence alerts
   void _onGeofenceAlert(GeofenceAlert alert) {
-    // Add to alerts list
     _alerts.insert(0, alert);
-
-    // Keep only last 10 alerts
     if (_alerts.length > 10) {
       _alerts.removeLast();
     }
-
     notifyListeners();
   }
 
-  /// Update bus marker on map
-  void _updateBusMarker() {
-    if (_currentBusLocation == null) return;
-
-    final marker = Marker(
-      key: ValueKey('bus_$_selectedBusId'),
-      point: _currentBusLocation!.position,
-      width: 40,
-      height: 40,
-      child: Transform.rotate(
-        angle: _currentBusLocation!.heading * (3.14159 / 180),
-        child: const Text('🚌', style: TextStyle(fontSize: 28)),
-      ),
-    );
-
-    _markers.removeWhere((m) => m.key == ValueKey('bus_$_selectedBusId'));
-    _markers.add(marker);
-  }
-
-  /// Update stop markers on map
-  void _updateStopMarkers() {
-    for (final stop in _stops) {
-      final isNextStop = stop.id == _currentBusLocation?.nextStopId;
-
-      final marker = Marker(
-        key: ValueKey('stop_${stop.id}'),
-        point: stop.position,
-        width: 30,
-        height: 30,
-        child: Container(
-          decoration: BoxDecoration(
-            color: isNextStop ? Colors.blue : Colors.red,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-          ),
-        ),
-      );
-
-      _markers.removeWhere((m) => m.key == ValueKey('stop_${stop.id}'));
-      _markers.add(marker);
-    }
-  }
-
-  /// Update route polylines
-  void _updatePolylines() {
-    if (_routePath == null || _routePath!.polyline.isEmpty) return;
-
-    final polyline = Polyline(
-      points: _routePath!.polyline,
-      color: const Color(0xFF6B9B5B),
-      strokeWidth: 5,
-    );
-
-    _polylines.clear();
-    _polylines.add(polyline);
-  }
-
-  /// Set map controller
-  void setMapController(MapController controller) {
-    _mapController = controller;
-  }
-
-  /// Center map on bus
+  /// Center map on bus (sets flag; screen reacts via listener)
   Future<void> centerOnBus() async {
-    if (_mapController != null && _currentBusLocation != null) {
-      _mapController!.move(_currentBusLocation!.position, 16);
-    }
+    _shouldCenterOnBus = true;
+    notifyListeners();
   }
 
   /// Toggle follow bus mode
   void toggleFollowBus() {
     _followBus = !_followBus;
     if (_followBus) {
-      centerOnBus();
+      _shouldCenterOnBus = true;
     }
     notifyListeners();
   }
@@ -275,26 +214,38 @@ class TrackingProvider extends ChangeNotifier {
 
   /// Get formatted trip info
   Map<String, dynamic>? get tripInfo {
-    if (_currentBusLocation == null) return null;
+    if (_trip == null && _currentBusLocation == null) return null;
 
     return {
-      'busNumber': _currentBusLocation!.busNumber,
-      'driverName': _currentBusLocation!.driverName ?? 'Unknown',
-      'status': _currentBusLocation!.status.displayName,
-      'speed': '${_currentBusLocation!.speed.toStringAsFixed(0)} km/h',
-      'nextStop': _stops
-          .where((s) => s.id == _currentBusLocation!.nextStopId)
-          .firstOrNull
-          ?.name,
-      'eta': _currentBusLocation!.formattedEta,
-      'passengers': _currentBusLocation!.passengerCount ?? 0,
+      'busNumber':
+          _currentBusLocation?.busNumber ??
+          _trip?.vehicleNumber ??
+          _trip?.vehicleId ??
+          '',
+      'driverName': _currentBusLocation?.driverName ?? 'Driver',
+      'status': _currentBusLocation?.status.displayName ??
+          (_trip?.status == 'active' ? 'Active' : 'Idle'),
+      'speed': _currentBusLocation != null
+          ? '${_currentBusLocation!.speed.toStringAsFixed(0)} km/h'
+          : '-- km/h',
+      'nextStop': _currentBusLocation != null
+          ? _stops
+                .where((s) => s.id == _currentBusLocation!.nextStopId)
+                .firstOrNull
+                ?.name
+          : _stops.isNotEmpty
+          ? _stops.first.name
+          : null,
+      'eta': _currentBusLocation?.formattedEta,
+      'passengers':
+          _currentBusLocation?.passengerCount ??
+          (_trip?.students.length ?? 0),
     };
   }
 
   @override
   void dispose() {
     stopTracking();
-    _mapController?.dispose();
     super.dispose();
   }
 }

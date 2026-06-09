@@ -1,9 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import '../api_client.dart';
-import '../api_constants.dart';
 import '../api_exceptions.dart';
+import '../endpoints.dart';
 import '../../utils/buffer_manager.dart';
 import '../../services/token_storage.dart';
 
@@ -11,23 +11,26 @@ import '../../services/token_storage.dart';
 class UserService {
   final ApiClient _apiClient = ApiClient();
   final BufferManager _buffer = BufferManager();
-  
+  final TokenStorage _tokenStorage = TokenStorage();
+
   /// Get user profile with buffer fallback
-  /// GET /user/profile
+  /// GET /api/auth/get/account
   Future<UserProfile> getProfile() async {
     return _buffer.withBuffer<UserProfile>(
       apiCall: () async {
-        final response = await _apiClient.get(ApiConstants.userProfile);
-        return UserProfile.fromJson(response['data'] ?? response);
+        final response = await _apiClient.get(Endpoints.userProfile);
+        final json = ApiClient.unwrapObject(response);
+        return json == null ? UserProfile.empty() : UserProfile.fromJson(json);
       },
       bufferKey: 'users/profile',
       fallbackData: UserProfile.empty(),
       cacheDuration: const Duration(minutes: 20),
     );
   }
-  
+
   /// Update user profile (no buffer - fresh data required)
-  /// PUT /user/profile
+  /// No text-profile update endpoint is defined in api.md; this updates local
+  /// cached profile data only.
   Future<UserProfile> updateProfile({
     String? name,
     String? email,
@@ -36,27 +39,42 @@ class UserService {
     String? vehicleNumber,
   }) async {
     try {
-      final body = <String, dynamic>{};
-      if (name != null) body['name'] = name;
-      if (email != null) body['email'] = email;
-      if (phone != null) body['phone'] = phone;
-      if (licenseNumber != null) body['license_number'] = licenseNumber;
-      if (vehicleNumber != null) body['vehicle_number'] = vehicleNumber;
-      
-      final response = await _apiClient.put(
-        ApiConstants.updateProfile,
-        body: body,
+      final currentProfile = await getProfile();
+      final profile = UserProfile(
+        id: currentProfile.id,
+        name: name ?? currentProfile.name,
+        phone: phone ?? currentProfile.phone,
+        email: email ?? currentProfile.email,
+        avatar: currentProfile.avatar,
+        role: currentProfile.role,
+        licenseNumber: licenseNumber ?? currentProfile.licenseNumber,
+        vehicleNumber: vehicleNumber ?? currentProfile.vehicleNumber,
+        schoolId: currentProfile.schoolId,
+        schoolName: currentProfile.schoolName,
+        vehicle: currentProfile.vehicle,
+        stats: currentProfile.stats,
+        createdAt: currentProfile.createdAt,
+        updatedAt: DateTime.now(),
       );
-      
-      final profile = UserProfile.fromJson(response['data']);
-      
+
+      await _tokenStorage.saveUserData(
+        userId: profile.id,
+        name: profile.name,
+        phone: profile.phone,
+        role: profile.role,
+        email: profile.email,
+        avatar: profile.avatar,
+        schoolId: profile.schoolId,
+        schoolName: profile.schoolName,
+      );
+
       // Update buffer with new profile
       await _buffer.saveBuffer(
         key: 'users/profile',
         data: profile,
         expiration: const Duration(minutes: 20),
       );
-      
+
       return profile;
     } on ApiException {
       rethrow;
@@ -64,19 +82,20 @@ class UserService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Change password (no buffer - always requires fresh API call)
-  /// POST /user/change-password
+  /// POST /api/auth/change/password
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
     try {
       await _apiClient.post(
-        ApiConstants.changePassword,
+        Endpoints.changePassword,
         body: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
+          'phoneNumber': await _requireStoredPhoneNumber(),
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
         },
       );
     } on ApiException {
@@ -85,98 +104,38 @@ class UserService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Upload profile photo (no buffer - always requires fresh API call)
-  /// Tries /api/user/avatar first, falls back to /api/auth/update/profile/picture
+  /// POST /api/auth/update/profile/picture
   Future<String> uploadAvatar(String filePath) async {
     debugPrint('📤 UserService.uploadAvatar called');
     debugPrint('   File path: $filePath');
-    
+
     try {
-      // Get current user ID for the request
-      final tokenStorage = TokenStorage();
-      final userData = await tokenStorage.getUserData();
-      final userId = userData?['userId']?.toString() ?? '';
-      debugPrint('   User ID: $userId');
-      
-      // Detect content type from file extension
-      final extension = filePath.split('.').last.toLowerCase();
-      MediaType contentType;
-      switch (extension) {
-        case 'png':
-          contentType = MediaType('image', 'png');
-          break;
-        case 'gif':
-          contentType = MediaType('image', 'gif');
-          break;
-        case 'webp':
-          contentType = MediaType('image', 'webp');
-          break;
-        case 'jpg':
-        case 'jpeg':
-        default:
-          contentType = MediaType('image', 'jpeg');
-          break;
-      }
-      debugPrint('   File extension: $extension, Content-Type: $contentType');
-      
-      // Helper to create fresh MultipartFile (can't reuse after failed request)
-      Future<http.MultipartFile> createFile(String fieldName) async {
-        return http.MultipartFile.fromPath(
-          fieldName,
-          filePath,
-          contentType: contentType,
-        );
-      }
-        
-      // Try primary endpoint first
-      dynamic response;
-      try {
-        debugPrint('   Sending POST to /api/user/avatar...');
-        final file = await createFile('file');
-        debugPrint('   Multipart file created: ${file.filename}, size: ${file.length}');
-        response = await _apiClient.postMultipart(
-          '/api/user/avatar',
-          fields: {'userId': userId},
-          files: [file],
-        );
-        debugPrint('   Primary endpoint success');
-      } on ApiException catch (e) {
-        debugPrint('   Caught exception: ${e.runtimeType}, statusCode: ${e.statusCode}, message: ${e.message}');
-        // Check for 404 by status code OR by message content (ServerException has status 500 default)
-        final isNotFound = e.statusCode == 404 || 
-                          (e.message.contains('404') || e.message.contains('not found') || e.message.contains('empty response'));
-        if (isNotFound) {
-          // Fallback to auth endpoint - must recreate file
-          debugPrint('   Primary endpoint not found (404), trying fallback...');
-          final file = await createFile('file');
-          debugPrint('   Multipart file recreated for fallback');
-          response = await _apiClient.postMultipart(
-            '/api/auth/update/profile/picture',
-            fields: {'userId': userId},
-            files: [file],
-          );
-          debugPrint('   Fallback endpoint success');
-        } else {
-          rethrow;
-        }
-      }
-      
+      final file = File(filePath);
+      final bytes = await file.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      final response = await _apiClient.post(
+        Endpoints.updateProfilePicture,
+        body: {'image': base64Image},
+      );
+
       debugPrint('   Response received: $response');
-        
+
       // Handle various response formats
       String? avatarUrl;
-      
+
       // Case 1: Response is a direct string URL
       if (response is String && response.isNotEmpty) {
         avatarUrl = response;
         debugPrint('   Response is direct string URL: $avatarUrl');
-      } 
+      }
       // Case 2: Response is a map with data
       else if (response is Map) {
         final data = response['data'] ?? response;
         debugPrint('   Response data: $data');
-        
+
         if (data is String && data.isNotEmpty) {
           avatarUrl = data;
           debugPrint('   Response data is string URL: $avatarUrl');
@@ -207,16 +166,16 @@ class UserService {
           }
         }
       }
-      
-      if (avatarUrl == null || avatarUrl.isEmpty) {
-        debugPrint('   ERROR: avatarUrl is null or empty');
-        throw ApiException(message: 'Invalid response: avatar URL not found');
-      }
-      
+
+      // Never persist the raw base64 payload as the avatar URL. api.md's
+      // update/profile/picture returns no image URL, so fall back to empty and
+      // let the caller keep the existing avatar / refresh the profile.
+      avatarUrl ??= '';
+
       // Clear profile buffer to force refresh
       await _buffer.clearBuffer('users/profile');
       debugPrint('   Upload completed successfully');
-      
+
       return avatarUrl;
     } on ApiException catch (e) {
       debugPrint('   ApiException: ${e.message}');
@@ -226,9 +185,9 @@ class UserService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Get notifications with buffer fallback
-  /// GET /notifications
+  /// GET /api/notifications/get/all
   Future<List<Notification>> getNotifications({
     int page = 1,
     int limit = 20,
@@ -236,53 +195,41 @@ class UserService {
   }) async {
     return _buffer.withBuffer<List<Notification>>(
       apiCall: () async {
-        final response = await _apiClient.get(
-          ApiConstants.notifications,
-          queryParams: {
-            'page': page.toString(),
-            'limit': limit.toString(),
-            if (unreadOnly) 'unread_only': 'true',
-          },
-        );
-        
-        final notifications = (response['data'] as List? ?? [])
+        final response = await _apiClient.get(Endpoints.getAllNotifications);
+
+        final notificationsData = ApiClient.unwrapList(response);
+
+        final notifications = notificationsData
             .map((n) => Notification.fromJson(n))
             .toList();
-        
+
         return notifications;
       },
-      bufferKey: unreadOnly 
-          ? '${BufferKeys.notifications}_unread' 
+      bufferKey: unreadOnly
+          ? '${BufferKeys.notifications}_unread'
           : '${BufferKeys.notifications}_page_$page',
       fallbackData: <Notification>[],
       cacheDuration: const Duration(minutes: 10),
     );
   }
-  
+
   /// Get unread notifications count with buffer fallback
   Future<int> getUnreadNotificationsCount() async {
     return _buffer.withBuffer<int>(
       apiCall: () async {
-        final response = await _apiClient.get(
-          ApiConstants.notifications,
-          queryParams: {'unread_only': 'true', 'count_only': 'true'},
-        );
-        return response['data']?['count'] ?? 0;
+        final notifications = await getNotifications(unreadOnly: true);
+        return notifications.length;
       },
       bufferKey: BufferKeys.unreadNotificationsCount,
       fallbackData: 0,
       cacheDuration: const Duration(minutes: 5),
     );
   }
-  
+
   /// Mark notification as read
-  /// PATCH /notifications/{id}/read
+  /// No notification read endpoint is defined in api.md.
   Future<void> markNotificationRead(String notificationId) async {
     try {
-      final endpoint = ApiConstants.markNotificationRead
-          .replaceAll('{id}', notificationId);
-      await _apiClient.patch(endpoint);
-      
       // Clear notification buffers to force refresh
       await _buffer.clearCategory('notifications');
     } on ApiException {
@@ -291,13 +238,11 @@ class UserService {
       throw ApiException(message: e.toString());
     }
   }
-  
+
   /// Mark all notifications as read
-  /// PATCH /notifications/read-all
+  /// No notification read-all endpoint is defined in api.md.
   Future<void> markAllNotificationsRead() async {
     try {
-      await _apiClient.patch('/notifications/read-all');
-      
       // Clear notification buffers
       await _buffer.clearCategory('notifications');
     } on ApiException {
@@ -321,6 +266,14 @@ class UserService {
     await _buffer.clearBuffer('users/profile');
     await _buffer.clearCategory('notifications');
   }
+
+  Future<String> _requireStoredPhoneNumber() async {
+    final phone = await _tokenStorage.getUserPhone();
+    if (phone == null || phone.isEmpty) {
+      throw ApiException(message: 'Phone number is required');
+    }
+    return phone;
+  }
 }
 
 /// User Profile Model
@@ -339,7 +292,7 @@ class UserProfile {
   final Stats stats;
   final DateTime createdAt;
   final DateTime updatedAt;
-  
+
   UserProfile({
     required this.id,
     required this.name,
@@ -356,27 +309,38 @@ class UserProfile {
     required this.createdAt,
     required this.updatedAt,
   });
-  
+
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      phone: json['phone'] ?? '',
+      name: json['fullname'] ?? json['name'] ?? '',
+      phone: json['phoneNumber'] ?? json['phone'] ?? '',
       email: json['email'],
-      avatar: json['avatar'],
-      role: json['role'] ?? 'unknown',
-      licenseNumber: json['license_number'] ?? json['licenseNumber'],
+      avatar: json['profileImage'] ?? json['avatar'],
+      role: json['userType'] ?? json['role'] ?? 'unknown',
+      licenseNumber:
+          json['licenseImage'] ??
+          json['license_number'] ??
+          json['licenseNumber'],
       vehicleNumber: json['vehicle_number'] ?? json['vehicleNumber'],
       schoolId: json['school_id'] ?? json['schoolId'] ?? json['companyOrgId'],
-      schoolName: json['school_name'] ?? json['schoolName'] ?? json['companyOrgName'],
-      vehicle: json['vehicle'] != null 
-          ? Vehicle.fromJson(json['vehicle']) 
+      schoolName:
+          json['schoolname'] ??
+          json['school_name'] ??
+          json['schoolName'] ??
+          json['companyOrgName'],
+      vehicle: json['vehicle'] != null
+          ? Vehicle.fromJson(json['vehicle'])
           : null,
-      stats: json['stats'] != null 
-          ? Stats.fromJson(json['stats']) 
+      stats: json['stats'] != null
+          ? Stats.fromJson(json['stats'])
           : Stats.empty(),
-      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
-      updatedAt: _parseDateTime(json['updated_at'] ?? json['updatedAt']) ?? DateTime.now(),
+      createdAt:
+          _parseDateTime(json['created_at'] ?? json['createdAt']) ??
+          DateTime.now(),
+      updatedAt:
+          _parseDateTime(json['updated_at'] ?? json['updatedAt']) ??
+          DateTime.now(),
     );
   }
 
@@ -398,7 +362,7 @@ class UserProfile {
       'updated_at': updatedAt.toIso8601String(),
     };
   }
-  
+
   factory UserProfile.empty() {
     return UserProfile(
       id: '',
@@ -429,7 +393,7 @@ class Vehicle {
   final String? model;
   final String? color;
   final int? capacity;
-  
+
   Vehicle({
     required this.id,
     required this.number,
@@ -437,14 +401,20 @@ class Vehicle {
     this.color,
     this.capacity,
   });
-  
+
   factory Vehicle.fromJson(Map<String, dynamic> json) {
     return Vehicle(
       id: json['id']?.toString() ?? '',
-      number: json['number'] ?? json['registrationNumber'] ?? json['registration_number'] ?? '',
+      number:
+          json['number'] ??
+          json['registrationNumber'] ??
+          json['registration_number'] ??
+          '',
       model: json['model'],
       color: json['color'],
-      capacity: json['capacity'] is int ? json['capacity'] : int.tryParse(json['capacity']?.toString() ?? ''),
+      capacity: json['capacity'] is int
+          ? json['capacity']
+          : int.tryParse(json['capacity']?.toString() ?? ''),
     );
   }
 
@@ -466,7 +436,7 @@ class Stats {
   final double totalDistance;
   final int totalStudents;
   final double rating;
-  
+
   Stats({
     required this.totalTrips,
     required this.completedTrips,
@@ -474,7 +444,7 @@ class Stats {
     required this.totalStudents,
     required this.rating,
   });
-  
+
   factory Stats.empty() {
     return Stats(
       totalTrips: 0,
@@ -484,12 +454,13 @@ class Stats {
       rating: 0,
     );
   }
-  
+
   factory Stats.fromJson(Map<String, dynamic> json) {
     return Stats(
       totalTrips: json['total_trips'] ?? json['totalTrips'] ?? 0,
       completedTrips: json['completed_trips'] ?? json['completedTrips'] ?? 0,
-      totalDistance: (json['total_distance'] ?? json['totalDistance'])?.toDouble() ?? 0,
+      totalDistance:
+          (json['total_distance'] ?? json['totalDistance'])?.toDouble() ?? 0,
       totalStudents: json['total_students'] ?? json['totalStudents'] ?? 0,
       rating: (json['rating'])?.toDouble() ?? 0,
     );
@@ -515,7 +486,7 @@ class Notification {
   final String? tripId;
   final bool isRead;
   final DateTime createdAt;
-  
+
   Notification({
     required this.id,
     required this.title,
@@ -525,7 +496,7 @@ class Notification {
     required this.isRead,
     required this.createdAt,
   });
-  
+
   factory Notification.fromJson(Map<String, dynamic> json) {
     return Notification(
       id: json['id']?.toString() ?? '',
@@ -534,7 +505,9 @@ class Notification {
       type: json['type'],
       tripId: json['trip_id'] ?? json['tripId'],
       isRead: json['is_read'] ?? json['isRead'] ?? false,
-      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']) ?? DateTime.now(),
+      createdAt:
+          _parseDateTime(json['created_at'] ?? json['createdAt']) ??
+          DateTime.now(),
     );
   }
 

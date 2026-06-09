@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'dart:developer' as developer;
 
-import 'package:http/http.dart' as http;
+import '../api/services/student_service.dart';
+import '../api/api_exceptions.dart';
 
 /// Service for managing student pickup/dropoff location coordinates.
 /// 
@@ -16,14 +16,7 @@ class StudentLocationService {
   
   StudentLocationService._internal();
 
-  /// Base API URL - should be configured based on your environment
-  String get _baseUrl => const String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://api.example.com',
-  );
-
-  /// API endpoint for updating student location
-  String get _updateLocationEndpoint => '/api/students/update-location';
+  final StudentService _studentService = StudentService();
 
   /// Checks if a student has valid location coordinates.
   /// 
@@ -72,41 +65,29 @@ class StudentLocationService {
         return LocationResult.failure('Invalid coordinates provided');
       }
 
-      final url = Uri.parse('$_baseUrl$_updateLocationEndpoint');
-      
       developer.log(
         'Saving location for student $studentId: ($latitude, $longitude)',
         name: 'StudentLocationService',
       );
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'studentId': studentId,
-          'latitude': latitude,
-          'longitude': longitude,
-        }),
+      await _studentService.updateStudent(
+        studentId: studentId.toString(),
+        latitude: latitude,
+        longitude: longitude,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log(
-          'Location saved successfully for student $studentId',
-          name: 'StudentLocationService',
-        );
-        return LocationResult.success();
-      } else {
-        final errorMessage = _parseErrorMessage(response);
-        developer.log(
-          'Failed to save location: ${response.statusCode} - $errorMessage',
-          name: 'StudentLocationService',
-          error: response.body,
-        );
-        return LocationResult.failure(errorMessage);
-      }
+      developer.log(
+        'Location saved successfully for student $studentId',
+        name: 'StudentLocationService',
+      );
+      return LocationResult.success();
+    } on ApiException catch (e) {
+      developer.log(
+        'API error while saving student location',
+        name: 'StudentLocationService',
+        error: e,
+      );
+      return LocationResult.failure(e.message);
     } catch (e, stackTrace) {
       developer.log(
         'Exception while saving student location',
@@ -145,17 +126,6 @@ class StudentLocationService {
            longitude <= 180;
   }
 
-  /// Parses error message from API response.
-  String _parseErrorMessage(http.Response response) {
-    try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      return body['message'] ?? 
-             body['error'] ?? 
-             'Failed with status code ${response.statusCode}';
-    } catch (_) {
-      return 'Failed with status code ${response.statusCode}';
-    }
-  }
 }
 
 /// Result class for location save operations.

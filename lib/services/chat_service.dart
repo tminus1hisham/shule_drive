@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
 import '../mqtt_client.dart';
-import '../api/api_client.dart';
-import '../api/endpoints.dart';
 import 'secure_token_storage.dart';
 import 'local_database_service.dart';
 
@@ -19,7 +17,6 @@ class ChatService {
   final MqttService _mqttService = MqttService();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
   final LocalDatabaseService _localDb = LocalDatabaseService();
-  final ApiClient _apiClient = ApiClient();
   final _uuid = const Uuid();
 
   // Message history (in-memory cache)
@@ -52,14 +49,17 @@ class ChatService {
 
   /// Start a chat with another user (using phone numbers)
   /// Subscribes to user's own topic 'chat/{currentUserPhone}' to receive messages
-  Future<void> startChat(String otherUserPhone, Function(ChatMessage) onMessage) async {
+  Future<void> startChat(
+    String otherUserPhone,
+    Function(ChatMessage) onMessage,
+  ) async {
     final currentUserPhone = await _tokenStorage.getUserPhone();
     if (currentUserPhone == null) throw Exception('Not authenticated');
 
     final chatTopic = _getChatTopic(currentUserPhone, otherUserPhone);
     // Subscribe to own topic to receive messages sent to current user
     final receiveTopic = 'chat/$currentUserPhone';
-    
+
     debugPrint('📱 Current user phone: $currentUserPhone');
     debugPrint('📱 Other user phone: $otherUserPhone');
     debugPrint('📱 Chat topic (for DB): $chatTopic');
@@ -74,19 +74,19 @@ class ChatService {
       debugPrint('📨 Received message on topic: $topic');
       try {
         final data = jsonDecode(message) as Map<String, dynamic>;
-        
+
         // Parse message from backend format
         final senderId = data['senderId']?.toString() ?? '';
         final receiverId = data['receiverId']?.toString() ?? '';
         final messageText = data['message']?.toString() ?? '';
         final createdAt = data['createdAt']?.toString() ?? '';
-        
+
         // Only process if this message is for the current chat
         if (senderId != otherUserPhone && receiverId != otherUserPhone) {
           debugPrint('   ℹ️ Message not for current chat, ignoring');
           return;
         }
-        
+
         final chatMessage = ChatMessage(
           id: _uuid.v4(),
           senderId: senderId,
@@ -95,24 +95,24 @@ class ChatService {
           timestamp: DateTime.tryParse(createdAt) ?? DateTime.now(),
           status: MessageStatus.delivered,
         );
-        
+
         debugPrint('   ├─ From (phone): ${chatMessage.senderId}');
         debugPrint('   ├─ To (phone): ${chatMessage.recipientId}');
         debugPrint('   ├─ Content: ${chatMessage.content}');
         debugPrint('   └─ Timestamp: ${chatMessage.timestamp}');
-        
+
         // Determine the correct chat topic for storage
         final msgChatTopic = _getChatTopic(senderId, receiverId);
-        
+
         // Save to local database
         _saveMessageToDb(msgChatTopic, chatMessage);
-        
+
         // Notify listener
         onMessage(chatMessage);
 
         // Store in memory cache
         _addToHistory(msgChatTopic, chatMessage);
-        
+
         debugPrint('✅ Message processed successfully');
       } catch (e) {
         debugPrint('❌ Failed to parse chat message: $e');
@@ -121,10 +121,13 @@ class ChatService {
   }
 
   /// Load message history from local database
-  Future<void> _loadMessageHistoryFromDb(String chatTopic, Function(ChatMessage) onMessage) async {
+  Future<void> _loadMessageHistoryFromDb(
+    String chatTopic,
+    Function(ChatMessage) onMessage,
+  ) async {
     try {
       final messages = await _localDb.getChatMessages(chatTopic);
-      
+
       for (final msgData in messages) {
         final message = ChatMessage(
           id: msgData['id'],
@@ -138,11 +141,11 @@ class ChatService {
           ),
           replyToMessageId: msgData['reply_to_message_id'],
         );
-        
+
         _addToHistory(chatTopic, message);
         onMessage(message);
       }
-      
+
       if (kDebugMode && messages.isNotEmpty) {
         print('📦 Loaded ${messages.length} messages from local database');
       }
@@ -153,12 +156,16 @@ class ChatService {
 
   /// Save message to local database under sender's phone path
   /// Format: chats/$senderPhone/$chatTopic
-  Future<void> _saveMessageToDb(String chatTopic, ChatMessage message, {String? senderPhone}) async {
+  Future<void> _saveMessageToDb(
+    String chatTopic,
+    ChatMessage message, {
+    String? senderPhone,
+  }) async {
     try {
       // Create sender-specific path: chats/$senderPhone
       final senderPath = senderPhone ?? message.senderId;
       final fullPath = 'chats/$senderPath/$chatTopic';
-      
+
       await _localDb.saveChatMessage(
         id: message.id,
         senderId: message.senderId,
@@ -166,11 +173,11 @@ class ChatService {
         content: message.content,
         timestamp: message.timestamp,
         status: message.status.name,
-        chatTopic: fullPath,  // Save with full path including sender
+        chatTopic: fullPath, // Save with full path including sender
         replyToMessageId: message.replyToMessageId,
         synced: true,
       );
-      
+
       debugPrint('💾 Saved to DB: $fullPath');
     } catch (e) {
       print('⚠️ Failed to save message to database: $e');
@@ -189,12 +196,13 @@ class ChatService {
     if (currentUserPhone == null) throw Exception('Not authenticated');
 
     // Get current user's name if not provided
-    final currentUserName = senderName ?? await _tokenStorage.getUserName() ?? 'Unknown';
+    final currentUserName =
+        senderName ?? await _tokenStorage.getUserName() ?? 'Unknown';
     final receiverUserName = recipientName ?? 'Unknown';
 
     // Publish to receiver's topic: chat/{receiverPhone}
     final publishTopic = 'chat/$recipientPhone';
-    
+
     debugPrint('📤 Sending message via MQTT:');
     debugPrint('   ├─ Topic: $publishTopic');
     debugPrint('   ├─ From: $currentUserPhone ($currentUserName)');
@@ -292,7 +300,7 @@ class ChatService {
     await _mqttService.publishJson(statusTopic, {
       'messageId': messageId,
       'status': 'delivered',
-      'deliveredBy': currentUserPhone,  // Use phone number
+      'deliveredBy': currentUserPhone, // Use phone number
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -306,7 +314,7 @@ class ChatService {
     await _mqttService.publishJson(statusTopic, {
       'messageId': messageId,
       'status': 'read',
-      'readBy': currentUserPhone,  // Use phone number
+      'readBy': currentUserPhone, // Use phone number
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -346,7 +354,7 @@ class ChatService {
     final ids = [userId1, userId2]..sort();
     return 'chat/${ids[0]}_${ids[1]}';
   }
-  
+
   /// Public method to get chat topic for two users
   String getChatTopic(String userId1, String userId2) {
     return _getChatTopic(userId1, userId2);

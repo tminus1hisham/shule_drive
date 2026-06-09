@@ -86,9 +86,83 @@ class TripProvider extends ChangeNotifier {
   void _updateTripStatus(String tripId, String status) {
     final index = _trips.indexWhere((t) => t.id == tripId);
     if (index != -1) {
-      // Update trip status
+      _trips[index] = _trips[index].copyWith(status: status);
+      if (_activeTrip?.id == tripId) {
+        _activeTrip = _activeTrip!.copyWith(status: status);
+      }
       notifyListeners();
     }
+  }
+
+  api.Trip? _findTrip(String tripId) {
+    if (_activeTrip?.id == tripId) return _activeTrip;
+    try {
+      return _trips.firstWhere((t) => t.id == tripId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _replaceTrip(api.Trip trip) {
+    if (_activeTrip?.id == trip.id) {
+      _activeTrip = trip;
+    }
+
+    final index = _trips.indexWhere((t) => t.id == trip.id);
+    if (index == -1) {
+      _trips.insert(0, trip);
+    } else {
+      _trips[index] = trip;
+    }
+  }
+
+  api.Trip _withStudentStatus({
+    required api.Trip trip,
+    required String studentId,
+    required String status,
+    String? notes,
+  }) {
+    final normalizedStatus = api.StudentPickup.normalizeStatus(status);
+    final now = DateTime.now();
+    final students = trip.students.map((student) {
+      if (student.id != studentId) return student;
+
+      return student.copyWith(
+        status: normalizedStatus,
+        pickupTime: normalizedStatus == 'picked'
+            ? now
+            : student.pickupTime,
+        dropoffTime: normalizedStatus == 'dropped'
+            ? now
+            : student.dropoffTime,
+        notes: notes ?? student.notes,
+      );
+    }).toList();
+
+    return trip.copyWith(students: students);
+  }
+
+  api.Trip _withBulkStudentStatus({
+    required api.Trip trip,
+    required String fromStatus,
+    required String toStatus,
+  }) {
+    final normalizedFrom = api.StudentPickup.normalizeStatus(fromStatus);
+    final normalizedTo = api.StudentPickup.normalizeStatus(toStatus);
+    final now = DateTime.now();
+    final students = trip.students.map((student) {
+      if (api.StudentPickup.normalizeStatus(student.status) != normalizedFrom) {
+        return student;
+      }
+
+      return student.copyWith(
+        status: normalizedTo,
+        pickupTime: normalizedTo == 'picked' ? now : student.pickupTime,
+        dropoffTime: normalizedTo == 'dropped' ? now : student.dropoffTime,
+      );
+    }).toList();
+
+    return trip.copyWith(students: students);
   }
 
   /// Fetch all trips (driver view)
@@ -132,11 +206,15 @@ class TripProvider extends ChangeNotifier {
     required String routeId,
     required String vehicleId,
     List<String>? studentIds,
+    int? masterTripId,
     String? route,
     String? tripName,
     String? driverName,
     String? numberPlate,
     String? driverPhoneNumber,
+    String? attendantName,
+    String? attendantPhoneNumber,
+    String? attendantProfileImage,
   }) async {
     _setLoading(true);
     _clearError();
@@ -146,11 +224,15 @@ class TripProvider extends ChangeNotifier {
         routeId: routeId,
         vehicleId: vehicleId,
         studentIds: studentIds,
+        masterTripId: masterTripId,
         route: route,
         tripName: tripName,
         driverName: driverName,
         numberPlate: numberPlate,
         driverPhoneNumber: driverPhoneNumber,
+        attendantName: attendantName,
+        attendantPhoneNumber: attendantPhoneNumber,
+        attendantProfileImage: attendantProfileImage,
       );
 
       _activeTrip = trip;
@@ -440,55 +522,47 @@ class TripProvider extends ChangeNotifier {
     String? notes,
   }) async {
     try {
+      final normalizedStatus = api.StudentPickup.normalizeStatus(status);
       // Get student info before updating
       String? studentName;
-      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
-      if (tripIndex != -1) {
-        final studentIndex = _trips[tripIndex].students.indexWhere(
-          (s) => s.id == studentId,
-        );
-        if (studentIndex != -1) {
-          studentName = _trips[tripIndex].students[studentIndex].name;
+      final existingTrip = _findTrip(tripId);
+      api.StudentPickup? existingStudent;
+      if (existingTrip != null) {
+        for (final student in existingTrip.students) {
+          if (student.id == studentId) {
+            existingStudent = student;
+            break;
+          }
         }
       }
+      studentName = existingStudent?.name;
 
       await _tripService.updateStudentStatus(
         tripId: tripId,
         studentId: studentId,
-        status: status,
+        status: normalizedStatus,
         notes: notes,
       );
 
-      // Update local state
-      if (tripIndex != -1) {
-        final studentIndex = _trips[tripIndex].students.indexWhere(
-          (s) => s.id == studentId,
+      if (existingTrip != null) {
+        final updatedTrip = _withStudentStatus(
+          trip: existingTrip,
+          studentId: studentId,
+          status: normalizedStatus,
+          notes: notes,
         );
-        if (studentIndex != -1) {
-          // Create new StudentPickup with updated status (immutable)
-          final oldStudent = _trips[tripIndex].students[studentIndex];
-          _trips[tripIndex].students[studentIndex] = api.StudentPickup(
-            id: oldStudent.id,
-            name: oldStudent.name,
-            photo: oldStudent.photo,
-            status: status,
-            pickupTime: oldStudent.pickupTime,
-            dropoffTime: oldStudent.dropoffTime,
-            notes: oldStudent.notes,
-            parentPhone: oldStudent.parentPhone,
-          );
-          notifyListeners();
-        }
+        _replaceTrip(updatedTrip);
+        notifyListeners();
       }
 
       // Show notification based on status
       if (studentName != null) {
-        if (status == 'picked') {
+        if (normalizedStatus == 'picked') {
           await NotificationHelper.showChildPickedUp(
             studentName: studentName,
             tripId: tripId,
           );
-        } else if (status == 'absent') {
+        } else if (normalizedStatus == 'absent') {
           await NotificationHelper.showChildAbsent(
             studentName: studentName,
             tripId: tripId,
@@ -513,42 +587,15 @@ class TripProvider extends ChangeNotifier {
       await _tripService.pickAllStudents(tripId);
 
       // Update local state
-      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
-      if (tripIndex != -1) {
-        // Update all pending students to picked
-        final updatedStudents = _trips[tripIndex].students.map((s) {
-          if (s.status == 'pending') {
-            return api.StudentPickup(
-              id: s.id,
-              name: s.name,
-              photo: s.photo,
-              status: 'picked',
-              pickupTime: DateTime.now(),
-              dropoffTime: s.dropoffTime,
-              notes: s.notes,
-              parentPhone: s.parentPhone,
-            );
-          }
-          return s;
-        }).toList();
-
-        // Create updated trip with new students
-        _trips[tripIndex] = api.Trip(
-          id: _trips[tripIndex].id,
-          routeName: _trips[tripIndex].routeName,
-          routeId: _trips[tripIndex].routeId,
-          startTime: _trips[tripIndex].startTime,
-          endTime: _trips[tripIndex].endTime,
-          status: _trips[tripIndex].status,
-          vehicleId: _trips[tripIndex].vehicleId,
-          vehicleNumber: _trips[tripIndex].vehicleNumber,
-          students: updatedStudents,
-          stops: _trips[tripIndex].stops,
-          distance: _trips[tripIndex].distance,
-          fare: _trips[tripIndex].fare,
-          notes: _trips[tripIndex].notes,
+      final trip = _findTrip(tripId);
+      if (trip != null) {
+        _replaceTrip(
+          _withBulkStudentStatus(
+            trip: trip,
+            fromStatus: 'pending',
+            toStatus: 'picked',
+          ),
         );
-
         notifyListeners();
       }
 
@@ -568,42 +615,15 @@ class TripProvider extends ChangeNotifier {
       await _tripService.dropAllStudents(tripId);
 
       // Update local state
-      final tripIndex = _trips.indexWhere((t) => t.id == tripId);
-      if (tripIndex != -1) {
-        // Update all picked students to dropped
-        final updatedStudents = _trips[tripIndex].students.map((s) {
-          if (s.status == 'picked') {
-            return api.StudentPickup(
-              id: s.id,
-              name: s.name,
-              photo: s.photo,
-              status: 'dropped',
-              pickupTime: s.pickupTime,
-              dropoffTime: DateTime.now(),
-              notes: s.notes,
-              parentPhone: s.parentPhone,
-            );
-          }
-          return s;
-        }).toList();
-
-        // Create updated trip with new students
-        _trips[tripIndex] = api.Trip(
-          id: _trips[tripIndex].id,
-          routeName: _trips[tripIndex].routeName,
-          routeId: _trips[tripIndex].routeId,
-          startTime: _trips[tripIndex].startTime,
-          endTime: _trips[tripIndex].endTime,
-          status: _trips[tripIndex].status,
-          vehicleId: _trips[tripIndex].vehicleId,
-          vehicleNumber: _trips[tripIndex].vehicleNumber,
-          students: updatedStudents,
-          stops: _trips[tripIndex].stops,
-          distance: _trips[tripIndex].distance,
-          fare: _trips[tripIndex].fare,
-          notes: _trips[tripIndex].notes,
+      final trip = _findTrip(tripId);
+      if (trip != null) {
+        _replaceTrip(
+          _withBulkStudentStatus(
+            trip: trip,
+            fromStatus: 'picked',
+            toStatus: 'dropped',
+          ),
         );
-
         notifyListeners();
       }
 
@@ -910,8 +930,17 @@ class TripProvider extends ChangeNotifier {
     _clearError();
 
     try {
+      api.TripStudent? assignedStudent;
+      for (final student in _tripStudents) {
+        if (student.id == studentTripId) {
+          assignedStudent = student;
+          break;
+        }
+      }
+      final apiStudentId = assignedStudent?.studentId ?? studentTripId;
+
       await _tripService.deleteStudentFromMasterTrip(
-        studentTripId: studentTripId,
+        studentId: apiStudentId,
         masterTripId: masterTripId,
       );
 
