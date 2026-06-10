@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show sin, cos, pi, sqrt, atan2;
+import 'dart:math' show sin, cos, sqrt, atan2;
 import 'package:latlong2/latlong.dart';
 import '../models/map_models.dart';
 

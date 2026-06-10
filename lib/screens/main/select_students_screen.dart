@@ -27,6 +27,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   api.MasterTrip? _selectedMasterTrip;
   List<api.TripStudent> _masterTripStudents = [];
   Map<String, dynamic>? _preloadedData; // Store preloaded data for driver map
+  TripProvider? _tripProvider;
 
   // UI State
   bool _isLoading = false; // Start false to show UI immediately
@@ -95,15 +96,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
     _searchController.addListener(_filterStudents);
 
     // Listen to TripProvider changes to sync local state
-    final tripProvider = context.read<TripProvider>();
-    tripProvider.addListener(_onTripProviderChanged);
+    _tripProvider = context.read<TripProvider>();
+    _tripProvider?.addListener(_onTripProviderChanged);
   }
 
   @override
   void dispose() {
     // Remove TripProvider listener
-    final tripProvider = context.read<TripProvider>();
-    tripProvider.removeListener(_onTripProviderChanged);
+    _tripProvider?.removeListener(_onTripProviderChanged);
+    _tripProvider = null;
 
     _searchController.dispose();
     _phoneSearchController.dispose();
@@ -113,9 +114,13 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   void _onTripProviderChanged() {
-    final tripProvider = context.read<TripProvider>();
+    if (!mounted) return;
+
+    final tripProvider = _tripProvider;
+    if (tripProvider == null) return;
+
     // Only update if we're not currently loading and data changed
-    if (!_isLoadingStudents && mounted) {
+    if (!_isLoadingStudents) {
       final providerStudents = tripProvider.tripStudents;
       if (providerStudents != _masterTripStudents) {
         setState(() {
@@ -308,11 +313,13 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   Future<void> _loadMasterTripStudents() async {
     if (_selectedMasterTrip == null) return;
 
+    if (!mounted) return;
     setState(() => _isLoadingStudents = true);
 
     try {
       final tripProvider = context.read<TripProvider>();
       await tripProvider.fetchMasterTripStudents(_selectedMasterTrip!.id);
+      if (!mounted) return;
       setState(() {
         _masterTripStudents = tripProvider.tripStudents;
         _isLoadingStudents = false;
@@ -327,6 +334,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       if (kDebugMode) {
         print('❌ Error loading master trip students: $e');
       }
+      if (!mounted) return;
       setState(() {
         _masterTripStudents = [];
         _isLoadingStudents = false;
@@ -351,6 +359,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
 
   /// Search students by phone number using the API endpoint
   Future<void> _searchStudentsByPhone() async {
+    if (_isSearchingByPhone) return;
+
     final phoneNumber = _phoneSearchController.text.trim();
 
     if (phoneNumber.isEmpty) {
@@ -378,6 +388,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       final studentService = api.StudentService();
       final students = await studentService.getStudentsByPhone(normalizedPhone);
 
+      if (!mounted) return;
       setState(() {
         _phoneSearchResults = students;
         _isSearchingByPhone = false;
@@ -400,6 +411,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isSearchingByPhone = false);
       if (kDebugMode) {
         print('❌ Error searching students by phone: $e');
@@ -500,6 +512,8 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Future<void> _createMasterTrip() async {
+    if (_isCreatingTrip) return;
+
     if (_tripNameController.text.isEmpty || _tripTimeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -530,6 +544,7 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       // Reload trips
       await _loadExistingTrips();
 
+      if (!mounted) return;
       setState(() {
         _selectedMasterTrip = newTrip;
         _showCreateForm = false;
@@ -556,11 +571,15 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
         );
       }
     } finally {
-      setState(() => _isCreatingTrip = false);
+      if (mounted) {
+        setState(() => _isCreatingTrip = false);
+      }
     }
   }
 
   Future<void> _startTrip() async {
+    if (_isStartingTrip) return;
+
     if (_routeId == null || _vehicleId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -751,7 +770,12 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
               onRefresh: _loadData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  _selectedMasterTrip != null ? 112 : 16,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1430,10 +1454,6 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
   }
 
   Widget _buildAvailableStudentsList(AppProvider provider) {
-    debugPrint(
-      '🎨 _buildAvailableStudentsList: _isLoading=$_isLoading, _filteredStudents=${_filteredStudents.length}, _showPhoneSearch=$_showPhoneSearch',
-    );
-
     // Show phone search results if available
     if (_showPhoneSearch && _phoneSearchResults.isNotEmpty) {
       return _buildPhoneSearchResultsList(provider);

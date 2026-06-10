@@ -1255,6 +1255,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildChildStatusCard(StudentPickup student, bool isDarkMode) {
     final isPicked = student.status == 'picked';
     final isDropped = student.status == 'dropped';
+    final isAbsent = student.status == 'absent';
 
     Color statusColor;
     String statusText;
@@ -1268,6 +1269,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       statusColor = context.colors.info;
       statusText = 'Dropped Off';
       statusIcon = Icons.home_rounded;
+    } else if (isAbsent) {
+      statusColor = context.colors.warning;
+      statusText = 'Absent';
+      statusIcon = Icons.person_off_rounded;
     } else {
       statusColor = context.colors.warning;
       statusText = 'Waiting';

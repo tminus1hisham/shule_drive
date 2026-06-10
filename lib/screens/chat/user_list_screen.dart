@@ -19,7 +19,7 @@ class _UserListScreenState extends State<UserListScreen>
   final FocusNode _searchFocusNode = FocusNode();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  
+
   bool _isLoading = true;
   String? _error;
   List<ChatUser> _users = [];
@@ -40,9 +40,9 @@ class _UserListScreenState extends State<UserListScreen>
       parent: _animationController,
       curve: Curves.easeOutCubic,
     );
-    
+
     _loadUsers();
-    
+
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -66,9 +66,11 @@ class _UserListScreenState extends State<UserListScreen>
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredUsers = _users.where((user) {
-        final matchesSearch = user.name.toLowerCase().contains(query) ||
-            (user.phone?.toLowerCase().contains(query) ?? false);
-        final matchesFilter = _selectedFilter == 'All' ||
+        final matchesSearch =
+            user.name.toLowerCase().contains(query) ||
+            user.phone.toLowerCase().contains(query);
+        final matchesFilter =
+            _selectedFilter == 'All' ||
             user.role?.toLowerCase() == _selectedFilter.toLowerCase();
         return matchesSearch && matchesFilter;
       }).toList();
@@ -82,13 +84,13 @@ class _UserListScreenState extends State<UserListScreen>
         setState(() => _isLoading = true);
       }
     });
-    
+
     try {
       final chatProvider = context.read<ChatProvider>();
       debugPrint('🔄 Loading available users...');
       final users = await chatProvider.getAvailableUsers();
       debugPrint('✅ Loaded ${users.length} users');
-      
+
       if (mounted) {
         setState(() {
           _users = users;
@@ -116,7 +118,7 @@ class _UserListScreenState extends State<UserListScreen>
       context,
       '/chat-detail',
       arguments: {
-        'receiverPhone': user.phone,  // Use phone number instead of user ID
+        'receiverPhone': user.phone, // Use phone number instead of user ID
         'receiverName': user.name,
         'receiverAvatar': user.avatar,
         'receiverRole': user.role,
@@ -130,20 +132,20 @@ class _UserListScreenState extends State<UserListScreen>
     final isDarkMode = appProvider.isDarkMode;
 
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F5F0),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F5F0),
       appBar: _buildAppBar(isDarkMode),
       body: Column(
         children: [
           // Search Bar
           _buildSearchBar(isDarkMode),
-          
+
           // Filter Chips
           _buildFilterChips(isDarkMode),
-          
+
           // Content
-          Expanded(
-            child: _buildBody(isDarkMode),
-          ),
+          Expanded(child: _buildBody(isDarkMode)),
         ],
       ),
     );
@@ -253,10 +255,9 @@ class _UserListScreenState extends State<UserListScreen>
           children: _filters.map((filter) {
             final isSelected = _selectedFilter == filter;
             // Display plural labels for better UX
-            final displayLabel = {
-              'Driver': 'Drivers',
-              'Guardian': 'Guardians',
-            }[filter] ?? filter;
+            final displayLabel =
+                {'Driver': 'Drivers', 'Guardian': 'Guardians'}[filter] ??
+                filter;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
@@ -268,8 +269,8 @@ class _UserListScreenState extends State<UserListScreen>
                   color: isSelected
                       ? Colors.white
                       : isDarkMode
-                          ? Colors.white70
-                          : const Color(0xFF666666),
+                      ? Colors.white70
+                      : const Color(0xFF666666),
                 ),
                 backgroundColor: isDarkMode
                     ? const Color(0xFF2C2C2C)
@@ -282,8 +283,8 @@ class _UserListScreenState extends State<UserListScreen>
                     color: isSelected
                         ? Colors.transparent
                         : isDarkMode
-                            ? Colors.white12
-                            : Colors.grey.shade300,
+                        ? Colors.white12
+                        : Colors.grey.shade300,
                   ),
                 ),
                 onSelected: (_) {
@@ -338,7 +339,9 @@ class _UserListScreenState extends State<UserListScreen>
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+              color: isDarkMode
+                  ? Colors.white.withAlpha(10)
+                  : Colors.grey.shade200,
               shape: BoxShape.circle,
             ),
           ),
@@ -351,7 +354,9 @@ class _UserListScreenState extends State<UserListScreen>
                   width: 140,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+                    color: isDarkMode
+                        ? Colors.white.withAlpha(10)
+                        : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -360,7 +365,9 @@ class _UserListScreenState extends State<UserListScreen>
                   width: 100,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+                    color: isDarkMode
+                        ? Colors.white.withAlpha(10)
+                        : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -422,7 +429,7 @@ class _UserListScreenState extends State<UserListScreen>
 
   Widget _buildEmptyState(bool isDarkMode) {
     final isSearching = _searchController.text.isNotEmpty;
-    
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Center(
@@ -481,7 +488,7 @@ class _UserListScreenState extends State<UserListScreen>
           : '#';
       groupedUsers.putIfAbsent(firstLetter, () => []).add(user);
     }
-    
+
     final sortedKeys = groupedUsers.keys.toList()..sort();
 
     return FadeTransition(
@@ -492,7 +499,7 @@ class _UserListScreenState extends State<UserListScreen>
         itemBuilder: (context, sectionIndex) {
           final letter = sortedKeys[sectionIndex];
           final usersInSection = groupedUsers[letter]!;
-          
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -508,12 +515,16 @@ class _UserListScreenState extends State<UserListScreen>
                   ),
                 ),
               ),
-              
+
               // Users in this section
               ...usersInSection.asMap().entries.map((entry) {
                 final index = entry.key;
                 final user = entry.value;
-                return _buildUserTile(user, isDarkMode, sectionIndex * 100 + index);
+                return _buildUserTile(
+                  user,
+                  isDarkMode,
+                  sectionIndex * 100 + index,
+                );
               }),
             ],
           );
@@ -527,14 +538,12 @@ class _UserListScreenState extends State<UserListScreen>
       animation: _animationController,
       builder: (context, child) {
         final delay = index * 0.05;
-        final value = (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
-        
+        final value =
+            (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
+
         return Transform.translate(
           offset: Offset(0, 20 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
+          child: Opacity(opacity: value, child: child),
         );
       },
       child: Container(
@@ -575,7 +584,9 @@ class _UserListScreenState extends State<UserListScreen>
                               color: const Color(0xFF4CAF50),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                                color: isDarkMode
+                                    ? const Color(0xFF1E1E1E)
+                                    : Colors.white,
                                 width: 2,
                               ),
                             ),
@@ -584,7 +595,7 @@ class _UserListScreenState extends State<UserListScreen>
                     ],
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // User Info
                   Expanded(
                     child: Column(
@@ -595,7 +606,9 @@ class _UserListScreenState extends State<UserListScreen>
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                            color: isDarkMode
+                                ? Colors.white
+                                : const Color(0xFF1A1A1A),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -608,7 +621,9 @@ class _UserListScreenState extends State<UserListScreen>
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _getRoleColor(user.role!).withAlpha(30),
+                                  color: _getRoleColor(
+                                    user.role!,
+                                  ).withAlpha(30),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -632,8 +647,8 @@ class _UserListScreenState extends State<UserListScreen>
                                   color: user.isOnline
                                       ? const Color(0xFF4CAF50)
                                       : isDarkMode
-                                          ? Colors.white38
-                                          : Colors.grey.shade500,
+                                      ? Colors.white38
+                                      : Colors.grey.shade500,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -644,7 +659,7 @@ class _UserListScreenState extends State<UserListScreen>
                       ],
                     ),
                   ),
-                  
+
                   // Chat Button
                   Container(
                     width: 44,
@@ -679,7 +694,9 @@ class _UserListScreenState extends State<UserListScreen>
       return CircleAvatar(
         radius: 26,
         backgroundImage: NetworkImage(avatarUrl),
-        backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade200,
+        backgroundColor: isDarkMode
+            ? const Color(0xFF2C2C2C)
+            : Colors.grey.shade200,
         onBackgroundImageError: (e, s) {
           if (kDebugMode) print('⚠️ Failed to load avatar: $e');
         },

@@ -17,7 +17,6 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  bool _isCheckingAuth = true;
   String? _errorMessage;
 
   @override
@@ -35,21 +34,17 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0.0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
 
     // Start animation immediately in next frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,7 +62,6 @@ class SplashState extends State<Splash> with SingleTickerProviderStateMixin {
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to initialize. Please restart the app.';
-        _isCheckingAuth = false;
       });
     }
   }

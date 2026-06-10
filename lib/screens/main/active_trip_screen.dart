@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show sin, cos, sqrt, atan2;
+import 'dart:math' show sin, cos, sqrt, atan2, pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -7,17 +7,20 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
+import '../../api/services/student_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../models/map_models.dart';
 import '../../models/preloaded_trip_data.dart';
 import '../../models/master_trip.dart';
-import '../../widgets/main_scaffold.dart';
 import '../../services/mapbox_service.dart';
 import '../../config/map_config.dart';
 import '../../services/notification_service.dart';
 import '../../mqtt_client.dart';
+import '../../utils/student_trip_logic.dart';
+import '../../widgets/main_scaffold.dart';
+import '../../widgets/next_student_trip_action_card.dart';
 
 /// Active Trip Screen - Shows live map tracking with flutter_map
 ///
@@ -44,6 +47,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   final NotificationService _notificationService = NotificationService();
   final MqttService _mqttService = MqttService();
   final MapboxService _mapboxService = MapboxService();
+  final StudentService _studentService = StudentService();
 
   // State
   BusLocation? _currentLocation;
@@ -70,6 +74,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   // Geofence tracking
   final Set<String> _processedStops = {};
+  final Set<String> _shownStudentProximityAlerts = {};
   bool _isShowingPickupDialog = false;
   final Set<String> _etaNotifiedStops = {};
 
@@ -403,6 +408,133 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
+  Map<String, dynamic>? _nextActionableStudent() {
+    final students = List<Map<String, dynamic>>.from(_buildStudentListFromStops());
+    if (students.isEmpty) return null;
+
+    students.sort((a, b) => _asInt(a['order']).compareTo(_asInt(b['order'])));
+
+    final isReturnTrip = isReturnTripDirection(_activeTrip?.tripDirection);
+    if (isReturnTrip) {
+      return _firstStudentWithStatus(students, 'picked');
+    }
+
+    return _firstStudentWithStatus(students, 'pending') ??
+        _firstStudentWithStatus(students, 'picked');
+  }
+
+  Map<String, dynamic>? _firstStudentWithStatus(
+    List<Map<String, dynamic>> students,
+    String status,
+  ) {
+    for (final student in students) {
+      if ((student['status'] ?? 'pending').toString() == status) {
+        return student;
+      }
+    }
+    return null;
+  }
+
+  StudentTripActionMode _actionModeForStudent(Map<String, dynamic> student) {
+    if (isReturnTripDirection(_activeTrip?.tripDirection)) {
+      return StudentTripActionMode.dropoff;
+    }
+
+    final status = (student['status'] ?? 'pending').toString();
+    return status == 'picked'
+        ? StudentTripActionMode.dropoff
+        : StudentTripActionMode.pickup;
+  }
+
+  LatLng? _targetLocationForStudent(
+    Map<String, dynamic> student,
+    StudentTripActionMode mode,
+  ) {
+    final targetLatitude = mode == StudentTripActionMode.dropoff
+        ? _firstValidDouble([student['homeLatitude'], student['latitude']])
+        : _asDouble(student['latitude']);
+    final targetLongitude = mode == StudentTripActionMode.dropoff
+        ? _firstValidDouble([student['homeLongitude'], student['longitude']])
+        : _asDouble(student['longitude']);
+
+    if (!hasValidStudentCoordinate(targetLatitude, targetLongitude)) {
+      return null;
+    }
+
+    return LatLng(targetLatitude!, targetLongitude!);
+  }
+
+  double? _distanceToStudent(
+    Map<String, dynamic> student, {
+    BusLocation? location,
+  }) {
+    final busLocation = location ?? _currentLocation;
+    if (busLocation == null) return null;
+
+    final mode = _actionModeForStudent(student);
+    final target = _targetLocationForStudent(student, mode);
+    if (target == null) return null;
+
+    return calculateStudentDistanceMeters(
+      vehicleLatitude: busLocation.position.latitude,
+      vehicleLongitude: busLocation.position.longitude,
+      targetLatitude: target.latitude,
+      targetLongitude: target.longitude,
+    );
+  }
+
+  NextStudentTripTarget? _nextStudentTripTarget() {
+    final student = _nextActionableStudent();
+    if (student == null) return null;
+
+    final mode = _actionModeForStudent(student);
+    final targetLocation = _targetLocationForStudent(student, mode);
+
+    return NextStudentTripTarget(
+      id: student['id']?.toString() ?? '',
+      name: student['name']?.toString() ?? 'Unknown Student',
+      status: (student['status'] ?? 'pending').toString(),
+      photoUrl: student['photo']?.toString(),
+      destinationLabel: _destinationLabelForStudent(student, mode),
+      latitude: targetLocation?.latitude,
+      longitude: targetLocation?.longitude,
+    );
+  }
+
+  String _destinationLabelForStudent(
+    Map<String, dynamic> student,
+    StudentTripActionMode mode,
+  ) {
+    final address = student['address']?.toString();
+    if (address != null && address.isNotEmpty) return address;
+
+    final stopName = student['stopName']?.toString();
+    if (stopName != null && stopName.isNotEmpty) return stopName;
+
+    return mode == StudentTripActionMode.dropoff
+        ? 'Saved home destination'
+        : 'Pickup location';
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  double? _firstValidDouble(List<dynamic> values) {
+    for (final value in values) {
+      final parsed = _asDouble(value);
+      if (parsed != null && parsed != 0) return parsed;
+    }
+    return null;
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
   void _checkGeofences(BusLocation location) {
     for (final stop in _stops) {
       final distance = _calculateDistance(
@@ -419,11 +551,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       GeofenceType? alertType;
       if (distance <= 100) {
         alertType = GeofenceType.arrived;
-        if (!_processedStops.contains(stop.id) &&
-            !_isShowingPickupDialog &&
-            _activeTrip != null) {
-          _showStudentPickupDialog(stop, location);
-        }
       } else if (distance <= 500) {
         alertType = GeofenceType.arriving;
       } else if (distance <= 2000) {
@@ -457,6 +584,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         }
       }
     }
+
+    _maybeShowNextStudentProximityPrompt(location);
   }
 
   double _calculateDistance(
@@ -514,7 +643,84 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     RouteStop stop,
     BusLocation busLocation,
   ) async {
-    // ... existing implementation
+    _maybeShowNextStudentProximityPrompt(busLocation, force: true);
+  }
+
+  void _maybeShowNextStudentProximityPrompt(
+    BusLocation location, {
+    bool force = false,
+  }) {
+    if (_isShowingPickupDialog || _activeTrip == null || !mounted) return;
+
+    final student = _nextActionableStudent();
+    if (student == null) return;
+
+    final mode = _actionModeForStudent(student);
+    final distance = _distanceToStudent(student, location: location);
+    if (distance == null) return;
+    if (!force && !isWithinStudentProximity(distance)) return;
+
+    final promptKey =
+        '${student['id']}_${mode.name}_${student['status'] ?? 'pending'}';
+    if (_shownStudentProximityAlerts.contains(promptKey)) return;
+    _shownStudentProximityAlerts.add(promptKey);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isShowingPickupDialog) return;
+      _showNextStudentProximitySheet(student, mode, distance);
+    });
+  }
+
+  Future<void> _showNextStudentProximitySheet(
+    Map<String, dynamic> student,
+    StudentTripActionMode mode,
+    double distance,
+  ) async {
+    _isShowingPickupDialog = true;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final targetLocation = _targetLocationForStudent(student, mode);
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: NextStudentTripActionCard(
+              student: NextStudentTripTarget(
+                id: student['id']?.toString() ?? '',
+                name: student['name']?.toString() ?? 'Unknown Student',
+                status: (student['status'] ?? 'pending').toString(),
+                photoUrl: student['photo']?.toString(),
+                destinationLabel: _destinationLabelForStudent(student, mode),
+                latitude: targetLocation?.latitude,
+                longitude: targetLocation?.longitude,
+              ),
+              mode: mode,
+              distanceMeters: distance,
+              isSubmitting: _isUpdatingStudentStatus,
+              errorMessage: context.read<TripProvider>().errorMessage,
+              onPickedUp: () => _updateStudentStatus(
+                student['id'].toString(),
+                'picked',
+              ),
+              onDroppedOff: () => _updateStudentStatus(
+                student['id'].toString(),
+                'dropped',
+              ),
+              onAbsent: () => _updateStudentStatus(
+                student['id'].toString(),
+                'absent',
+              ),
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() {
+      _isShowingPickupDialog = false;
+    });
   }
 
   void _showTripOptions() {
@@ -1035,6 +1241,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   Widget _buildBottomPanel(bool isDarkMode) {
+    final nextStudent = _nextActionableStudent();
+    final nextMode = nextStudent == null
+        ? StudentTripActionMode.pickup
+        : _actionModeForStudent(nextStudent);
+    final nextDistance = nextStudent == null ? null : _distanceToStudent(nextStudent);
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1082,6 +1294,33 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   ),
                 ],
               ),
+            const SizedBox(height: 12),
+
+            NextStudentTripActionCard(
+              student: _nextStudentTripTarget(),
+              mode: nextMode,
+              distanceMeters: nextDistance,
+              isSubmitting: _isUpdatingStudentStatus,
+              errorMessage: context.watch<TripProvider>().errorMessage,
+              onPickedUp: nextStudent == null
+                  ? null
+                  : () => _updateStudentStatus(
+                        nextStudent['id'].toString(),
+                        'picked',
+                      ),
+              onDroppedOff: nextStudent == null
+                  ? null
+                  : () => _updateStudentStatus(
+                        nextStudent['id'].toString(),
+                        'dropped',
+                      ),
+              onAbsent: nextStudent == null
+                  ? null
+                  : () => _updateStudentStatus(
+                        nextStudent['id'].toString(),
+                        'absent',
+                      ),
+            ),
             const SizedBox(height: 12),
 
             // Action buttons
@@ -1242,7 +1481,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     if (!mounted) return;
     final tripProvider = context.read<TripProvider>();
-    final success = await tripProvider.pickAllStudents(_tripId!);
+    final success = await tripProvider.pickAllStudents(
+      _tripId!,
+      latitude: _currentLocation?.position.latitude ?? 0,
+      longitude: _currentLocation?.position.longitude ?? 0,
+    );
 
     if (success && mounted) {
       // Background refresh of the actual trip data
@@ -1308,7 +1551,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     if (!mounted) return;
     final tripProvider = context.read<TripProvider>();
-    final success = await tripProvider.dropAllStudents(_tripId!);
+    final success = await tripProvider.dropAllStudents(
+      _tripId!,
+      latitude: _currentLocation?.position.latitude ?? 0,
+      longitude: _currentLocation?.position.longitude ?? 0,
+    );
 
     if (success && mounted) {
       // Background refresh of the actual trip data
@@ -1339,6 +1586,83 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           backgroundColor: Color(0xFF6B9B5B),
         ),
       );
+    }
+  }
+
+  Map<String, dynamic>? _findStudentById(String studentId) {
+    for (final student in _buildStudentListFromStops()) {
+      if (student['id']?.toString() == studentId) return student;
+    }
+    return null;
+  }
+
+  bool _studentHasSavedHomeDestination(Map<String, dynamic> student) {
+    return hasValidStudentCoordinate(
+          _asDouble(student['homeLatitude']),
+          _asDouble(student['homeLongitude']),
+        ) ||
+        hasValidStudentCoordinate(
+          _asDouble(student['latitude']),
+          _asDouble(student['longitude']),
+        );
+  }
+
+  Future<bool> _saveHomeDestinationIfNeeded(
+    Map<String, dynamic> student,
+  ) async {
+    if (_studentHasSavedHomeDestination(student)) return true;
+
+    final location = _currentLocation;
+    if (location == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Current location is required before pickup'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+
+    final guardianPhone = student['guardianPhone']?.toString() ?? '';
+    if (guardianPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Guardian phone is required to save home location'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+
+    try {
+      await _studentService.saveStudentHomeDestination(
+        studentId: student['id'].toString(),
+        name: student['name']?.toString() ?? 'Student',
+        guardianPhoneNumber: guardianPhone,
+        latitude: location.position.latitude,
+        longitude: location.position.longitude,
+        studentRegNumber: student['studentRegNumber']?.toString(),
+        schoolName: student['schoolName']?.toString(),
+        className: student['className']?.toString(),
+        route: student['route']?.toString() ?? student['stopName']?.toString(),
+        photo: student['photo']?.toString(),
+        transportOrg: student['transportOrg']?.toString(),
+      );
+
+      student['latitude'] = location.position.latitude;
+      student['longitude'] = location.position.longitude;
+      student['homeLatitude'] = location.position.latitude;
+      student['homeLongitude'] = location.position.longitude;
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save home destination: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
     }
   }
 
@@ -1378,11 +1702,22 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       navigator.pop();
     }
 
+    final student = _findStudentById(studentId);
+    if (newStatus == 'picked' && student != null) {
+      final savedHomeDestination = await _saveHomeDestinationIfNeeded(student);
+      if (!savedHomeDestination) {
+        if (mounted) setState(() => _isUpdatingStudentStatus = false);
+        return;
+      }
+    }
+
     final tripProvider = context.read<TripProvider>();
     final success = await tripProvider.updateStudentStatus(
       tripId: _tripId!,
       studentId: studentId,
       status: newStatus,
+      latitude: _currentLocation?.position.latitude,
+      longitude: _currentLocation?.position.longitude,
     );
 
     if (!mounted) return;
@@ -1393,6 +1728,17 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         for (final student in _preloadedStudents) {
           if (student['id'] == studentId) {
             student['status'] = newStatus;
+            if (newStatus == 'picked' &&
+                _currentLocation != null &&
+                !_studentHasSavedHomeDestination(student)) {
+              student['homeLatitude'] = _currentLocation!.position.latitude;
+              student['homeLongitude'] = _currentLocation!.position.longitude;
+            }
+            if (newStatus == 'dropped' && _currentLocation != null) {
+              student['droppedLatitude'] = _currentLocation!.position.latitude;
+              student['droppedLongitude'] =
+                  _currentLocation!.position.longitude;
+            }
             break;
           }
         }
@@ -1727,11 +2073,16 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   List<Map<String, dynamic>> _convertTripStudentsToMap(
     List<TripStudent> students,
   ) {
-    return students.map((s) {
+    return students.asMap().entries.map((entry) {
+      final index = entry.key;
+      final s = entry.value;
       return {
-        'id': s.id.toString(),
+        'id': s.studentId.toString(),
+        'tripStudentId': s.id.toString(),
         'name': s.fullname,
         'stopName': s.route,
+        'route': s.route,
+        'address': s.address,
         'status': s.isStudentDropped
             ? 'dropped'
             : s.isStudentPicked
@@ -1744,6 +2095,20 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'guardianName': s.guardianPhoneNumber,
         'studentRegNumber': s.studentRegNumber,
         'className': s.classname,
+        'schoolName': s.schoolname,
+        'transportOrg': s.transportOrg,
+        'photo': s.profileImage,
+        'latitude': s.latitude,
+        'longitude': s.longitude,
+        'homeLatitude': s.pickedLatitude != 0 ? s.pickedLatitude : s.latitude,
+        'homeLongitude': s.pickedLongitude != 0 ? s.pickedLongitude : s.longitude,
+        'pickedLatitude': s.pickedLatitude,
+        'pickedLongitude': s.pickedLongitude,
+        'droppedLatitude': s.droppedLatitude,
+        'droppedLongitude': s.droppedLongitude,
+        'pickupTime': s.pickedTime,
+        'dropoffTime': s.dropTime,
+        'order': index,
       };
     }).toList();
   }
@@ -1758,26 +2123,48 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     // Use actual students from the active trip
     if (_activeTrip != null && _activeTrip!.students.isNotEmpty) {
       return _activeTrip!.students
+          .asMap()
+          .entries
           .map(
-            (s) => {
-              'id': s.id,
-              'name': s.name,
-              'stopName': _stops
-                  .firstWhere(
-                    (stop) => stop.studentIds?.contains(s.id) ?? false,
-                    orElse: () => RouteStop(
-                      id: '',
-                      name: 'Unknown Stop',
-                      position: const LatLng(0, 0),
-                      order: 0,
-                    ),
-                  )
-                  .name,
-              'status': s.status,
-              'guardianPhone': s.parentPhone,
-              'guardianId': null,
-              'guardianName': null,
-              'photo': s.photo,
+            (entry) {
+              final s = entry.value;
+              final stop = _stops.firstWhere(
+                (stop) => stop.studentIds?.contains(s.id) ?? false,
+                orElse: () => RouteStop(
+                  id: '',
+                  name: s.route ?? 'Unknown Stop',
+                  position: LatLng(s.latitude ?? 0, s.longitude ?? 0),
+                  order: entry.key,
+                ),
+              );
+
+              return {
+                'id': s.id,
+                'tripStudentId': s.tripStudentId,
+                'name': s.name,
+                'stopName': stop.name,
+                'status': s.status,
+                'guardianPhone': s.parentPhone,
+                'guardianId': null,
+                'guardianName': null,
+                'photo': s.photo,
+                'studentRegNumber': s.studentRegNumber,
+                'className': s.className,
+                'schoolName': s.schoolName,
+                'route': s.route,
+                'address': s.address ?? stop.address,
+                'latitude': s.latitude ?? stop.position.latitude,
+                'longitude': s.longitude ?? stop.position.longitude,
+                'homeLatitude': s.homeLatitude,
+                'homeLongitude': s.homeLongitude,
+                'pickedLatitude': s.pickedLatitude,
+                'pickedLongitude': s.pickedLongitude,
+                'droppedLatitude': s.droppedLatitude,
+                'droppedLongitude': s.droppedLongitude,
+                'pickupTime': s.pickupTime,
+                'dropoffTime': s.dropoffTime,
+                'order': stop.order == 0 ? entry.key : stop.order,
+              };
             },
           )
           .toList();
@@ -1796,6 +2183,12 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             'guardianPhone': stop.guardianPhone,
             'guardianId': null,
             'guardianName': null,
+            'address': stop.address,
+            'latitude': stop.position.latitude,
+            'longitude': stop.position.longitude,
+            'homeLatitude': stop.position.latitude,
+            'homeLongitude': stop.position.longitude,
+            'order': stop.order,
           });
         }
       }

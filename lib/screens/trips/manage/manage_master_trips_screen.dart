@@ -45,7 +45,6 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   bool _isCreatingNew = true;
   bool _isLoading = false;
   bool _isLoadingStudents = false;
-  bool _triedLoadingStudents = false;
   String? _errorMessage;
 
   // Search state
@@ -56,7 +55,6 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
   List<route_service.BusRoute> _routes = [];
   List<bus_service.Bus> _buses = [];
   List<student_service.Student> _students = [];
-  List<student_service.Student> _filteredStudents = [];
 
   // Animation
   late AnimationController _animationController;
@@ -245,7 +243,6 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         if (mounted) {
           setState(() {
             _students = students;
-            _filteredStudents = students;
           });
         }
       } else {
@@ -273,14 +270,12 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           if (mounted) {
             setState(() {
               _students = students;
-              _filteredStudents = students;
             });
             debugPrint('✅ Loaded ${students.length} students in parallel');
           }
         } else {
           setState(() {
             _students = [];
-            _filteredStudents = [];
           });
         }
       }
@@ -303,8 +298,6 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       if (mounted) {
         setState(() {
           _students = students;
-          _filteredStudents = students;
-          _triedLoadingStudents = true;
         });
         debugPrint(
           '✅ Loaded ${students.length} students from guardian endpoint',
@@ -313,9 +306,6 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     } catch (e, stackTrace) {
       debugPrint('❌ Error loading students from guardian endpoint: $e');
       debugPrint('Stack trace: $stackTrace');
-      if (mounted) {
-        setState(() => _triedLoadingStudents = true);
-      }
     }
   }
 

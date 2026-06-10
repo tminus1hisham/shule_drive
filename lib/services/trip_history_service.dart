@@ -11,7 +11,6 @@ class TripHistoryService {
   TripHistoryService._internal();
 
   static const String _tripsKey = 'driver_trip_history';
-  static const String _statsKey = 'driver_trip_stats';
 
   /// Save a completed trip to local history
   Future<void> saveTripToHistory({
@@ -61,9 +60,6 @@ class TripHistoryService {
 
       // Save to storage
       await prefs.setString('${_tripsKey}_$driverId', jsonString);
-
-      // Update stats
-      await _updateStats(prefs, driverId, trip);
 
       if (kDebugMode) {
         print('✅ Trip saved to history: ${trip.id}');
@@ -120,22 +116,10 @@ class TripHistoryService {
   }
 
   /// Get driver statistics
-  /// Computes stats from actual trip history data to stay accurate
+  /// Always recomputed from trip history so picked counts stay accurate
+  /// even when trips are updated after the initial save.
   Future<DriverStats> getDriverStats(String driverId) async {
     try {
-      // First try the saved counter
-      final prefs = await SharedPreferences.getInstance();
-      final statsString = prefs.getString('${_statsKey}_$driverId');
-
-      if (statsString != null) {
-        final savedStats = DriverStats.fromJson(jsonDecode(statsString));
-        // If saved stats look valid (non-zero trips), use them
-        if (savedStats.totalTrips > 0) {
-          return savedStats;
-        }
-      }
-
-      // Fallback: compute stats directly from trip history
       final history = await getTripHistory(driverId);
       if (history.isNotEmpty) {
         int totalStudents = 0;
@@ -155,7 +139,7 @@ class TripHistoryService {
           }
         }
 
-        final computedStats = DriverStats(
+        return DriverStats(
           totalTrips: history.length,
           totalStudents: totalStudents,
           totalPicked: totalPicked,
@@ -163,18 +147,6 @@ class TripHistoryService {
           totalDistance: totalDistance,
           lastTripDate: lastTripDate,
         );
-
-        // Save the recomputed stats so they persist
-        await prefs.setString(
-          '${_statsKey}_$driverId',
-          jsonEncode(computedStats.toJson()),
-        );
-
-        if (kDebugMode) {
-          print('📊 Recomputed driver stats from ${history.length} trips');
-        }
-
-        return computedStats;
       }
     } catch (e) {
       if (kDebugMode) {
@@ -185,41 +157,11 @@ class TripHistoryService {
     return DriverStats.empty();
   }
 
-  /// Update driver statistics
-  Future<void> _updateStats(
-    SharedPreferences prefs,
-    String driverId,
-    Trip trip,
-  ) async {
-    try {
-      final stats = await getDriverStats(driverId);
-
-      final updatedStats = DriverStats(
-        totalTrips: stats.totalTrips + 1,
-        totalStudents: stats.totalStudents + trip.students.length,
-        totalPicked: stats.totalPicked + trip.pickedCount,
-        totalAbsent: stats.totalAbsent + trip.absentCount,
-        totalDistance: stats.totalDistance + (trip.distance ?? 0),
-        lastTripDate: DateTime.now(),
-      );
-
-      await prefs.setString(
-        '${_statsKey}_$driverId',
-        jsonEncode(updatedStats.toJson()),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Failed to update stats: $e');
-      }
-    }
-  }
-
   /// Clear trip history for a driver
   Future<void> clearTripHistory(String driverId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('${_tripsKey}_$driverId');
-      await prefs.remove('${_statsKey}_$driverId');
 
       if (kDebugMode) {
         print('🗑️ Trip history cleared for driver: $driverId');

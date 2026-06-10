@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show sin, cos, sqrt, atan2, pi;
+import 'dart:math' show sin, cos, sqrt, atan2;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'notification_service.dart';
@@ -7,11 +7,12 @@ import 'local_database_service.dart';
 import '../api/services/trip_service.dart' as api;
 
 /// Geofence Notification Handler
-/// 
+///
 /// Monitors bus location relative to pickup stops and triggers notifications
 /// at three distances: 2km (approaching), 500m (arriving), 100m (arrived)
 class GeofenceNotificationHandler {
-  static final GeofenceNotificationHandler _instance = GeofenceNotificationHandler._internal();
+  static final GeofenceNotificationHandler _instance =
+      GeofenceNotificationHandler._internal();
   factory GeofenceNotificationHandler() => _instance;
   GeofenceNotificationHandler._internal();
 
@@ -20,8 +21,8 @@ class GeofenceNotificationHandler {
 
   // Geofence thresholds
   static const double _approachingDistance = 2000; // 2km
-  static const double _arrivingDistance = 500;     // 500m
-  static const double _arrivedDistance = 100;      // 100m
+  static const double _arrivingDistance = 500; // 500m
+  static const double _arrivedDistance = 100; // 100m
 
   // Cooldown periods to prevent spam
   static const Duration _approachingCooldown = Duration(minutes: 5);
@@ -30,27 +31,30 @@ class GeofenceNotificationHandler {
 
   // Track triggered alerts for cooldown
   final Map<String, DateTime> _lastAlertTimes = {};
-  
+
   // Stream subscription for tracking
   StreamSubscription<LatLng>? _trackingSubscription;
-  
+
   // Current trip and stops being monitored
   api.Trip? _currentTrip;
   List<api.TripStop> _monitoredStops = [];
   Map<String, List<String>> _stopToStudents = {}; // stopId -> studentIds
-  
+
   bool _isMonitoring = false;
 
   /// Start monitoring geofences for a trip
-  Future<void> startMonitoring(api.Trip trip, {List<String>? studentIds}) async {
+  Future<void> startMonitoring(
+    api.Trip trip, {
+    List<String>? studentIds,
+  }) async {
     if (_isMonitoring) {
       await stopMonitoring();
     }
 
     _currentTrip = trip;
-    _monitoredStops = trip.stops.where((stop) => 
-      stop.latitude != null && stop.longitude != null
-    ).toList();
+    _monitoredStops = trip.stops
+        .where((stop) => stop.latitude != null && stop.longitude != null)
+        .toList();
 
     // Map stops to students (for guardian-specific notifications)
     _buildStopToStudentMap(trip, studentIds);
@@ -108,7 +112,10 @@ class GeofenceNotificationHandler {
 
   /// Process bus location update
   /// Call this when bus location updates from GPS/MQTT
-  Future<void> processLocationUpdate(LatLng busLocation, {double? speedKmh}) async {
+  Future<void> processLocationUpdate(
+    LatLng busLocation, {
+    double? speedKmh,
+  }) async {
     if (!_isMonitoring || _currentTrip == null) return;
 
     for (final stop in _monitoredStops) {
@@ -124,7 +131,7 @@ class GeofenceNotificationHandler {
 
       // Determine alert type
       GeofenceAlertType? alertType;
-      
+
       if (distance <= _arrivedDistance) {
         alertType = GeofenceAlertType.arrived;
       } else if (distance <= _arrivingDistance) {
@@ -135,7 +142,7 @@ class GeofenceNotificationHandler {
 
       if (alertType != null) {
         final alertKey = '${_currentTrip!.id}_${stop.id}_${alertType.name}';
-        
+
         if (_shouldTriggerAlert(alertKey, alertType)) {
           await _triggerAlert(
             tripId: _currentTrip!.id,
@@ -145,7 +152,7 @@ class GeofenceNotificationHandler {
             etaMinutes: etaMinutes,
             busLocation: busLocation,
           );
-          
+
           _lastAlertTimes[alertKey] = DateTime.now();
         }
       }
@@ -209,8 +216,8 @@ class GeofenceNotificationHandler {
     } else if (etaMinutes > 0) {
       body = 'Bus is approximately $etaMinutes minutes away from ${stop.name}';
     } else {
-      final dist = distance < 1000 
-          ? '${distance.toInt()}m' 
+      final dist = distance < 1000
+          ? '${distance.toInt()}m'
           : '${(distance / 1000).toStringAsFixed(1)}km';
       body = 'Bus is $dist away from ${stop.name}';
     }
@@ -260,10 +267,9 @@ class GeofenceNotificationHandler {
     final deltaLat = _degreesToRadians(point2.latitude - point1.latitude);
     final deltaLon = _degreesToRadians(point2.longitude - point1.longitude);
 
-    final a = 
+    final a =
         sin(deltaLat / 2) * sin(deltaLat / 2) +
-        cos(lat1) * cos(lat2) *
-        sin(deltaLon / 2) * sin(deltaLon / 2);
+        cos(lat1) * cos(lat2) * sin(deltaLon / 2) * sin(deltaLon / 2);
 
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
@@ -285,7 +291,7 @@ class GeofenceNotificationHandler {
   }) async {
     // TODO: Implement API call to send geofence event to backend
     // Backend will then send FCM notifications to relevant guardians
-    
+
     // Example payload:
     // {
     //   "trip_id": "...",
@@ -319,5 +325,3 @@ class GeofenceNotificationHandler {
     await _db.clearOldAlerts(daysToKeep: 7);
   }
 }
-
-

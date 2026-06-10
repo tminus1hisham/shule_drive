@@ -206,6 +206,7 @@ class TripService {
               : resolvedMasterTripId.toString(),
           routeName: tripName ?? route ?? 'Trip',
           routeId: routeId,
+          tripDirection: response['tripDirection']?.toString(),
           startTime: DateTime.now(),
           status: 'active',
           vehicleId: vehicleId,
@@ -392,18 +393,19 @@ class TripService {
     required String studentId,
     required String status, // 'picked', 'absent', 'dropped'
     String? notes,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final normalizedStatus = StudentPickup.normalizeStatus(status);
       if (normalizedStatus == 'absent') {
         await _apiClient.post(
           Endpoints.studentNotPicked,
-          body: {
-            'tripUniqueIdentity': tripId,
-            'studentId': int.tryParse(studentId) ?? 0,
-            'reason': notes ?? 'Student not picked',
-            'updatedAt': DateTime.now().toUtc().toIso8601String(),
-          },
+          body: buildStudentNotPickedBody(
+            tripUniqueIdentity: tripId,
+            studentId: int.tryParse(studentId) ?? 0,
+            reason: notes ?? 'Student not picked',
+          ),
         );
       } else {
         debugPrint(
@@ -1070,12 +1072,43 @@ class TripService {
     double longitude = 0,
     required bool isDroppingAll,
   }) {
+    return buildPickDropAllBody(
+      uniqueTripIdentity: uniqueTripIdentity,
+      latitude: latitude,
+      longitude: longitude,
+      isDroppingAll: isDroppingAll,
+    );
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic> buildPickDropAllBody({
+    required String uniqueTripIdentity,
+    double latitude = 0,
+    double longitude = 0,
+    required bool isDroppingAll,
+    DateTime? updatedAt,
+  }) {
     return {
       'uniqueTripIdentity': uniqueTripIdentity,
       'latitude': latitude,
       'longitude': longitude,
       'isDroppingAll': isDroppingAll,
-      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'updatedAt': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
+    };
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic> buildStudentNotPickedBody({
+    required String tripUniqueIdentity,
+    required int studentId,
+    String reason = 'Student not picked',
+    DateTime? updatedAt,
+  }) {
+    return {
+      'tripUniqueIdentity': tripUniqueIdentity,
+      'studentId': studentId,
+      'reason': reason,
+      'updatedAt': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
     };
   }
 }
@@ -1085,6 +1118,8 @@ class Trip {
   final String id;
   final String routeName;
   final String routeId;
+  final int? masterTripId;
+  final String? tripDirection;
   final DateTime startTime;
   final DateTime? endTime;
   final String status; // 'active', 'completed', 'cancelled'
@@ -1100,6 +1135,8 @@ class Trip {
     required this.id,
     required this.routeName,
     required this.routeId,
+    this.masterTripId,
+    this.tripDirection,
     required this.startTime,
     this.endTime,
     required this.status,
@@ -1116,6 +1153,8 @@ class Trip {
     String? id,
     String? routeName,
     String? routeId,
+    int? masterTripId,
+    String? tripDirection,
     DateTime? startTime,
     DateTime? endTime,
     String? status,
@@ -1131,6 +1170,8 @@ class Trip {
       id: id ?? this.id,
       routeName: routeName ?? this.routeName,
       routeId: routeId ?? this.routeId,
+      masterTripId: masterTripId ?? this.masterTripId,
+      tripDirection: tripDirection ?? this.tripDirection,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       status: status ?? this.status,
@@ -1163,6 +1204,10 @@ class Trip {
           json['masterTripId']?.toString() ??
           json['route']?.toString() ??
           '',
+      masterTripId: _parseInt(json['masterTripId']),
+      tripDirection:
+          json['tripDirection']?.toString() ??
+          json['trip_direction']?.toString(),
       startTime:
           _parseDateTime(
             json['start_time'] ?? json['startTime'] ?? json['createdAt'],
@@ -1201,6 +1246,8 @@ class Trip {
       'id': id,
       'route_name': routeName,
       'route_id': routeId,
+      'masterTripId': masterTripId,
+      'tripDirection': tripDirection,
       'start_time': startTime.toIso8601String(),
       'end_time': endTime?.toIso8601String(),
       'status': status,
@@ -1249,11 +1296,18 @@ class Trip {
       return null;
     }
   }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
 }
 
 /// Student Pickup Model
 class StudentPickup {
   final String id;
+  final String? tripStudentId;
   final String name;
   final String? photo;
   final String status; // 'pending', 'picked', 'absent', 'dropped'
@@ -1261,9 +1315,22 @@ class StudentPickup {
   final DateTime? dropoffTime;
   final String? notes;
   final String? parentPhone;
+  final String? studentRegNumber;
+  final String? className;
+  final String? schoolName;
+  final String? route;
+  final String? address;
+  final double? latitude;
+  final double? longitude;
+  final double? pickedLatitude;
+  final double? pickedLongitude;
+  final double? droppedLatitude;
+  final double? droppedLongitude;
+  final bool isStudentActive;
 
   StudentPickup({
     required this.id,
+    this.tripStudentId,
     required this.name,
     this.photo,
     required this.status,
@@ -1271,10 +1338,23 @@ class StudentPickup {
     this.dropoffTime,
     this.notes,
     this.parentPhone,
+    this.studentRegNumber,
+    this.className,
+    this.schoolName,
+    this.route,
+    this.address,
+    this.latitude,
+    this.longitude,
+    this.pickedLatitude,
+    this.pickedLongitude,
+    this.droppedLatitude,
+    this.droppedLongitude,
+    this.isStudentActive = true,
   });
 
   StudentPickup copyWith({
     String? id,
+    String? tripStudentId,
     String? name,
     String? photo,
     String? status,
@@ -1282,9 +1362,22 @@ class StudentPickup {
     DateTime? dropoffTime,
     String? notes,
     String? parentPhone,
+    String? studentRegNumber,
+    String? className,
+    String? schoolName,
+    String? route,
+    String? address,
+    double? latitude,
+    double? longitude,
+    double? pickedLatitude,
+    double? pickedLongitude,
+    double? droppedLatitude,
+    double? droppedLongitude,
+    bool? isStudentActive,
   }) {
     return StudentPickup(
       id: id ?? this.id,
+      tripStudentId: tripStudentId ?? this.tripStudentId,
       name: name ?? this.name,
       photo: photo ?? this.photo,
       status: status ?? this.status,
@@ -1292,6 +1385,18 @@ class StudentPickup {
       dropoffTime: dropoffTime ?? this.dropoffTime,
       notes: notes ?? this.notes,
       parentPhone: parentPhone ?? this.parentPhone,
+      studentRegNumber: studentRegNumber ?? this.studentRegNumber,
+      className: className ?? this.className,
+      schoolName: schoolName ?? this.schoolName,
+      route: route ?? this.route,
+      address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      pickedLatitude: pickedLatitude ?? this.pickedLatitude,
+      pickedLongitude: pickedLongitude ?? this.pickedLongitude,
+      droppedLatitude: droppedLatitude ?? this.droppedLatitude,
+      droppedLongitude: droppedLongitude ?? this.droppedLongitude,
+      isStudentActive: isStudentActive ?? this.isStudentActive,
     );
   }
 
@@ -1318,6 +1423,8 @@ class StudentPickup {
       studentStatus = json['isStudentDropped'] == true ? 'dropped' : 'picked';
     } else if (json['status'] != null) {
       studentStatus = json['status'].toString();
+    } else if (json['isStudentActive'] == false) {
+      studentStatus = 'absent';
     }
     studentStatus = normalizeStatus(studentStatus);
 
@@ -1342,7 +1449,8 @@ class StudentPickup {
     }
 
     return StudentPickup(
-      id: json['id']?.toString() ?? json['studentId']?.toString() ?? '',
+      id: json['studentId']?.toString() ?? json['id']?.toString() ?? '',
+      tripStudentId: json['id']?.toString(),
       name: studentName,
       photo: json['profileImage'] ?? json['photo'],
       status: studentStatus,
@@ -1357,21 +1465,67 @@ class StudentPickup {
           json['guardianPhoneNumber'] ??
           json['parent_phone'] ??
           json['parentPhone'],
+      studentRegNumber: json['studentRegNumber']?.toString(),
+      className: json['classname']?.toString() ?? json['className']?.toString(),
+      schoolName:
+          json['schoolname']?.toString() ?? json['schoolName']?.toString(),
+      route: json['route']?.toString(),
+      address: json['address']?.toString(),
+      latitude: _parseDouble(json['latitude']),
+      longitude: _parseDouble(json['longitude']),
+      pickedLatitude: _parseDouble(json['pickedLatitude']),
+      pickedLongitude: _parseDouble(json['pickedLongitude']),
+      droppedLatitude: _parseDouble(json['droppedLatitude']),
+      droppedLongitude: _parseDouble(json['droppedLongitude']),
+      isStudentActive: json['isStudentActive'] ?? true,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'studentId': int.tryParse(id) ?? id,
+      'tripStudentId': tripStudentId,
       'name': name,
+      'fullname': name,
       'photo': photo,
+      'profileImage': photo,
       'status': status,
       'pickup_time': pickupTime?.toIso8601String(),
       'dropoff_time': dropoffTime?.toIso8601String(),
       'notes': notes,
       'parent_phone': parentPhone,
+      'guardianPhoneNumber': parentPhone,
+      'studentRegNumber': studentRegNumber,
+      'classname': className,
+      'schoolname': schoolName,
+      'route': route,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      'pickedLatitude': pickedLatitude,
+      'pickedLongitude': pickedLongitude,
+      'droppedLatitude': droppedLatitude,
+      'droppedLongitude': droppedLongitude,
+      'isStudentActive': isStudentActive,
     };
   }
+
+  bool get hasPickupLocation => _hasValidCoordinate(latitude, longitude);
+
+  bool get hasSavedHomeDestination =>
+      _hasValidCoordinate(pickedLatitude, pickedLongitude) ||
+      _hasValidCoordinate(latitude, longitude);
+
+  double? get homeLatitude =>
+      _hasValidCoordinate(pickedLatitude, pickedLongitude)
+      ? pickedLatitude
+      : latitude;
+
+  double? get homeLongitude =>
+      _hasValidCoordinate(pickedLatitude, pickedLongitude)
+      ? pickedLongitude
+      : longitude;
 
   static String normalizeStatus(String value) {
     switch (value.trim().toLowerCase()) {
@@ -1390,6 +1544,17 @@ class StudentPickup {
       default:
         return 'pending';
     }
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  static bool _hasValidCoordinate(double? latitude, double? longitude) {
+    if (latitude == null || longitude == null) return false;
+    return latitude != 0 && longitude != 0;
   }
 }
 

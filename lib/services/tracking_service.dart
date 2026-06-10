@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show sqrt, sin, cos, atan2, pi;
+import 'dart:math' show sqrt, sin, cos, atan2;
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../mqtt_client.dart';
@@ -43,7 +43,7 @@ class TrackingService {
 
   // Subscriptions
   final Map<String, void Function(String topic, String message)>
-      _mqttCallbacks = {};
+  _mqttCallbacks = {};
 
   bool _isInitialized = false;
 

@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
 import '../api_client.dart';
-import '../api_exceptions.dart';
 import '../endpoints.dart';
+import '../../models/guardian.dart';
 import '../../utils/buffer_manager.dart';
+
+// Re-export so existing `guardian_service.Guardian` consumers keep working.
+export '../../models/guardian.dart';
 
 /// Guardian Service - Handles guardian-related API calls
 class GuardianService {
@@ -84,85 +87,5 @@ class GuardianService {
   /// Clear guardian-related buffers
   Future<void> clearGuardianBuffers() async {
     await _buffer.clearCategory('guardians');
-  }
-}
-
-/// Guardian Model
-class Guardian {
-  final String id;
-  final String name;
-  final String? email;
-  final String? phone;
-  final String? phoneNumber;
-  final String? companyOrgId;
-  final String? schoolId;
-  final String? schoolName;
-  final bool isActive;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
-
-  Guardian({
-    required this.id,
-    required this.name,
-    this.email,
-    this.phone,
-    this.phoneNumber,
-    this.companyOrgId,
-    this.schoolId,
-    this.schoolName,
-    this.isActive = true,
-    this.createdAt,
-    this.updatedAt,
-  });
-
-  factory Guardian.fromJson(Map<String, dynamic> json) {
-    return Guardian(
-      id: json['id']?.toString() ?? json['userId']?.toString() ?? '',
-      name: json['name'] ?? json['fullname'] ?? '',
-      email: json['email'],
-      phone: json['phone'] ?? json['phoneNumber'],
-      phoneNumber: json['phoneNumber'] ?? json['phone'],
-      companyOrgId:
-          json['companyOrgId'] ??
-          json['company_org_id'] ??
-          json['school_id'] ??
-          json['schoolId'],
-      schoolId: json['school_id'] ?? json['schoolId'],
-      schoolName:
-          json['schoolname'] ?? json['school_name'] ?? json['schoolName'],
-      isActive:
-          json['userActive'] ?? json['isActive'] ?? json['is_active'] ?? true,
-      createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
-      updatedAt: _parseDateTime(json['updatedAt'] ?? json['updated_at']),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'email': email,
-      'phone': phone,
-      'phoneNumber': phoneNumber,
-      'companyOrgId': companyOrgId,
-      'school_id': schoolId,
-      'school_name': schoolName,
-      'userActive': isActive,
-      'createdAt': createdAt?.toUtc().toIso8601String(),
-      'updatedAt': updatedAt?.toUtc().toIso8601String(),
-    };
-  }
-
-  /// Get the best phone number to use
-  String? get bestPhoneNumber => phoneNumber ?? phone;
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    try {
-      return DateTime.parse(value.toString());
-    } catch (e) {
-      return null;
-    }
   }
 }

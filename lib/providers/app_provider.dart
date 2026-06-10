@@ -121,7 +121,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         print('✅ AppProvider: Fetched ${_routes.length} routes');
       }
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       if (kDebugMode) {
         print('⚠️ AppProvider: Routes endpoint not found (404)');
@@ -151,7 +151,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _routes = await _routeService.getRoutesByUser();
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       _routes = [];
       notifyListeners();
@@ -294,7 +294,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (kDebugMode) {
         print('✅ AppProvider: Fetched ${_buses.length} buses');
       }
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       if (kDebugMode) {
         print('⚠️ AppProvider: Buses endpoint not found (404)');
       }
@@ -323,7 +323,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _buses = await _busService.getBusesByUser();
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       _buses = [];
       notifyListeners();
@@ -344,7 +344,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _buses = await _busService.getActiveBuses();
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       _buses = [];
       notifyListeners();
@@ -386,7 +386,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       if (kDebugMode) {
         print('⚠️ AppProvider: Routes endpoint not found (404)');
       }
@@ -424,7 +424,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       if (kDebugMode) {
         print('⚠️ AppProvider: Buses endpoint not found (404)');
       }
@@ -462,7 +462,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       if (kDebugMode) {
         print('⚠️ AppProvider: Students endpoint not found (404)');
       }
@@ -558,7 +558,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _apiStudents = await _studentService.getAllStudents();
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       _apiStudents = [];
       notifyListeners();
@@ -579,7 +579,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       _apiStudents = await _studentService.getGuardianStudents();
       notifyListeners();
-    } on api.NotFoundException catch (e) {
+    } on api.NotFoundException {
       // Endpoint not available - show empty list
       _apiStudents = [];
       notifyListeners();

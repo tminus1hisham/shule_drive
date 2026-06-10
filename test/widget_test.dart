@@ -6,21 +6,13 @@ import 'package:shule_drive/providers/auth_provider.dart';
 import 'package:shule_drive/widgets/route_guard.dart';
 
 class _FakeAuthProvider extends AuthProvider {
-  _FakeAuthProvider({
-    required this.authenticated,
-    required this.role,
-    this.loading = false,
-  });
+  _FakeAuthProvider({required this.authenticated, required this.role});
 
   final bool authenticated;
-  final bool loading;
   final UserRole role;
 
   @override
   bool get isAuthenticated => authenticated;
-
-  @override
-  bool get isLoading => loading;
 
   @override
   UserRole get userRole => role;
@@ -41,10 +33,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
-        value: _FakeAuthProvider(
-          authenticated: true,
-          role: UserRole.driver,
-        ),
+        value: _FakeAuthProvider(authenticated: true, role: UserRole.driver),
         child: const MaterialApp(
           home: RouteGuard(
             allowedRoles: [UserRole.driver],
@@ -62,10 +51,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
-        value: _FakeAuthProvider(
-          authenticated: true,
-          role: UserRole.guardian,
-        ),
+        value: _FakeAuthProvider(authenticated: true, role: UserRole.guardian),
         child: const MaterialApp(
           home: RouteGuard(
             allowedRoles: [UserRole.driver],

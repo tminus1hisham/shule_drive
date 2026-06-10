@@ -55,3 +55,4 @@ app.*.map.json
 *.keystore
 key.properties
 /android/key.properties
+.github/workflows/ci.yml

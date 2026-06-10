@@ -12,14 +12,20 @@ void main() {
 
     test('parses defensive API shapes', () {
       final picked = StudentPickup.fromJson({
+        'id': 777,
         'studentId': 42,
         'fullname': 'Amina Otieno',
         'isStudentPicked': true,
+        'latitude': -1.2921,
+        'longitude': 36.8219,
       });
 
       expect(picked.id, '42');
+      expect(picked.tripStudentId, '777');
       expect(picked.name, 'Amina Otieno');
       expect(picked.status, 'picked');
+      expect(picked.latitude, -1.2921);
+      expect(picked.longitude, 36.8219);
 
       final dropped = StudentPickup.fromJson({
         'studentId': 42,
@@ -72,6 +78,40 @@ void main() {
       expect(trip.students.single.status, 'pending');
       expect(updated.students.single.status, 'picked');
       expect(updated.pickedCount, 1);
+    });
+
+    test('builds api.md pick/drop all payload', () {
+      final payload = TripService.buildPickDropAllBody(
+        uniqueTripIdentity: 'trip-123',
+        latitude: -1.2921,
+        longitude: 36.8219,
+        isDroppingAll: false,
+        updatedAt: DateTime.utc(2026, 6, 9, 10, 30),
+      );
+
+      expect(payload, {
+        'uniqueTripIdentity': 'trip-123',
+        'latitude': -1.2921,
+        'longitude': 36.8219,
+        'isDroppingAll': false,
+        'updatedAt': '2026-06-09T10:30:00.000Z',
+      });
+    });
+
+    test('builds api.md student not picked payload', () {
+      final payload = TripService.buildStudentNotPickedBody(
+        tripUniqueIdentity: 'trip-123',
+        studentId: 42,
+        reason: 'Absent',
+        updatedAt: DateTime.utc(2026, 6, 9, 10, 30),
+      );
+
+      expect(payload, {
+        'tripUniqueIdentity': 'trip-123',
+        'studentId': 42,
+        'reason': 'Absent',
+        'updatedAt': '2026-06-09T10:30:00.000Z',
+      });
     });
   });
 }

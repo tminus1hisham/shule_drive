@@ -5,6 +5,7 @@ import '../api/api.dart' as api;
 import '../mqtt_client.dart';
 import '../services/trip_history_service.dart';
 import '../utils/notification_helper.dart';
+import '../utils/student_trip_logic.dart';
 
 /// Trip States
 enum TripState { upcoming, ongoing, completed, cancelled }
@@ -116,16 +117,39 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  bool _guardianPhoneMatches(String? studentPhone, String guardianPhone) {
+    final studentDigits = normalizeGuardianPhone(studentPhone);
+    final guardianDigits = normalizeGuardianPhone(guardianPhone);
+
+    return studentDigits.isNotEmpty && studentDigits == guardianDigits;
+  }
+
+  api.Trip _filterTripForGuardian(api.Trip trip, String guardianPhone) {
+    final students = trip.students
+        .where((student) => _guardianPhoneMatches(student.parentPhone, guardianPhone))
+        .toList();
+
+    return trip.copyWith(students: students);
+  }
+
   api.Trip _withStudentStatus({
     required api.Trip trip,
     required String studentId,
     required String status,
     String? notes,
+    double? latitude,
+    double? longitude,
   }) {
     final normalizedStatus = api.StudentPickup.normalizeStatus(status);
     final now = DateTime.now();
     final students = trip.students.map((student) {
       if (student.id != studentId) return student;
+
+      final shouldSavePickupLocation =
+          normalizedStatus == 'picked' &&
+          latitude != null &&
+          longitude != null &&
+          !student.hasSavedHomeDestination;
 
       return student.copyWith(
         status: normalizedStatus,
@@ -136,6 +160,20 @@ class TripProvider extends ChangeNotifier {
             ? now
             : student.dropoffTime,
         notes: notes ?? student.notes,
+        latitude: shouldSavePickupLocation ? latitude : student.latitude,
+        longitude: shouldSavePickupLocation ? longitude : student.longitude,
+        pickedLatitude: shouldSavePickupLocation
+            ? latitude
+            : student.pickedLatitude,
+        pickedLongitude: shouldSavePickupLocation
+            ? longitude
+            : student.pickedLongitude,
+        droppedLatitude: normalizedStatus == 'dropped' && latitude != null
+            ? latitude
+            : student.droppedLatitude,
+        droppedLongitude: normalizedStatus == 'dropped' && longitude != null
+            ? longitude
+            : student.droppedLongitude,
       );
     }).toList();
 
@@ -191,6 +229,11 @@ class TripProvider extends ChangeNotifier {
       _activeTrip = await _tripService.getActiveTrip(
         guardianPhone: guardianPhone,
       );
+      if (_activeTrip != null &&
+          guardianPhone != null &&
+          guardianPhone.isNotEmpty) {
+        _activeTrip = _filterTripForGuardian(_activeTrip!, guardianPhone);
+      }
       notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);
@@ -330,6 +373,7 @@ class TripProvider extends ChangeNotifier {
     final originalStudents = _activeTrip?.students ?? [];
     final originalRouteName = _activeTrip?.routeName ?? 'Trip';
     final originalVehicleId = _activeTrip?.vehicleId ?? '';
+    final originalVehicleNumber = _activeTrip?.vehicleNumber;
     final originalStartTime = _activeTrip?.startTime ?? DateTime.now();
 
     try {
@@ -352,11 +396,11 @@ class TripProvider extends ChangeNotifier {
           routeId: endedTrip.routeId,
           startTime: endedTrip.startTime,
           endTime: endedTrip.endTime ?? DateTime.now(),
-          status: 'completed', // Force completed status
+          status: 'completed',
           vehicleId: endedTrip.vehicleId.isNotEmpty
               ? endedTrip.vehicleId
               : originalVehicleId,
-          vehicleNumber: endedTrip.vehicleNumber,
+          vehicleNumber: endedTrip.vehicleNumber ?? originalVehicleNumber,
           students: originalStudents,
           stops: endedTrip.stops,
           distance: endedTrip.distance,
@@ -375,7 +419,7 @@ class TripProvider extends ChangeNotifier {
             endTime: endedTrip.endTime ?? DateTime.now(),
             status: 'completed',
             vehicleId: endedTrip.vehicleId,
-            vehicleNumber: endedTrip.vehicleNumber,
+            vehicleNumber: endedTrip.vehicleNumber ?? originalVehicleNumber,
             students: endedTrip.students,
             stops: endedTrip.stops,
             distance: endedTrip.distance,
@@ -409,6 +453,7 @@ class TripProvider extends ChangeNotifier {
           endTime: DateTime.now(),
           status: 'completed',
           vehicleId: originalVehicleId,
+          vehicleNumber: originalVehicleNumber,
           students: originalStudents,
           stops: [],
         );
@@ -520,6 +565,8 @@ class TripProvider extends ChangeNotifier {
     required String studentId,
     required String status,
     String? notes,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final normalizedStatus = api.StudentPickup.normalizeStatus(status);
@@ -542,6 +589,8 @@ class TripProvider extends ChangeNotifier {
         studentId: studentId,
         status: normalizedStatus,
         notes: notes,
+        latitude: latitude,
+        longitude: longitude,
       );
 
       if (existingTrip != null) {
@@ -550,6 +599,8 @@ class TripProvider extends ChangeNotifier {
           studentId: studentId,
           status: normalizedStatus,
           notes: notes,
+          latitude: latitude,
+          longitude: longitude,
         );
         _replaceTrip(updatedTrip);
         notifyListeners();
@@ -582,9 +633,17 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// Pick all students in a trip
-  Future<bool> pickAllStudents(String tripId) async {
+  Future<bool> pickAllStudents(
+    String tripId, {
+    double latitude = 0,
+    double longitude = 0,
+  }) async {
     try {
-      await _tripService.pickAllStudents(tripId);
+      await _tripService.pickAllStudents(
+        tripId,
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       // Update local state
       final trip = _findTrip(tripId);
@@ -610,9 +669,17 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// Drop all students in a trip
-  Future<bool> dropAllStudents(String tripId) async {
+  Future<bool> dropAllStudents(
+    String tripId, {
+    double latitude = 0,
+    double longitude = 0,
+  }) async {
     try {
-      await _tripService.dropAllStudents(tripId);
+      await _tripService.dropAllStudents(
+        tripId,
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       // Update local state
       final trip = _findTrip(tripId);

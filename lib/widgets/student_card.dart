@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/student.dart';
 
 /// Modern Student Card with enhanced styling and status indications
-/// 
+///
 /// Features:
 /// - Premium avatar with status ring
 /// - Animated status badge
@@ -40,19 +40,6 @@ class StudentCard extends StatelessWidget {
         return const Color(0xFF607D8B);
       case StudentStatus.dropped:
         return const Color(0xFF2196F3);
-    }
-  }
-
-  Color get _statusLightColor {
-    switch (student.status) {
-      case StudentStatus.picked:
-        return const Color(0xFFE8F5E9);
-      case StudentStatus.absent:
-        return const Color(0xFFFFF3E0);
-      case StudentStatus.pending:
-        return const Color(0xFFECEFF1);
-      case StudentStatus.dropped:
-        return const Color(0xFFE3F2FD);
     }
   }
 
@@ -135,11 +122,13 @@ class StudentCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                              color: isDarkMode
+                                  ? Colors.white
+                                  : const Color(0xFF1A1A1A),
                             ),
                           ),
                           const SizedBox(height: 6),
-                          
+
                           // Status Badge
                           AnimatedContainer(
                             duration: const Duration(milliseconds: 300),
@@ -153,7 +142,9 @@ class StudentCard extends StatelessWidget {
                               ),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: _statusColor.withValues(alpha: 0.2 * 255),
+                                color: _statusColor.withValues(
+                                  alpha: 0.2 * 255,
+                                ),
                               ),
                             ),
                             child: Row(
@@ -195,13 +186,19 @@ class StudentCard extends StatelessWidget {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                const Color(0xFF6B9B5B).withValues(alpha: 0.15 * 255),
-                                const Color(0xFF6B9B5B).withValues(alpha: 0.05 * 255),
+                                const Color(
+                                  0xFF6B9B5B,
+                                ).withValues(alpha: 0.15 * 255),
+                                const Color(
+                                  0xFF6B9B5B,
+                                ).withValues(alpha: 0.05 * 255),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: const Color(0xFF6B9B5B).withValues(alpha: 0.2 * 255),
+                              color: const Color(
+                                0xFF6B9B5B,
+                              ).withValues(alpha: 0.2 * 255),
                             ),
                           ),
                           child: const Icon(
@@ -251,7 +248,8 @@ class StudentCard extends StatelessWidget {
                     ],
                   ),
                 ),
-              ] else if (showActions && student.status == StudentStatus.picked) ...[
+              ] else if (showActions &&
+                  student.status == StudentStatus.picked) ...[
                 Divider(
                   height: 1,
                   indent: 16,
@@ -273,7 +271,9 @@ class StudentCard extends StatelessWidget {
                       ),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFF6B9B5B).withValues(alpha: 0.2 * 255),
+                        color: const Color(
+                          0xFF6B9B5B,
+                        ).withValues(alpha: 0.2 * 255),
                       ),
                     ),
                     child: Row(
@@ -282,7 +282,9 @@ class StudentCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B).withValues(alpha: 0.2 * 255),
+                            color: const Color(
+                              0xFF6B9B5B,
+                            ).withValues(alpha: 0.2 * 255),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -360,7 +362,7 @@ class StudentCard extends StatelessWidget {
 
   Widget _buildAvatarContent() {
     final avatarUrl = student.avatar;
-    
+
     // Check if it's a valid network URL
     if (avatarUrl.isNotEmpty &&
         (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
@@ -416,9 +418,7 @@ class StudentCard extends StatelessWidget {
               : null,
           color: isPrimary ? null : color.withValues(alpha: 0.08 * 255),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: color.withValues(alpha: 0.25 * 255),
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.25 * 255)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

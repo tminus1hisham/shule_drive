@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
@@ -7,13 +6,11 @@ import '../models/chat_conversation.dart';
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import '../services/secure_token_storage.dart';
-import '../services/local_database_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
   final ApiClient _apiClient = ApiClient();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
-  final LocalDatabaseService _localDb = LocalDatabaseService();
 
   // Messages for current chat - sorted by time ascending (oldest first)
   List<ChatMessage> _messages = [];
@@ -470,18 +467,4 @@ class ChatProvider extends ChangeNotifier {
     _chatService.dispose();
     super.dispose();
   }
-}
-
-// ============================================================================
-// MOCK DATA (for testing)
-// ============================================================================
-
-bool _useMockData = false;
-
-List<ChatConversation> _getMockConversations() {
-  return [];
-}
-
-List<ChatUser> _getMockUsers() {
-  return [];
 }

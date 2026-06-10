@@ -31,14 +31,14 @@ class BufferManager {
     Duration? expiration,
   }) async {
     await init();
-    
+
     final timestamp = DateTime.now();
     final expiry = timestamp.add(expiration ?? defaultCacheDuration);
-    
+
     // Save to memory cache
     _memoryCache[key] = data;
     _cacheTimestamps[key] = expiry;
-    
+
     // Save to persistent storage for primitive types
     if (data is String) {
       await _prefs?.setString('buffer_$key', data);
@@ -53,7 +53,7 @@ class BufferManager {
       await _prefs?.setString('buffer_$key', jsonEncode(data));
       await _prefs?.setString('buffer_${key}_expiry', expiry.toIso8601String());
     }
-    
+
     if (kDebugMode) {
       debugPrint('BufferManager: Saved data for key: $key, expires: $expiry');
     }
@@ -65,7 +65,7 @@ class BufferManager {
     bool checkExpiry = true,
   }) async {
     await init();
-    
+
     // Check memory cache first
     if (_memoryCache.containsKey(key)) {
       if (checkExpiry) {
@@ -83,7 +83,7 @@ class BufferManager {
         return _memoryCache[key] as T?;
       }
     }
-    
+
     // Check persistent storage
     final expiryString = _prefs?.getString('buffer_${key}_expiry');
     if (expiryString != null) {
@@ -119,14 +119,16 @@ class BufferManager {
         } else {
           // For complex types (like List<Bus>), we can't deserialize from JSON
           // Return null to trigger API call or fallback
-          debugPrint('BufferManager: Cannot deserialize complex type $T from JSON for key: $key');
+          debugPrint(
+            'BufferManager: Cannot deserialize complex type $T from JSON for key: $key',
+          );
         }
       } else {
         // Expired, clear from storage
         await clearBuffer(key);
       }
     }
-    
+
     return null;
   }
 
@@ -150,7 +152,7 @@ class BufferManager {
     await init();
     _memoryCache.clear();
     _cacheTimestamps.clear();
-    
+
     // Clear all buffer keys from prefs
     final keys = _prefs?.getKeys().where((k) => k.startsWith('buffer_')) ?? [];
     for (final key in keys) {
@@ -161,14 +163,20 @@ class BufferManager {
   /// Clear buffers for a specific category (e.g., 'trips', 'students')
   Future<void> clearCategory(String category) async {
     await init();
-    final keysToRemove = _memoryCache.keys.where((k) => k.startsWith(category)).toList();
+    final keysToRemove = _memoryCache.keys
+        .where((k) => k.startsWith(category))
+        .toList();
     for (final key in keysToRemove) {
       _memoryCache.remove(key);
       _cacheTimestamps.remove(key);
     }
-    
-    final storageKeys = _prefs?.getKeys().where((k) => 
-        k.startsWith('buffer_$category')).toList() ?? [];
+
+    final storageKeys =
+        _prefs
+            ?.getKeys()
+            .where((k) => k.startsWith('buffer_$category'))
+            .toList() ??
+        [];
     for (final key in storageKeys) {
       await _prefs?.remove(key);
     }
@@ -187,7 +195,7 @@ class BufferManager {
     try {
       // Try API call
       final result = await apiCall();
-      
+
       // Save successful result to buffer
       if (saveOnSuccess) {
         await saveBuffer<T>(
@@ -196,14 +204,16 @@ class BufferManager {
           expiration: cacheDuration ?? defaultCacheDuration,
         );
       }
-      
+
       return result;
     } catch (e) {
       // API call failed, try to get from buffer
       if (kDebugMode) {
-        debugPrint('BufferManager: API call failed for $bufferKey, trying buffer: $e');
+        debugPrint(
+          'BufferManager: API call failed for $bufferKey, trying buffer: $e',
+        );
       }
-      
+
       final buffer = await getBuffer<T>(key: bufferKey);
       if (buffer != null) {
         if (kDebugMode) {
@@ -212,10 +222,12 @@ class BufferManager {
         onFallback?.call();
         return buffer;
       }
-      
+
       // No buffer available, return fallback data
       if (kDebugMode) {
-        debugPrint('BufferManager: No buffer available for $bufferKey, using fallback');
+        debugPrint(
+          'BufferManager: No buffer available for $bufferKey, using fallback',
+        );
       }
       onFallback?.call();
       return fallbackData;
@@ -231,7 +243,7 @@ class BufferManager {
   }) async {
     try {
       final result = await apiCall();
-      
+
       if (saveOnSuccess) {
         await saveBuffer<T>(
           key: bufferKey,
@@ -239,7 +251,7 @@ class BufferManager {
           expiration: cacheDuration ?? defaultCacheDuration,
         );
       }
-      
+
       return result;
     } catch (e) {
       final buffer = await getBuffer<T>(key: bufferKey);
@@ -269,10 +281,13 @@ class BufferManager {
   /// Get buffer info for debugging
   Future<Map<String, dynamic>> getBufferInfo() async {
     await init();
-    
+
     return {
       'memoryCacheKeys': _memoryCache.keys.toList(),
-      'persistentCacheKeys': _prefs?.getKeys().where((k) => k.startsWith('buffer_')).toList(),
+      'persistentCacheKeys': _prefs
+          ?.getKeys()
+          .where((k) => k.startsWith('buffer_'))
+          .toList(),
     };
   }
 
@@ -287,7 +302,7 @@ class BufferManager {
   }) async {
     int attempt = 0;
     Duration currentDelay = initialDelay;
-    
+
     while (attempt < maxRetries) {
       attempt++;
       try {
@@ -295,24 +310,28 @@ class BufferManager {
           debugPrint('Retry attempt $attempt/$maxRetries for $operationName');
         }
         return await apiCall();
-      } on ServerUnavailableException catch (e) {
+      } on ServerUnavailableException {
         if (attempt >= maxRetries) {
           if (kDebugMode) {
-            debugPrint('Max retries ($maxRetries) reached for $operationName. Giving up.');
+            debugPrint(
+              'Max retries ($maxRetries) reached for $operationName. Giving up.',
+            );
           }
           rethrow;
         }
-        
+
         // Add jitter to avoid thundering herd
         final jitter = Duration(milliseconds: math.Random().nextInt(500));
         final waitTime = currentDelay + jitter;
-        
+
         if (kDebugMode) {
-          debugPrint('Server unavailable for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)');
+          debugPrint(
+            'Server unavailable for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)',
+          );
         }
-        
+
         await Future.delayed(waitTime);
-        
+
         // Exponential backoff with max cap
         currentDelay = Duration(
           milliseconds: math.min(
@@ -320,21 +339,25 @@ class BufferManager {
             maxDelay.inMilliseconds,
           ),
         );
-      } on TimeoutException catch (e) {
+      } on TimeoutException {
         if (attempt >= maxRetries) {
           if (kDebugMode) {
-            debugPrint('Max retries ($maxRetries) reached for timeout on $operationName. Giving up.');
+            debugPrint(
+              'Max retries ($maxRetries) reached for timeout on $operationName. Giving up.',
+            );
           }
           rethrow;
         }
-        
+
         final jitter = Duration(milliseconds: math.Random().nextInt(500));
         final waitTime = currentDelay + jitter;
-        
+
         if (kDebugMode) {
-          debugPrint('Request timeout for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)');
+          debugPrint(
+            'Request timeout for $operationName. Retrying in ${waitTime.inMilliseconds}ms... (attempt $attempt/$maxRetries)',
+          );
         }
-        
+
         await Future.delayed(waitTime);
         currentDelay = Duration(
           milliseconds: math.min(
@@ -344,7 +367,7 @@ class BufferManager {
         );
       }
     }
-    
+
     // Should never reach here
     throw ApiException(message: 'Unexpected error in retry logic');
   }
@@ -354,48 +377,52 @@ class BufferManager {
 class BufferKeys {
   // Auth
   static const String currentUser = 'auth/current_user';
-  
+
   // Trips
-  static String trips({int page = 1, int limit = 20}) => 
+  static String trips({int page = 1, int limit = 20}) =>
       'trips/list_page_${page}_$limit';
   static String tripDetails(String tripId) => 'trips/details_$tripId';
   static const String activeTrip = 'trips/active';
-  
+
   // Students
-  static String students({String? guardianId}) => 
+  static String students({String? guardianId}) =>
       guardianId != null ? 'students/guardian_$guardianId' : 'students/all';
-  static String studentDetails(String studentId) => 'students/details_$studentId';
-  
+  static String studentDetails(String studentId) =>
+      'students/details_$studentId';
+
   // Routes
   static const String routes = 'routes/all';
   static String routeDetails(String routeId) => 'routes/details_$routeId';
-  
+
   // Buses
   static const String buses = 'buses/all';
   static String busDetails(String busId) => 'buses/details_$busId';
-  
+
   // Notifications
   static const String notifications = 'notifications/all';
   static const String unreadNotificationsCount = 'notifications/unread_count';
-  
+
   // Chat
   static const String conversations = 'chat/conversations';
-  static String chatMessages(String conversationId) => 
+  static String chatMessages(String conversationId) =>
       'chat/messages_$conversationId';
-  
+
   // User
   static String userProfile(String userId) => 'users/profile_$userId';
   static String userChildren(String userId) => 'users/children_$userId';
-  
+
   // Guardians
-  static String guardians({String? companyOrgId}) => 
+  static String guardians({String? companyOrgId}) =>
       companyOrgId != null ? 'guardians/org_$companyOrgId' : 'guardians/all';
 }
 
 /// Extension methods for easy buffer access
 extension BufferManagerExtension on BufferManager {
   /// Get trips from buffer
-  Future<List<Map<String, dynamic>>?> getTripsBuffer({int page = 1, int limit = 20}) async {
+  Future<List<Map<String, dynamic>>?> getTripsBuffer({
+    int page = 1,
+    int limit = 20,
+  }) async {
     final buffer = await getBuffer<List<dynamic>>(
       key: BufferKeys.trips(page: page, limit: limit),
     );
@@ -404,7 +431,9 @@ extension BufferManagerExtension on BufferManager {
   }
 
   /// Get students from buffer
-  Future<List<Map<String, dynamic>>?> getStudentsBuffer({String? guardianId}) async {
+  Future<List<Map<String, dynamic>>?> getStudentsBuffer({
+    String? guardianId,
+  }) async {
     final buffer = await getBuffer<List<dynamic>>(
       key: BufferKeys.students(guardianId: guardianId),
     );
@@ -414,9 +443,7 @@ extension BufferManagerExtension on BufferManager {
 
   /// Get routes from buffer
   Future<List<Map<String, dynamic>>?> getRoutesBuffer() async {
-    final buffer = await getBuffer<List<dynamic>>(
-      key: BufferKeys.routes,
-    );
+    final buffer = await getBuffer<List<dynamic>>(key: BufferKeys.routes);
     if (buffer == null) return null;
     return buffer.cast<Map<String, dynamic>>();
   }

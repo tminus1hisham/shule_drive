@@ -119,34 +119,52 @@ class StudentService {
     String? name,
     String? className,
     String? schoolId,
+    String? schoolName,
     String? photo,
     String? pickupLocation,
     String? dropoffLocation,
     String? emergencyContact,
     String? emergencyPhone,
+    String? guardianPhoneNumber,
+    String? studentRegNumber,
+    String? transportOrg,
+    bool? isActive,
+    DateTime? createdAt,
     double? latitude,
     double? longitude,
   }) async {
     try {
       final body = <String, dynamic>{};
-      final current = await getStudentById(studentId);
+      Student? current;
+      try {
+        current = await getStudentById(studentId);
+      } catch (e) {
+        debugPrint(
+          'StudentService.updateStudent: using provided fields because lookup failed: $e',
+        );
+      }
       body['id'] = int.tryParse(studentId) ?? 0;
       body['fullname'] = name ?? current?.name ?? '';
       body['guardianPhoneNumber'] =
-          current?.guardianPhone ?? await _tokenStorage.getUserPhone() ?? '';
-      body['studentRegNumber'] = current?.studentRegNumber ?? '';
-      body['schoolname'] = schoolId ?? current?.schoolName ?? '';
-      body['transportOrg'] = current?.transportOrg ?? '';
+          guardianPhoneNumber ??
+          current?.guardianPhone ??
+          await _tokenStorage.getUserPhone() ??
+          '';
+      body['studentRegNumber'] =
+          studentRegNumber ?? current?.studentRegNumber ?? '';
+      body['schoolname'] = schoolName ?? schoolId ?? current?.schoolName ?? '';
+      body['transportOrg'] = transportOrg ?? current?.transportOrg ?? '';
       body['classname'] = className ?? current?.className ?? '';
       body['route'] = pickupLocation ?? current?.route ?? '';
       body['latitude'] = latitude ?? current?.latitude ?? 0;
       body['longitude'] = longitude ?? current?.longitude ?? 0;
       body['profileImage'] = photo ?? current?.photo ?? '';
       body['hasStudentPaid'] = false;
-      body['isStudentActive'] = current?.isActive ?? true;
+      body['isStudentActive'] = isActive ?? current?.isActive ?? true;
       body['isStudentDeleted'] = false;
       body['expirelyDate'] = DateTime.now().toUtc().toIso8601String();
       body['createdAt'] =
+          createdAt?.toUtc().toIso8601String() ??
           current?.createdAt.toUtc().toIso8601String() ??
           DateTime.now().toUtc().toIso8601String();
       body['updatedAt'] = DateTime.now().toUtc().toIso8601String();
@@ -190,6 +208,36 @@ class StudentService {
     } catch (e) {
       throw ApiException(message: e.toString());
     }
+  }
+
+  /// Save a student's home destination using api.md's full Students update body.
+  Future<Student> saveStudentHomeDestination({
+    required String studentId,
+    required String name,
+    required String guardianPhoneNumber,
+    required double latitude,
+    required double longitude,
+    String? studentRegNumber,
+    String? schoolName,
+    String? className,
+    String? route,
+    String? photo,
+    String? transportOrg,
+  }) {
+    return updateStudent(
+      studentId: studentId,
+      name: name,
+      guardianPhoneNumber: guardianPhoneNumber,
+      studentRegNumber: studentRegNumber,
+      schoolName: schoolName,
+      className: className,
+      pickupLocation: route,
+      photo: photo,
+      transportOrg: transportOrg,
+      latitude: latitude,
+      longitude: longitude,
+      isActive: true,
+    );
   }
 
   /// Delete student

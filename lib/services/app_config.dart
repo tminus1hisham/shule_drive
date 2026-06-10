@@ -1,9 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'secure_token_storage.dart';
 
 /// AppConfig - Centralized configuration management
-/// 
+///
 /// Priority order for configuration values:
 /// 1. dart-define (compile-time, highest priority) - for production builds
 /// 2. Secure Storage (runtime) - for tokens fetched from API
@@ -14,7 +13,7 @@ import 'secure_token_storage.dart';
 /// ```dart
 /// // Initialize in main.dart before app starts
 /// await AppConfig().initialize();
-/// 
+///
 /// // Access anywhere
 /// final token = AppConfig().mapboxAccessToken;
 /// ```
@@ -22,14 +21,6 @@ class AppConfig {
   static final AppConfig _instance = AppConfig._internal();
   factory AppConfig() => _instance;
   AppConfig._internal();
-
-  // Secure storage for sensitive tokens
-  final SecureTokenStorage _secureStorage = SecureTokenStorage();
-
-  // Configuration keys
-  static const String _mapboxTokenKey = 'mapbox_access_token';
-  static const String _apiBaseUrlKey = 'api_base_url';
-  static const String _environmentKey = 'environment';
 
   // Cached values
   String? _cachedMapboxToken;
@@ -70,7 +61,9 @@ class AppConfig {
       print('[AppConfig] Initialized');
       print('[AppConfig] Environment: $_cachedEnvironment');
       print('[AppConfig] API Base URL: $_cachedApiBaseUrl');
-      print('[AppConfig] Mapbox token available: ${_cachedMapboxToken != null && _cachedMapboxToken!.isNotEmpty}');
+      print(
+        '[AppConfig] Mapbox token available: ${_cachedMapboxToken != null && _cachedMapboxToken!.isNotEmpty}',
+      );
     }
   }
 
@@ -78,7 +71,7 @@ class AppConfig {
   /// Priority: dart-define > secure storage > .env file
   String get mapboxAccessToken {
     if (_cachedMapboxToken != null) return _cachedMapboxToken!;
-    
+
     // This should not happen if initialize() was called
     // But we provide a fallback for safety
     _cachedMapboxToken = _getMapboxToken();
@@ -89,14 +82,20 @@ class AppConfig {
     // Priority 1: dart-define MAPBOX_ACCESS_TOKEN (new standard)
     const dartDefineToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
     if (dartDefineToken.isNotEmpty) {
-      if (kDebugMode) print('[AppConfig] Using Mapbox token from dart-define (MAPBOX_ACCESS_TOKEN)');
+      if (kDebugMode)
+        print(
+          '[AppConfig] Using Mapbox token from dart-define (MAPBOX_ACCESS_TOKEN)',
+        );
       return dartDefineToken;
     }
 
     // Priority 1b: dart-define ACCESS_TOKEN (legacy support)
     const legacyToken = String.fromEnvironment('ACCESS_TOKEN');
     if (legacyToken.isNotEmpty) {
-      if (kDebugMode) print('[AppConfig] Using Mapbox token from dart-define (ACCESS_TOKEN - legacy)');
+      if (kDebugMode)
+        print(
+          '[AppConfig] Using Mapbox token from dart-define (ACCESS_TOKEN - legacy)',
+        );
       return legacyToken;
     }
 
@@ -115,7 +114,10 @@ class AppConfig {
     // Priority 3b: .env file ACCESS_TOKEN (legacy)
     final legacyEnvToken = dotenv.env['ACCESS_TOKEN'];
     if (legacyEnvToken != null && legacyEnvToken.isNotEmpty) {
-      if (kDebugMode) print('[AppConfig] Using Mapbox token from .env file (ACCESS_TOKEN - legacy)');
+      if (kDebugMode)
+        print(
+          '[AppConfig] Using Mapbox token from .env file (ACCESS_TOKEN - legacy)',
+        );
       return legacyEnvToken;
     }
 
@@ -150,8 +152,8 @@ class AppConfig {
     }
 
     // Priority 3: Default based on environment
-    return isProduction 
-        ? 'https://api.shuledrive.com' 
+    return isProduction
+        ? 'https://api.shuledrive.com'
         : 'https://staging-api.shuledrive.com';
   }
 
@@ -236,11 +238,13 @@ class AppConfig {
   /// Print current configuration (for debugging)
   void printConfig() {
     if (!kDebugMode) return;
-    
+
     print('=== AppConfig ===');
     print('Environment: $environment');
     print('API Base URL: $apiBaseUrl');
-    print('Mapbox Token: ${mapboxAccessToken.isNotEmpty ? "[SET]" : "[NOT SET]"}');
+    print(
+      'Mapbox Token: ${mapboxAccessToken.isNotEmpty ? "[SET]" : "[NOT SET]"}',
+    );
     print('=================');
   }
 }
