@@ -1143,8 +1143,7 @@ class TripService {
 
   /// Body for POST /api/trips/pick/drop/student ([PickSingleStudentModel]).
   ///
-  /// `action` mirrors the trailing path segment of the bulk endpoints
-  /// (`pick` / `drop`).
+  /// `action` is `picked` / `dropped`.
   @visibleForTesting
   static Map<String, dynamic> buildPickSingleStudentBody({
     required String uniqueTripIdentity,
@@ -1160,7 +1159,7 @@ class TripService {
       'studentReg': studentReg,
       'guardianPhoneNumber': guardianPhoneNumber,
       'numberPlate': numberPlate,
-      'action': isDropping ? 'drop' : 'pick',
+      'action': isDropping ? 'dropped' : 'picked',
       'latitude': latitude,
       'longitude': longitude,
     };

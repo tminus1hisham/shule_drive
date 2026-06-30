@@ -130,7 +130,7 @@ void main() {
         'studentReg': 'REG-001',
         'guardianPhoneNumber': '+254700000000',
         'numberPlate': 'KDA 123A',
-        'action': 'pick',
+        'action': 'picked',
         'latitude': -1.2921,
         'longitude': 36.8219,
       });
@@ -145,7 +145,7 @@ void main() {
         isDropping: true,
       );
 
-      expect(payload['action'], 'drop');
+      expect(payload['action'], 'dropped');
       expect(payload['latitude'], 0);
       expect(payload['longitude'], 0);
     });
