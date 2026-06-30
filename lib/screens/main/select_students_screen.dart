@@ -596,6 +596,31 @@ class _SelectStudentsScreenState extends State<SelectStudentsScreen> {
       final tripProvider = context.read<TripProvider>();
       final authProvider = context.read<AuthProvider>();
 
+      // Refuse to start a new trip while one is still running.
+      // Re-check with the server to catch trips left active from a
+      // previous session or another device.
+      await tripProvider.fetchActiveTrip(
+        driverId: authProvider.currentUser?.id,
+      );
+      if (!mounted) return;
+      final existingTrip = tripProvider.activeTrip;
+      if (existingTrip != null && existingTrip.isActive) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'A trip is already in progress. End it before starting a new one.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.pushReplacementNamed(
+          context,
+          '/osm-tracking',
+          arguments: {'tripId': existingTrip.id, 'preloadedData': null},
+        );
+        return;
+      }
+
       // Get student IDs from master trip
       final studentIds = _masterTripStudents
           .map((s) => s.studentId.toString())

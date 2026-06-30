@@ -3904,6 +3904,39 @@
           }
         }
       }
+    },
+    "/api/trips/pick/drop/student": {
+      "post": {
+        "tags": [
+          "Trips"
+        ],
+        "operationId": "Trips_PickDropSingleStudent",
+        "consumes": [
+          "application/json",
+          "text/json",
+          "application/*+json"
+        ],
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PickSingleStudentModel"
+            },
+            "x-nullable": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-nullable": true,
+            "description": "",
+            "schema": {
+              "type": "file"
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -5420,6 +5453,48 @@
           "type": "string",
           "format": "date-time",
           "minLength": 1
+        }
+      }
+    },
+    "PickSingleStudentModel": {
+      "type": "object",
+      "required": [
+        "uniqueTripIdentity",
+        "studentReg",
+        "guardianPhoneNumber",
+        "numberPlate",
+        "action",
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "uniqueTripIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "studentReg": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guardianPhoneNumber": {
+          "type": "string",
+          "minLength": 1
+        },
+        "numberPlate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
         }
       }
     }

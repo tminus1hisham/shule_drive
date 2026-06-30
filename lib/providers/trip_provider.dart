@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -203,6 +204,55 @@ class TripProvider extends ChangeNotifier {
     return trip.copyWith(students: students);
   }
 
+  /// Rank used to decide which student status is further along when merging
+  /// fetched trip data with locally recorded statuses.
+  static int _statusRank(String status) {
+    switch (api.StudentPickup.normalizeStatus(status)) {
+      case 'absent':
+        return 1;
+      case 'picked':
+        return 2;
+      case 'dropped':
+        return 3;
+      default:
+        return 0; // pending
+    }
+  }
+
+  /// The driver has no working server read for the active trip (the endpoint
+  /// requires guardianPhone) and there is no per-student pick API, so fetched
+  /// or history-restored data can carry statuses older than what this
+  /// provider already recorded. Keep the further-along status per student
+  /// instead of downgrading.
+  @visibleForTesting
+  static api.Trip mergeWithLocalStatuses(api.Trip fetched, api.Trip local) {
+    if (fetched.id != local.id) return fetched;
+
+    if (fetched.students.isEmpty && local.students.isNotEmpty) {
+      return fetched.copyWith(students: local.students);
+    }
+
+    final localById = {for (final s in local.students) s.id: s};
+    final students = fetched.students.map((student) {
+      final localStudent = localById[student.id];
+      if (localStudent == null) return student;
+      return _statusRank(localStudent.status) > _statusRank(student.status)
+          ? localStudent
+          : student;
+    }).toList();
+
+    return fetched.copyWith(students: students);
+  }
+
+  /// Write an updated trip back to the active-trip buffer and local trip
+  /// history so fetch fallbacks don't resurrect pre-update statuses.
+  void _persistTripState(api.Trip trip) {
+    if (_activeTrip?.id == trip.id) {
+      unawaited(_tripService.cacheActiveTrip(trip));
+    }
+    unawaited(TripHistoryService().updateTripInHistory(trip));
+  }
+
   /// Fetch all trips (driver view)
   Future<void> fetchTrips({int page = 1, int limit = 20}) async {
     _setLoading(true);
@@ -221,19 +271,33 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// Fetch active trip
-  /// For guardians, pass their phone number to get their active trip
-  Future<void> fetchActiveTrip({String? guardianPhone}) async {
+  /// For guardians, pass their phone number to get their active trip.
+  /// For drivers, pass [driverId] so a running trip can be restored from
+  /// local trip history when the API/buffer have no record of it
+  /// (e.g. after the app was killed and reopened).
+  Future<void> fetchActiveTrip({String? guardianPhone, String? driverId}) async {
     // Use microtask to avoid calling notifyListeners during build
     await Future.microtask(() => _setLoading(true));
     try {
-      _activeTrip = await _tripService.getActiveTrip(
+      final previousTrip = _activeTrip;
+      var fetched = await _tripService.getActiveTrip(
         guardianPhone: guardianPhone,
       );
-      if (_activeTrip != null &&
+      if (fetched != null &&
           guardianPhone != null &&
           guardianPhone.isNotEmpty) {
-        _activeTrip = _filterTripForGuardian(_activeTrip!, guardianPhone);
+        fetched = _filterTripForGuardian(fetched, guardianPhone);
       }
+      if (fetched == null && driverId != null && driverId.isNotEmpty) {
+        fetched = await _restoreActiveTripFromHistory(driverId);
+        if (fetched != null) {
+          _activeTripUniqueId = fetched.id;
+        }
+      }
+      if (fetched != null && previousTrip != null) {
+        fetched = mergeWithLocalStatuses(fetched, previousTrip);
+      }
+      _activeTrip = fetched;
       notifyListeners();
     } on api.ApiException catch (e) {
       _setError(e.message);
@@ -242,6 +306,32 @@ class TripProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  /// How long a locally recorded trip stays restorable as "active".
+  /// Guards against resurrecting stale trips that were never ended cleanly.
+  static const Duration _maxRestorableTripAge = Duration(hours: 12);
+
+  /// Restore the driver's running trip from local trip history.
+  /// History entries are saved as 'active' when a trip starts and updated to
+  /// 'completed' when it ends, so the newest active entry is the running trip.
+  Future<api.Trip?> _restoreActiveTripFromHistory(String driverId) async {
+    try {
+      final history = await TripHistoryService().getTripHistory(driverId);
+      for (final entry in history) {
+        final trip = entry.trip;
+        if (!trip.isActive) continue;
+        if (DateTime.now().difference(trip.startTime) >
+            _maxRestorableTripAge) {
+          continue;
+        }
+        debugPrint('🔄 Restored active trip from local history: ${trip.id}');
+        return trip;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to restore active trip from history: $e');
+    }
+    return null;
   }
 
   /// Start a trip (driver only)
@@ -259,6 +349,14 @@ class TripProvider extends ChangeNotifier {
     String? attendantPhoneNumber,
     String? attendantProfileImage,
   }) async {
+    // Hard guard: never allow two trips at once
+    if (_activeTrip != null && _activeTrip!.isActive) {
+      _setError(
+        'A trip is already in progress. End the current trip before starting a new one.',
+      );
+      return null;
+    }
+
     _setLoading(true);
     _clearError();
 
@@ -591,6 +689,10 @@ class TripProvider extends ChangeNotifier {
         notes: notes,
         latitude: latitude,
         longitude: longitude,
+        // Required by the single-student pick/drop endpoint.
+        studentReg: existingStudent?.studentRegNumber,
+        guardianPhoneNumber: existingStudent?.parentPhone,
+        numberPlate: existingTrip?.vehicleNumber ?? existingTrip?.vehicleId,
       );
 
       if (existingTrip != null) {
@@ -604,6 +706,7 @@ class TripProvider extends ChangeNotifier {
         );
         _replaceTrip(updatedTrip);
         notifyListeners();
+        _persistTripState(updatedTrip);
       }
 
       // Show notification based on status
@@ -648,14 +751,14 @@ class TripProvider extends ChangeNotifier {
       // Update local state
       final trip = _findTrip(tripId);
       if (trip != null) {
-        _replaceTrip(
-          _withBulkStudentStatus(
-            trip: trip,
-            fromStatus: 'pending',
-            toStatus: 'picked',
-          ),
+        final updatedTrip = _withBulkStudentStatus(
+          trip: trip,
+          fromStatus: 'pending',
+          toStatus: 'picked',
         );
+        _replaceTrip(updatedTrip);
         notifyListeners();
+        _persistTripState(updatedTrip);
       }
 
       return true;
@@ -684,14 +787,14 @@ class TripProvider extends ChangeNotifier {
       // Update local state
       final trip = _findTrip(tripId);
       if (trip != null) {
-        _replaceTrip(
-          _withBulkStudentStatus(
-            trip: trip,
-            fromStatus: 'picked',
-            toStatus: 'dropped',
-          ),
+        final updatedTrip = _withBulkStudentStatus(
+          trip: trip,
+          fromStatus: 'picked',
+          toStatus: 'dropped',
         );
+        _replaceTrip(updatedTrip);
         notifyListeners();
+        _persistTripState(updatedTrip);
       }
 
       return true;

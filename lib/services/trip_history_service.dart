@@ -76,6 +76,57 @@ class TripHistoryService {
     }
   }
 
+  /// Update the active history entry for [trip] with fresh trip data, e.g.
+  /// after student pickup statuses change mid-trip. Without this, restoring
+  /// the active trip from history resurrects the statuses saved at trip
+  /// start. Scans all drivers' histories since callers don't always know the
+  /// driver ID; completed entries are left untouched.
+  Future<void> updateTripInHistory(Trip trip) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tripKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith(_tripsKey))
+          .toList();
+
+      for (final key in tripKeys) {
+        final tripsString = prefs.getString(key);
+        if (tripsString == null || tripsString.isEmpty) continue;
+
+        final tripsJson = jsonDecode(tripsString) as List;
+        var updated = false;
+        for (var i = 0; i < tripsJson.length; i++) {
+          try {
+            final entry = TripHistory.fromJson(tripsJson[i]);
+            if (entry.trip.id != trip.id || entry.trip.isCompleted) continue;
+            tripsJson[i] = TripHistory(
+              trip: trip,
+              driverId: entry.driverId,
+              driverName: entry.driverName,
+              attendantName: entry.attendantName,
+              loggedAt: entry.loggedAt,
+            ).toJson();
+            updated = true;
+          } catch (_) {
+            // Skip unparseable entries, same as getTripHistory
+          }
+        }
+
+        if (updated) {
+          await prefs.setString(key, jsonEncode(tripsJson));
+          if (kDebugMode) {
+            print('💾 Updated active trip in history: ${trip.id}');
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Failed to update trip in history: $e');
+      }
+    }
+  }
+
   /// Get trip history for a driver
   Future<List<TripHistory>> getTripHistory(String driverId) async {
     try {

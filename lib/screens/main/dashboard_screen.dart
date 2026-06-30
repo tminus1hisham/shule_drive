@@ -62,8 +62,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
 
-    // Check if we arrived from trip end
+    _startPeriodicRefresh();
+    // Subscribe to app lifecycle
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Check if we arrived from trip end
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is Map && args['fromTripEnd'] == true) {
         _fromTripEnd = true;
@@ -71,23 +75,33 @@ class _DashboardScreenState extends State<DashboardScreen>
           '📍 Dashboard: Arrived from trip end, skipping auto-redirect',
         );
       }
+      _initDashboard();
     });
+  }
 
-    _loadData();
-    _startPeriodicRefresh();
-    // Subscribe to app lifecycle
-    WidgetsBinding.instance.addObserver(this);
+  /// Initial dashboard flow: fetch the active trip first, and if the driver
+  /// has one running, resume it immediately on the live trip screen.
+  /// Only when there is no active trip do we check for scheduled master trips.
+  Future<void> _initDashboard() async {
+    await _loadData();
+    if (!mounted) return;
 
-    // Check for master trips if driver - with slight delay to ensure auth is ready
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _checkMasterTripsForDriver();
-          // Start upcoming trip checker
-          _startUpcomingTripChecker();
-        }
-      });
-    });
+    final authProvider = context.read<AuthProvider>();
+    final tripProvider = context.read<TripProvider>();
+    final activeTrip = tripProvider.activeTrip;
+
+    if (authProvider.isDriver && activeTrip != null && !_fromTripEnd) {
+      debugPrint('🚌 Active trip found on open, resuming: ${activeTrip.id}');
+      Navigator.pushNamed(
+        context,
+        '/osm-tracking',
+        arguments: {'tripId': activeTrip.id, 'preloadedData': null},
+      );
+      return;
+    }
+
+    _checkMasterTripsForDriver();
+    _startUpcomingTripChecker();
   }
 
   /// Check if driver has master trips and redirect accordingly
@@ -489,7 +503,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
       }
     } else if (authProvider.isDriver) {
-      await tripProvider.fetchActiveTrip();
+      await tripProvider.fetchActiveTrip(
+        driverId: authProvider.currentUser?.id,
+      );
     }
 
     // For drivers: start duration timer if active trip, load next scheduled trip
@@ -573,7 +589,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
       }
     } else if (authProvider.isDriver) {
-      await tripProvider.fetchActiveTrip();
+      await tripProvider.fetchActiveTrip(
+        driverId: authProvider.currentUser?.id,
+      );
     }
   }
 
@@ -672,6 +690,25 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  /// Navigate to the start-trip flow, but never while a trip is running.
+  /// If a trip is active, redirect to the live trip screen instead.
+  void _goToStartTrip() {
+    final activeTrip = context.read<TripProvider>().activeTrip;
+    if (activeTrip != null) {
+      AppSnackbar.info(
+        context,
+        'A trip is already in progress. End it before starting a new one.',
+      );
+      Navigator.pushNamed(
+        context,
+        '/osm-tracking',
+        arguments: {'tripId': activeTrip.id, 'preloadedData': null},
+      );
+      return;
+    }
+    Navigator.pushNamed(context, '/start-trip');
+  }
+
   void _handleNavigation(int index, bool isDriver) {
     switch (index) {
       case 0:
@@ -689,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         break;
       case 4:
         if (isDriver) {
-          Navigator.pushNamed(context, '/start-trip');
+          _goToStartTrip();
         }
         break;
     }
@@ -900,7 +937,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               label: 'Start Trip',
               icon: Icons.play_arrow_rounded,
               variant: AppButtonVariant.onBrand,
-              onPressed: () => Navigator.pushNamed(context, '/start-trip'),
+              onPressed: _goToStartTrip,
             ),
           ],
         ),
@@ -1360,7 +1397,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 label: 'Start Trip',
                 subtitle: 'Begin new journey',
                 color: context.colors.brand,
-                onTap: () => Navigator.pushNamed(context, '/start-trip'),
+                onTap: _goToStartTrip,
                 isDarkMode: isDarkMode,
                 isPrimary: true,
               ),

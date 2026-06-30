@@ -113,5 +113,41 @@ void main() {
         'updatedAt': '2026-06-09T10:30:00.000Z',
       });
     });
+
+    test('builds api.md single student pick payload', () {
+      final payload = TripService.buildPickSingleStudentBody(
+        uniqueTripIdentity: 'trip-123',
+        studentReg: 'REG-001',
+        guardianPhoneNumber: '+254700000000',
+        numberPlate: 'KDA 123A',
+        isDropping: false,
+        latitude: -1.2921,
+        longitude: 36.8219,
+      );
+
+      expect(payload, {
+        'uniqueTripIdentity': 'trip-123',
+        'studentReg': 'REG-001',
+        'guardianPhoneNumber': '+254700000000',
+        'numberPlate': 'KDA 123A',
+        'action': 'pick',
+        'latitude': -1.2921,
+        'longitude': 36.8219,
+      });
+    });
+
+    test('builds api.md single student drop payload', () {
+      final payload = TripService.buildPickSingleStudentBody(
+        uniqueTripIdentity: 'trip-123',
+        studentReg: 'REG-001',
+        guardianPhoneNumber: '+254700000000',
+        numberPlate: 'KDA 123A',
+        isDropping: true,
+      );
+
+      expect(payload['action'], 'drop');
+      expect(payload['latitude'], 0);
+      expect(payload['longitude'], 0);
+    });
   });
 }

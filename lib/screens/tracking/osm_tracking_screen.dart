@@ -4,10 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
+import 'package:provider/provider.dart';
 import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
+import '../../models/preloaded_trip_data.dart';
+import '../../providers/trip_provider.dart';
 import '../../utils/student_trip_logic.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 
@@ -23,8 +26,15 @@ class OsmTrackingScreen extends StatefulWidget {
   final String? tripId;
   final String? busId;
   final String? routeId;
+  final Map<String, dynamic>? preloadedData;
 
-  const OsmTrackingScreen({super.key, this.tripId, this.busId, this.routeId});
+  const OsmTrackingScreen({
+    super.key,
+    this.tripId,
+    this.busId,
+    this.routeId,
+    this.preloadedData,
+  });
 
   @override
   State<OsmTrackingScreen> createState() => _OsmTrackingScreenState();
@@ -57,6 +67,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   // Data
   Trip? _trip;
+  PreloadedTripData? _preloadedData;
   List<TripStudent> _students = [];
   RouteResult? _routeResult;
 
@@ -78,8 +89,12 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     )..addListener(_onAnimationUpdate);
 
     _initializeMapbox();
-    _initializeLocation();
-    _loadTripData();
+    _loadPreloadedData();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadProviderTripData();
+      _initializeLocation();
+      _loadTripData();
+    });
   }
 
   @override
@@ -88,6 +103,41 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     _positionStream?.cancel();
     _mapboxMap?.dispose();
     super.dispose();
+  }
+
+  String? get _tripDirection =>
+      _trip?.tripDirection ?? _preloadedData?.masterTrip.tripDirection;
+
+  String get _routeName =>
+      _trip?.routeName ??
+      _preloadedData?.masterTrip.tripName ??
+      _preloadedData?.masterTrip.route ??
+      'Live Tracking';
+
+  String get _vehicleLabel {
+    final vehicleNumber =
+        _trip?.vehicleNumber ??
+        _preloadedData?.vehicle?.registrationNumber ??
+        _preloadedData?.masterTrip.numberPlate;
+    if (vehicleNumber != null && vehicleNumber.isNotEmpty) {
+      return vehicleNumber;
+    }
+
+    final vehicleId = _trip?.vehicleId ?? widget.busId;
+    return vehicleId == null || vehicleId.isEmpty ? 'Bus' : 'Bus $vehicleId';
+  }
+
+  /// Raw vehicle number plate (no "Bus" label) for API calls that require it.
+  String? get _numberPlate =>
+      _trip?.vehicleNumber ??
+      _preloadedData?.vehicle?.registrationNumber ??
+      _preloadedData?.masterTrip.numberPlate;
+
+  int? get _resolvedMasterTripId {
+    return _trip?.masterTripId ??
+        _preloadedData?.masterTrip.id ??
+        int.tryParse(widget.routeId ?? '') ??
+        int.tryParse(_trip?.routeId ?? '');
   }
 
   void _onAnimationUpdate() {
@@ -234,11 +284,124 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     _maybeShowNextStudentProximityPrompt();
   }
 
+  void _loadPreloadedData() {
+    final rawData = widget.preloadedData;
+    if (rawData == null) return;
+
+    try {
+      final preloadedData = PreloadedTripData.fromJson(rawData);
+      if (preloadedData.students.isEmpty) return;
+
+      _preloadedData = preloadedData;
+      _students = List<TripStudent>.from(preloadedData.students);
+      _isLoading = false;
+    } catch (e) {
+      developer.log(
+        'Failed to parse preloaded trip data: $e',
+        name: 'TrackingScreen',
+      );
+    }
+  }
+
+  Future<void> _loadProviderTripData() async {
+    if (!mounted || _students.isNotEmpty) return;
+
+    final activeTrip = context.read<TripProvider>().activeTrip;
+    if (activeTrip == null) return;
+    if (activeTrip.students.isEmpty) {
+      await _loadMasterTripStudentsFallback(
+        activeTrip.masterTripId ?? int.tryParse(activeTrip.routeId),
+      );
+      return;
+    }
+
+    setState(() {
+      _students = activeTrip.students
+          .map(
+            (s) => _tripStudentFromPickup(
+              id: s.id,
+              masterTripId: activeTrip.masterTripId ?? 0,
+              name: s.name,
+              parentPhone: s.parentPhone,
+              route: s.route,
+              latitude: s.latitude,
+              longitude: s.longitude,
+              pickedLatitude: s.pickedLatitude,
+              pickedLongitude: s.pickedLongitude,
+              droppedLatitude: s.droppedLatitude,
+              droppedLongitude: s.droppedLongitude,
+              status: s.status,
+              photo: s.photo,
+              address: s.address,
+              studentRegNumber: s.studentRegNumber,
+              className: s.className,
+              schoolName: s.schoolName,
+            ),
+          )
+          .toList();
+      _isLoading = false;
+      _errorMessage = null;
+    });
+  }
+
+  TripStudent _tripStudentFromPickup({
+    required String id,
+    required int masterTripId,
+    required String name,
+    String? parentPhone,
+    String? route,
+    double? latitude,
+    double? longitude,
+    double? pickedLatitude,
+    double? pickedLongitude,
+    double? droppedLatitude,
+    double? droppedLongitude,
+    required String status,
+    String? photo,
+    String? address,
+    String? studentRegNumber,
+    String? className,
+    String? schoolName,
+  }) {
+    final normalizedStatus = status.trim().toLowerCase();
+
+    return TripStudent(
+      id: int.tryParse(id) ?? 0,
+      masterTripId: masterTripId,
+      studentId: int.tryParse(id) ?? 0,
+      fullname: name,
+      studentRegNumber: studentRegNumber ?? '',
+      guardianPhoneNumber: parentPhone ?? '',
+      schoolname: schoolName ?? '',
+      transportOrg: '',
+      classname: className ?? '',
+      route: route ?? '',
+      latitude: latitude ?? 0,
+      longitude: longitude ?? 0,
+      pickedLatitude: pickedLatitude ?? 0,
+      pickedLongitude: pickedLongitude ?? 0,
+      droppedLatitude: droppedLatitude ?? 0,
+      droppedLongitude: droppedLongitude ?? 0,
+      isStudentPicked: normalizedStatus == 'picked',
+      isStudentDropped: normalizedStatus == 'dropped',
+      profileImage: photo ?? '',
+      address: address ?? '',
+      createdBy: '',
+      hasStudentPaid: false,
+      isStudentActive: normalizedStatus != 'absent',
+      isStudentDeleted: false,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+  }
+
   Future<void> _loadTripData() async {
     if (widget.tripId == null) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'No trip ID provided';
+        if (_students.isEmpty) {
+          _errorMessage = 'No trip ID provided';
+        }
       });
       return;
     }
@@ -246,54 +409,81 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     try {
       final trip = await _tripService.getTripDetails(widget.tripId!);
       if (trip != null) {
+        final fetchedStudents = trip.students
+            .map(
+              (s) => _tripStudentFromPickup(
+                id: s.id,
+                masterTripId: trip.masterTripId ?? 0,
+                name: s.name,
+                parentPhone: s.parentPhone,
+                route: s.route,
+                latitude: s.latitude,
+                longitude: s.longitude,
+                pickedLatitude: s.pickedLatitude,
+                pickedLongitude: s.pickedLongitude,
+                droppedLatitude: s.droppedLatitude,
+                droppedLongitude: s.droppedLongitude,
+                status: s.status,
+                photo: s.photo,
+                address: s.address,
+                studentRegNumber: s.studentRegNumber,
+                className: s.className,
+                schoolName: s.schoolName,
+              ),
+            )
+            .toList();
+
         setState(() {
           _trip = trip;
-          _students = trip.students
-              .map(
-                (s) => TripStudent(
-                  id: int.tryParse(s.id) ?? 0,
-                  masterTripId: int.tryParse(widget.tripId!) ?? 0,
-                  studentId: int.tryParse(s.id) ?? 0,
-                  fullname: s.name,
-                  studentRegNumber: '',
-                  guardianPhoneNumber: s.parentPhone ?? '',
-                  schoolname: '',
-                  transportOrg: '',
-                  classname: '',
-                  route: s.route ?? '',
-                  latitude: s.latitude ?? 0,
-                  longitude: s.longitude ?? 0,
-                  pickedLatitude: s.pickedLatitude ?? 0,
-                  pickedLongitude: s.pickedLongitude ?? 0,
-                  droppedLatitude: s.droppedLatitude ?? 0,
-                  droppedLongitude: s.droppedLongitude ?? 0,
-                  isStudentPicked: s.status == 'picked',
-                  isStudentDropped: s.status == 'dropped',
-                  profileImage: s.photo ?? '',
-                  address: s.address ?? '',
-                  createdBy: '',
-                  hasStudentPaid: false,
-                  isStudentActive: s.status != 'absent',
-                  isStudentDeleted: false,
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                ),
-              )
-              .toList();
+          if (fetchedStudents.isNotEmpty) {
+            _students = fetchedStudents;
+          }
+          _errorMessage = null;
           _isLoading = false;
         });
+        if (fetchedStudents.isEmpty) {
+          await _loadMasterTripStudentsFallback(_resolvedMasterTripId);
+        }
         _calculateRoute();
       } else {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Trip not found';
+          if (_students.isEmpty) {
+            _errorMessage = 'Trip not found';
+          }
         });
+        await _loadMasterTripStudentsFallback(_resolvedMasterTripId);
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Error loading trip: $e';
+        if (_students.isEmpty) {
+          _errorMessage = 'Error loading trip: $e';
+        }
       });
+      await _loadMasterTripStudentsFallback(_resolvedMasterTripId);
+    }
+  }
+
+  Future<void> _loadMasterTripStudentsFallback(int? masterTripId) async {
+    if (masterTripId == null || masterTripId <= 0 || _students.isNotEmpty) {
+      return;
+    }
+
+    try {
+      final students = await _tripService.getMasterTripStudents(masterTripId);
+      if (!mounted || students.isEmpty) return;
+
+      setState(() {
+        _students = students;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      developer.log(
+        'Failed to load master trip students: $e',
+        name: 'TrackingScreen',
+      );
     }
   }
 
@@ -424,7 +614,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     final sorted = List<TripStudent>.from(_students);
     sorted.sort((a, b) => a.id.compareTo(b.id));
 
-    if (isReturnTripDirection(_trip?.tripDirection)) {
+    if (isReturnTripDirection(_tripDirection)) {
       return _firstStudentWithStatus(sorted, 'picked');
     }
 
@@ -443,7 +633,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   StudentTripActionMode _actionModeForStudent(TripStudent student) {
-    if (isReturnTripDirection(_trip?.tripDirection)) {
+    if (isReturnTripDirection(_tripDirection)) {
       return StudentTripActionMode.dropoff;
     }
 
@@ -504,6 +694,31 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     );
   }
 
+  List<NextStudentTripTarget> _cardTargetsForStudents() {
+    return _students.map(_cardTargetForStudent).toList();
+  }
+
+  TripStudent? _studentForCardTarget(NextStudentTripTarget target) {
+    for (final student in _students) {
+      if (student.studentId.toString() == target.id) return student;
+    }
+    return null;
+  }
+
+  StudentTripActionMode _modeForCardTarget(NextStudentTripTarget target) {
+    final student = _studentForCardTarget(target);
+    if (student != null) return _actionModeForStudent(student);
+
+    return target.status == 'picked'
+        ? StudentTripActionMode.dropoff
+        : StudentTripActionMode.pickup;
+  }
+
+  double? _distanceForCardTarget(NextStudentTripTarget target) {
+    final student = _studentForCardTarget(target);
+    return student == null ? null : _distanceToStudent(student);
+  }
+
   void _maybeShowNextStudentProximityPrompt() {
     if (!mounted || _isUpdatingStudentStatus || _currentPosition == null) {
       return;
@@ -532,21 +747,42 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             padding: const EdgeInsets.all(16),
             child: NextStudentTripActionCard(
               student: _cardTargetForStudent(student),
+              students: _cardTargetsForStudents(),
               mode: mode,
               distanceMeters: distance,
+              modeForStudent: _modeForCardTarget,
+              distanceForStudent: _distanceForCardTarget,
               isSubmitting: _isUpdatingStudentStatus,
               errorMessage: _statusErrorMessage,
-              onPickedUp: () {
+              onPickedUpStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected == null) return;
                 Navigator.pop(sheetContext);
-                _updateStudentStatus(student, 'picked');
+                _updateStudentStatus(selected, 'picked');
               },
-              onDroppedOff: () {
+              onDroppedOffStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected == null) return;
                 Navigator.pop(sheetContext);
-                _updateStudentStatus(student, 'dropped');
+                _updateStudentStatus(selected, 'dropped');
               },
-              onAbsent: () {
+              onAbsentStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected == null) return;
                 Navigator.pop(sheetContext);
-                _updateStudentStatus(student, 'absent');
+                _updateStudentStatus(selected, 'absent');
+              },
+              onChat: () {
+                Navigator.pop(sheetContext);
+                _openTripChat();
+              },
+              onStudents: () {
+                Navigator.pop(sheetContext);
+                _openStudentsList();
+              },
+              onNotify: () {
+                Navigator.pop(sheetContext);
+                _showNotifyOptions();
               },
             ),
           ),
@@ -570,6 +806,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         status: status,
         latitude: _currentPosition?.latitude,
         longitude: _currentPosition?.longitude,
+        studentReg: student.studentRegNumber,
+        guardianPhoneNumber: student.guardianPhoneNumber,
+        numberPlate: _numberPlate,
       );
 
       if (!mounted) return;
@@ -620,11 +859,97 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     }
   }
 
+  void _openTripChat() {
+    final tripId = widget.tripId;
+    Navigator.pushNamed(
+      context,
+      '/chat-detail',
+      arguments: {
+        'tripId': tripId,
+        'receiverPhone': 'trip_${tripId ?? 'active'}',
+        'receiverName': _routeName,
+        'receiverRole': 'Group',
+        'isTripChat': true,
+      },
+    );
+  }
+
+  void _openStudentsList() {
+    Navigator.pushNamed(
+      context,
+      '/students-list',
+      arguments: {'tripId': widget.tripId},
+    );
+  }
+
+  void _showNotifyOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Notify guardians',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.schedule, color: Color(0xFF6B9B5B)),
+                title: const Text('Running Late'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showNotificationSent('Running late');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.traffic, color: Color(0xFF6B9B5B)),
+                title: const Text('Traffic Delay'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showNotificationSent('Traffic delay');
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFF6B9B5B),
+                ),
+                title: const Text('On Schedule'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showNotificationSent('On schedule');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showNotificationSent(String label) {
+    final guardians = _students
+        .map((s) => s.guardianPhoneNumber)
+        .where((phone) => phone.isNotEmpty)
+        .toSet()
+        .length;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label notification sent to $guardians guardians'),
+        backgroundColor: const Color(0xFF6B9B5B),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_trip?.routeName ?? 'Live Tracking'),
+        title: Text(_routeName),
         backgroundColor: const Color(0xFF6B9B5B),
         foregroundColor: Colors.white,
         actions: [
@@ -827,7 +1152,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _trip?.vehicleNumber ?? 'Bus ${_trip?.vehicleId ?? ''}',
+                      _vehicleLabel,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -903,19 +1228,28 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           NextStudentTripActionCard(
             student:
                 nextStudent == null ? null : _cardTargetForStudent(nextStudent),
+            students: _cardTargetsForStudents(),
             mode: nextMode,
             distanceMeters: nextDistance,
+            modeForStudent: _modeForCardTarget,
+            distanceForStudent: _distanceForCardTarget,
             isSubmitting: _isUpdatingStudentStatus,
             errorMessage: _statusErrorMessage,
-            onPickedUp: nextStudent == null
-                ? null
-                : () => _updateStudentStatus(nextStudent, 'picked'),
-            onDroppedOff: nextStudent == null
-                ? null
-                : () => _updateStudentStatus(nextStudent, 'dropped'),
-            onAbsent: nextStudent == null
-                ? null
-                : () => _updateStudentStatus(nextStudent, 'absent'),
+            onPickedUpStudent: (target) {
+              final selected = _studentForCardTarget(target);
+              if (selected != null) _updateStudentStatus(selected, 'picked');
+            },
+            onDroppedOffStudent: (target) {
+              final selected = _studentForCardTarget(target);
+              if (selected != null) _updateStudentStatus(selected, 'dropped');
+            },
+            onAbsentStudent: (target) {
+              final selected = _studentForCardTarget(target);
+              if (selected != null) _updateStudentStatus(selected, 'absent');
+            },
+            onChat: _openTripChat,
+            onStudents: _openStudentsList,
+            onNotify: _showNotifyOptions,
           ),
 
           const SizedBox(height: 24),

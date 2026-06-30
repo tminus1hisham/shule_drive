@@ -49,6 +49,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
 
   // State
   List<TripStudent> _students = [];
+  String? _numberPlate;
   bool _isLoading = true;
   bool _isLoadingRoute = false;
   String? _errorMessage;
@@ -73,6 +74,9 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       try {
         final preloaded = PreloadedTripData.fromJson(widget.preloadedData!);
         _students = preloaded.students;
+        _numberPlate =
+            preloaded.vehicle?.registrationNumber ??
+            preloaded.masterTrip.numberPlate;
         developer.log('Loaded ${_students.length} students from preloaded data', 
             name: 'DriverMapScreen');
       } catch (e) {
@@ -361,6 +365,11 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
         tripId: widget.tripId,
         studentId: student.studentId.toString(),
         status: 'picked',
+        latitude: _currentPosition?.latitude,
+        longitude: _currentPosition?.longitude,
+        studentReg: student.studentRegNumber,
+        guardianPhoneNumber: student.guardianPhoneNumber,
+        numberPlate: _numberPlate,
       );
 
       // Update local state

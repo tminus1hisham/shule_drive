@@ -157,6 +157,16 @@ class TripService {
     }
   }
 
+  /// Overwrite the buffered active trip with locally-updated data so the
+  /// buffer fallback in [getActiveTrip] doesn't serve stale student statuses.
+  Future<void> cacheActiveTrip(Trip trip) async {
+    await _buffer.saveBuffer(
+      key: BufferKeys.activeTrip,
+      data: trip,
+      expiration: const Duration(minutes: 5),
+    );
+  }
+
   /// Start a new trip (no buffer - always requires fresh API call)
   /// POST /trips/start
   Future<Trip> startTrip({
@@ -386,8 +396,14 @@ class TripService {
     }
   }
 
-  /// Update student pickup status
-  /// The documented API only supports marking a student as not picked.
+  /// Update student pickup status.
+  ///
+  /// - `absent` → POST /api/trips/student/not/picked
+  /// - `picked` / `dropped` → POST /api/trips/pick/drop/student (single student)
+  ///
+  /// The single-student pick/drop endpoint requires the student's registration
+  /// number, the guardian's phone number and the vehicle number plate. When any
+  /// of those are missing we fall back to updating local state only.
   Future<void> updateStudentStatus({
     required String tripId,
     required String studentId,
@@ -395,6 +411,9 @@ class TripService {
     String? notes,
     double? latitude,
     double? longitude,
+    String? studentReg,
+    String? guardianPhoneNumber,
+    String? numberPlate,
   }) async {
     try {
       final normalizedStatus = StudentPickup.normalizeStatus(status);
@@ -407,6 +426,31 @@ class TripService {
             reason: notes ?? 'Student not picked',
           ),
         );
+      } else if (normalizedStatus == 'picked' || normalizedStatus == 'dropped') {
+        final reg = studentReg?.trim() ?? '';
+        final phone = guardianPhoneNumber?.trim() ?? '';
+        final plate = numberPlate?.trim() ?? '';
+
+        if (reg.isEmpty || phone.isEmpty || plate.isEmpty) {
+          debugPrint(
+            'Cannot call ${Endpoints.pickDropStudent} for "$normalizedStatus" '
+            '(studentReg/guardianPhoneNumber/numberPlate missing); '
+            'updating local state only.',
+          );
+        } else {
+          await _apiClient.post(
+            Endpoints.pickDropStudent,
+            body: buildPickSingleStudentBody(
+              uniqueTripIdentity: tripId,
+              studentReg: reg,
+              guardianPhoneNumber: phone,
+              numberPlate: plate,
+              isDropping: normalizedStatus == 'dropped',
+              latitude: latitude ?? 0,
+              longitude: longitude ?? 0,
+            ),
+          );
+        }
       } else {
         debugPrint(
           'No documented API endpoint for individual "$normalizedStatus" updates; updating local state only.',
@@ -1094,6 +1138,31 @@ class TripService {
       'longitude': longitude,
       'isDroppingAll': isDroppingAll,
       'updatedAt': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
+    };
+  }
+
+  /// Body for POST /api/trips/pick/drop/student ([PickSingleStudentModel]).
+  ///
+  /// `action` mirrors the trailing path segment of the bulk endpoints
+  /// (`pick` / `drop`).
+  @visibleForTesting
+  static Map<String, dynamic> buildPickSingleStudentBody({
+    required String uniqueTripIdentity,
+    required String studentReg,
+    required String guardianPhoneNumber,
+    required String numberPlate,
+    required bool isDropping,
+    double latitude = 0,
+    double longitude = 0,
+  }) {
+    return {
+      'uniqueTripIdentity': uniqueTripIdentity,
+      'studentReg': studentReg,
+      'guardianPhoneNumber': guardianPhoneNumber,
+      'numberPlate': numberPlate,
+      'action': isDropping ? 'drop' : 'pick',
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 

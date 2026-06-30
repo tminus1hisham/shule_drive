@@ -86,5 +86,110 @@ void main() {
     expect(pickButton.onPressed, isNull);
     expect(absentButton.onPressed, isNull);
   });
-}
 
+  testWidgets('student proximity popup shows trip roster and quick actions', (
+    tester,
+  ) async {
+    String? pickedStudentId;
+    var openedChat = false;
+    var openedStudents = false;
+    var openedNotify = false;
+
+    const amina = NextStudentTripTarget(
+      id: '42',
+      name: 'Amina Otieno',
+      status: 'pending',
+      destinationLabel: 'Kilimani stop',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              return Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) {
+                        return SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: NextStudentTripActionCard(
+                              student: amina,
+                              students: const [
+                                amina,
+                                NextStudentTripTarget(
+                                  id: '43',
+                                  name: 'Brian Mwangi',
+                                  status: 'picked',
+                                  destinationLabel: 'Saved home destination',
+                                ),
+                                NextStudentTripTarget(
+                                  id: '44',
+                                  name: 'Chao Njeri',
+                                  status: 'dropped',
+                                  destinationLabel: 'Lavington',
+                                ),
+                              ],
+                              mode: StudentTripActionMode.pickup,
+                              distanceMeters: 35,
+                              modeForStudent: (student) =>
+                                  student.status == 'picked'
+                                      ? StudentTripActionMode.dropoff
+                                      : StudentTripActionMode.pickup,
+                              distanceForStudent: (student) =>
+                                  student.id == '42' ? 35 : null,
+                              onPickedUpStudent: (student) {
+                                pickedStudentId = student.id;
+                              },
+                              onChat: () {
+                                openedChat = true;
+                              },
+                              onStudents: () {
+                                openedStudents = true;
+                              },
+                              onNotify: () {
+                                openedNotify = true;
+                              },
+                              maxRosterHeight: 420,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                  child: const Text('Open proximity popup'),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open proximity popup'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trip students'), findsOneWidget);
+    expect(find.text('Amina Otieno'), findsOneWidget);
+    expect(find.text('Brian Mwangi'), findsOneWidget);
+    expect(find.text('Chao Njeri'), findsOneWidget);
+    expect(find.text('35 m away'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Students'), findsOneWidget);
+    expect(find.text('Notify'), findsOneWidget);
+
+    await tester.tap(find.text('Notify'));
+    await tester.tap(find.text('Chat'));
+    await tester.tap(find.text('Students'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Picked up').first);
+
+    expect(openedNotify, isTrue);
+    expect(openedChat, isTrue);
+    expect(openedStudents, isTrue);
+    expect(pickedStudentId, '42');
+  });
+}

@@ -487,6 +487,18 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final student = _nextActionableStudent();
     if (student == null) return null;
 
+    return _studentTripTargetForStudent(student);
+  }
+
+  List<NextStudentTripTarget> _studentTripTargets() {
+    return _buildStudentListFromStops()
+        .map(_studentTripTargetForStudent)
+        .toList();
+  }
+
+  NextStudentTripTarget _studentTripTargetForStudent(
+    Map<String, dynamic> student,
+  ) {
     final mode = _actionModeForStudent(student);
     final targetLocation = _targetLocationForStudent(student, mode);
 
@@ -499,6 +511,22 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       latitude: targetLocation?.latitude,
       longitude: targetLocation?.longitude,
     );
+  }
+
+  StudentTripActionMode _actionModeForTripTarget(
+    NextStudentTripTarget target,
+  ) {
+    final student = _findStudentById(target.id);
+    if (student != null) return _actionModeForStudent(student);
+
+    return target.status == 'picked'
+        ? StudentTripActionMode.dropoff
+        : StudentTripActionMode.pickup;
+  }
+
+  double? _distanceForTripTarget(NextStudentTripTarget target) {
+    final student = _findStudentById(target.id);
+    return student == null ? null : _distanceToStudent(student);
   }
 
   String _destinationLabelForStudent(
@@ -682,38 +710,43 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        final targetLocation = _targetLocationForStudent(student, mode);
-
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: NextStudentTripActionCard(
-              student: NextStudentTripTarget(
-                id: student['id']?.toString() ?? '',
-                name: student['name']?.toString() ?? 'Unknown Student',
-                status: (student['status'] ?? 'pending').toString(),
-                photoUrl: student['photo']?.toString(),
-                destinationLabel: _destinationLabelForStudent(student, mode),
-                latitude: targetLocation?.latitude,
-                longitude: targetLocation?.longitude,
-              ),
+              student: _studentTripTargetForStudent(student),
+              students: _studentTripTargets(),
               mode: mode,
               distanceMeters: distance,
+              modeForStudent: _actionModeForTripTarget,
+              distanceForStudent: _distanceForTripTarget,
               isSubmitting: _isUpdatingStudentStatus,
               errorMessage: context.read<TripProvider>().errorMessage,
-              onPickedUp: () => _updateStudentStatus(
-                student['id'].toString(),
-                'picked',
-              ),
-              onDroppedOff: () => _updateStudentStatus(
-                student['id'].toString(),
-                'dropped',
-              ),
-              onAbsent: () => _updateStudentStatus(
-                student['id'].toString(),
-                'absent',
-              ),
+              onPickedUpStudent: (target) {
+                Navigator.pop(sheetContext);
+                _updateStudentStatus(target.id, 'picked');
+              },
+              onDroppedOffStudent: (target) {
+                Navigator.pop(sheetContext);
+                _updateStudentStatus(target.id, 'dropped');
+              },
+              onAbsentStudent: (target) {
+                Navigator.pop(sheetContext);
+                _updateStudentStatus(target.id, 'absent');
+              },
+              onChat: () {
+                Navigator.pop(sheetContext);
+                _openTripChat();
+              },
+              onStudents: () {
+                Navigator.pop(sheetContext);
+                _showStudentList();
+              },
+              onNotify: () {
+                Navigator.pop(sheetContext);
+                _showNotifyOptions();
+              },
             ),
           ),
         );
@@ -1245,7 +1278,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final nextMode = nextStudent == null
         ? StudentTripActionMode.pickup
         : _actionModeForStudent(nextStudent);
-    final nextDistance = nextStudent == null ? null : _distanceToStudent(nextStudent);
+    final nextDistance = nextStudent == null
+        ? null
+        : _distanceToStudent(nextStudent);
+    final studentTargets = _studentTripTargets();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1298,28 +1334,22 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
             NextStudentTripActionCard(
               student: _nextStudentTripTarget(),
+              students: studentTargets,
               mode: nextMode,
               distanceMeters: nextDistance,
+              modeForStudent: _actionModeForTripTarget,
+              distanceForStudent: _distanceForTripTarget,
               isSubmitting: _isUpdatingStudentStatus,
               errorMessage: context.watch<TripProvider>().errorMessage,
-              onPickedUp: nextStudent == null
-                  ? null
-                  : () => _updateStudentStatus(
-                        nextStudent['id'].toString(),
-                        'picked',
-                      ),
-              onDroppedOff: nextStudent == null
-                  ? null
-                  : () => _updateStudentStatus(
-                        nextStudent['id'].toString(),
-                        'dropped',
-                      ),
-              onAbsent: nextStudent == null
-                  ? null
-                  : () => _updateStudentStatus(
-                        nextStudent['id'].toString(),
-                        'absent',
-                      ),
+              onPickedUpStudent: (target) =>
+                  _updateStudentStatus(target.id, 'picked'),
+              onDroppedOffStudent: (target) =>
+                  _updateStudentStatus(target.id, 'dropped'),
+              onAbsentStudent: (target) =>
+                  _updateStudentStatus(target.id, 'absent'),
+              onChat: _openTripChat,
+              onStudents: _showStudentList,
+              onNotify: _showNotifyOptions,
             ),
             const SizedBox(height: 12),
 
@@ -1803,6 +1833,22 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
+  /// Open the group chat for this active trip.
+  void _openTripChat() {
+    final tripId = _tripId ?? _activeTrip?.id;
+    Navigator.pushNamed(
+      context,
+      '/chat-detail',
+      arguments: {
+        'tripId': tripId,
+        'receiverPhone': 'trip_${tripId ?? 'active'}',
+        'receiverName': _activeTrip?.routeName ?? 'Trip Chat',
+        'receiverRole': 'Group',
+        'isTripChat': true,
+      },
+    );
+  }
+
   /// Chat with student's guardian
   void _chatWithGuardian(Map<String, dynamic> student) {
     final guardianPhone = student['guardianPhone'] as String?;
@@ -1828,6 +1874,62 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'tripId': _tripId,
         'isTripChat': true,
       },
+    );
+  }
+
+  void _showNotifyOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Notify guardians',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.schedule, color: Color(0xFF6B9B5B)),
+                title: const Text('Running Late'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendBulkMessage('The bus is running late.');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.traffic, color: Color(0xFF6B9B5B)),
+                title: const Text('Traffic Delay'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendBulkMessage('Traffic is delaying the trip.');
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFF6B9B5B),
+                ),
+                title: const Text('On Schedule'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendBulkMessage('The bus is on schedule.');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_note, color: Color(0xFF6B9B5B)),
+                title: const Text('Custom Message'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showMessageAllDialog();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

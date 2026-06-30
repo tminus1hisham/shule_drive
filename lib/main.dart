@@ -492,6 +492,7 @@ Route _buildPageRoute(RouteSettings settings) {
         tripId: args?['tripId']?.toString(),
         busId: args?['busId'] as String?,
         routeId: args?['routeId'] as String?,
+        preloadedData: args?['preloadedData'] as Map<String, dynamic>?,
       );
       protected = true;
       break;

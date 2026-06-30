@@ -235,6 +235,7 @@ class Endpoints {
       '/api/trips/get/student/active/trip';
   static const String pickAllStudents = '/api/trips/pick/all';
   static const String dropAllStudents = '/api/trips/drop/all';
+  static const String pickDropStudent = '/api/trips/pick/drop/student';
   static const String getUniqueTrips = '/api/trips/get/unique/trips';
   static const String getUniqueTripsFromTrip =
       '/api/trips/get/unique/trips/from/trip';
