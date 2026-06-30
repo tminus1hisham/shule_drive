@@ -80,6 +80,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   // Preloaded trip data
   List<Map<String, dynamic>> _preloadedStudents = [];
+  // Roster (as StudentPickup) used to seed the provider's active trip so it
+  // becomes the single source of truth shared with the students-list screen
+  // and preserved by endTrip.
+  List<api.StudentPickup> _preloadedRoster = [];
+  String? _masterTripName;
+  String? _masterTripPlate;
+
+  // Provider reference kept for listener add/remove.
+  TripProvider? _tripProvider;
 
   // Map style
   String _currentMapStyle = 'mapbox://styles/mapbox/streets-v12';
@@ -88,16 +97,52 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tripProvider = context.read<TripProvider>();
+      _tripProvider?.addListener(_onTripProviderChanged);
       _initializeTrip();
     });
   }
 
   @override
   void dispose() {
+    _tripProvider?.removeListener(_onTripProviderChanged);
     _locationSubscription?.cancel();
     _refreshTimer?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Mirror provider status changes (e.g. picks made on the students-list
+  /// screen) into this screen's working copy so all screens stay in sync.
+  void _onTripProviderChanged() {
+    if (!mounted) return;
+    final providerTrip = _tripProvider?.activeTrip;
+    if (providerTrip == null) return;
+
+    final byId = {for (final s in providerTrip.students) s.id: s};
+    for (final student in _preloadedStudents) {
+      final match = byId[student['id']?.toString()];
+      if (match != null && student['status'] != match.status) {
+        student['status'] = match.status;
+      }
+    }
+
+    setState(() {
+      _activeTrip = providerTrip;
+      _recomputeCounts();
+    });
+  }
+
+  void _recomputeCounts() {
+    if (_preloadedStudents.isNotEmpty) {
+      _totalCount = _preloadedStudents.length;
+      _pickedCount =
+          _preloadedStudents.where((s) => s['status'] == 'picked').length;
+    } else if (_activeTrip != null) {
+      _totalCount = _activeTrip!.students.length;
+      _pickedCount = _activeTrip!.pickedCount;
+    }
   }
 
   Future<void> _initializeTrip() async {
@@ -116,6 +161,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       try {
         final preloadedData = PreloadedTripData.fromJson(preloadedDataMap);
         _preloadedStudents = _convertTripStudentsToMap(preloadedData.students);
+        // Build the StudentPickup roster used to seed the provider. TripStudent
+        // serialises to exactly the keys StudentPickup.fromJson reads.
+        _preloadedRoster = preloadedData.students
+            .map((s) => api.StudentPickup.fromJson(s.toJson()))
+            .toList();
+        _masterTripName = preloadedData.masterTrip.tripName;
+        _masterTripPlate = preloadedData.masterTrip.numberPlate;
         _totalCount = _preloadedStudents.length;
         _pickedCount = _preloadedStudents
             .where((s) => s['status'] == 'picked')
@@ -127,6 +179,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     // Load active trip data
     await _loadActiveTrip();
+
+    // Seed the provider's active trip with the full roster so it becomes the
+    // single source of truth (fixes cross-screen status drift and empty
+    // trip-details after completion).
+    _hydrateProviderFromPreloaded();
 
     // Initialize location tracking
     await _initializeLocationTracking();
@@ -162,6 +219,33 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     } catch (e) {
       debugPrint('❌ Error loading active trip: $e');
     }
+  }
+
+  /// Push the preloaded roster (and any missing vehicle/route details) into the
+  /// provider's active trip, then adopt the provider's merged copy locally.
+  void _hydrateProviderFromPreloaded() {
+    if (!mounted) return;
+    final tripProvider = context.read<TripProvider>();
+    if (tripProvider.activeTrip == null) return;
+    // Prefer the real master-trip plate; the _busPlate arg can be the
+    // 'BUS001' placeholder.
+    final plate = (_masterTripPlate != null && _masterTripPlate!.isNotEmpty)
+        ? _masterTripPlate
+        : _busPlate;
+
+    if (_preloadedRoster.isEmpty && (plate == null || plate.isEmpty)) {
+      return;
+    }
+
+    tripProvider.hydrateActiveTrip(
+      roster: _preloadedRoster,
+      vehicleNumber: plate,
+      routeName: _masterTripName,
+    );
+
+    _activeTrip = tripProvider.activeTrip ?? _activeTrip;
+    // Mirror the merged provider statuses into the working list + counts.
+    _onTripProviderChanged();
   }
 
   void _onMapReady() {

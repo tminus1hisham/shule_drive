@@ -455,6 +455,77 @@ class TripProvider extends ChangeNotifier {
     }
   }
 
+  /// Seed the active trip with the full student roster (and missing trip
+  /// details) preloaded for the driver before the trip screen opened.
+  ///
+  /// The start-trip API returns no students, so this provider's active trip
+  /// can be empty even though the active-trip screen holds the full roster.
+  /// Without seeding, per-student pick/drop updates match nothing here and
+  /// [endTrip] persists an empty student list to history (trip details then
+  /// show "0 students / Unknown Vehicle"). Merges by id, keeping whichever
+  /// status is further along so already-recorded picks are never downgraded.
+  void hydrateActiveTrip({
+    required List<api.StudentPickup> roster,
+    String? vehicleNumber,
+    String? routeName,
+  }) {
+    final trip = _activeTrip;
+    if (trip == null) return;
+
+    var updatedTrip = trip;
+
+    if (roster.isNotEmpty) {
+      final existingById = {for (final s in trip.students) s.id: s};
+      final seenIds = <String>{};
+      final merged = <api.StudentPickup>[];
+
+      for (final rosterStudent in roster) {
+        seenIds.add(rosterStudent.id);
+        final existing = existingById[rosterStudent.id];
+        if (existing == null) {
+          merged.add(rosterStudent);
+          continue;
+        }
+        // Keep the further-along status, but take the roster's richer profile.
+        final keepExistingStatus =
+            _statusRank(existing.status) >= _statusRank(rosterStudent.status);
+        merged.add(
+          rosterStudent.copyWith(
+            status: keepExistingStatus ? existing.status : rosterStudent.status,
+            pickupTime: existing.pickupTime ?? rosterStudent.pickupTime,
+            dropoffTime: existing.dropoffTime ?? rosterStudent.dropoffTime,
+          ),
+        );
+      }
+
+      // Preserve any provider-only students not present in the roster.
+      for (final existing in trip.students) {
+        if (!seenIds.contains(existing.id)) merged.add(existing);
+      }
+
+      updatedTrip = updatedTrip.copyWith(students: merged);
+    }
+
+    if ((updatedTrip.vehicleNumber == null ||
+            updatedTrip.vehicleNumber!.isEmpty) &&
+        vehicleNumber != null &&
+        vehicleNumber.isNotEmpty) {
+      updatedTrip = updatedTrip.copyWith(vehicleNumber: vehicleNumber);
+    }
+
+    if (updatedTrip.routeName.isEmpty &&
+        routeName != null &&
+        routeName.isNotEmpty) {
+      updatedTrip = updatedTrip.copyWith(routeName: routeName);
+    }
+
+    if (identical(updatedTrip, trip)) return;
+
+    _replaceTrip(updatedTrip);
+    notifyListeners();
+    _persistTripState(updatedTrip);
+  }
+
   /// End a trip (driver only)
   Future<bool> endTrip(
     String tripId, {
