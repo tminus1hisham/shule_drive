@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/guardian_trip_notification_service.dart';
 import '../../widgets/main_scaffold.dart';
 // import '../../widgets/map_selector.dart'; // Re-enable when using Google Maps
 
@@ -13,6 +14,27 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // HomeScreen is the guardian's persistent main tab, so start the live
+    // student pick/drop listener here for the whole guardian session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthProvider>();
+      final phone = auth.userPhone;
+      if (auth.isGuardian && phone != null && phone.isNotEmpty) {
+        GuardianTripNotificationService().start(phone);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    GuardianTripNotificationService().stop();
+    super.dispose();
+  }
+
   void _handleNavigation(int index) {
     switch (index) {
       case 0:

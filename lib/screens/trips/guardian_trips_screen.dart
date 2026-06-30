@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/guardian_trip_notification_service.dart';
 import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
@@ -96,6 +98,9 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
   bool _isLoadingHistory = true;
   String? _historyError;
 
+  // Live MQTT student-status updates
+  StreamSubscription<GuardianStudentStatusEvent>? _statusSub;
+
   @override
   void initState() {
     super.initState();
@@ -103,13 +108,49 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     _tabController.addListener(_onTabChanged);
     _loadActiveTrip();
     _loadTripHistory();
+
+    // Reflect live pick/drop/absent updates pushed by the driver over MQTT.
+    _statusSub =
+        GuardianTripNotificationService().updates.listen(_onStudentStatusEvent);
   }
 
   @override
   void dispose() {
+    _statusSub?.cancel();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Patch the on-screen active trip when a live status update arrives so the
+  /// guardian sees the change without a manual refresh.
+  void _onStudentStatusEvent(GuardianStudentStatusEvent event) {
+    if (!mounted) return;
+    final hasStudent = _myStudents.any((s) => s.id == event.studentId);
+    if (!hasStudent) return;
+
+    setState(() {
+      _myStudents = _myStudents
+          .map(
+            (s) => s.id == event.studentId
+                ? s.copyWith(status: event.status)
+                : s,
+          )
+          .toList();
+
+      final trip = _activeTrip;
+      if (trip != null) {
+        _activeTrip = trip.copyWith(
+          students: trip.students
+              .map(
+                (s) => s.id == event.studentId
+                    ? s.copyWith(status: event.status)
+                    : s,
+              )
+              .toList(),
+        );
+      }
+    });
   }
 
   void _onTabChanged() {

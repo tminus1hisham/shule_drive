@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart' as api;
 import '../mqtt_client.dart';
+import '../services/guardian_trip_notification_service.dart';
 import '../services/trip_history_service.dart';
 import '../utils/notification_helper.dart';
 import '../utils/student_trip_logic.dart';
@@ -251,6 +252,58 @@ class TripProvider extends ChangeNotifier {
       unawaited(_tripService.cacheActiveTrip(trip));
     }
     unawaited(TripHistoryService().updateTripInHistory(trip));
+  }
+
+  /// Notify each guardian whose student's status changed between [before] and
+  /// [after], over MQTT, so the guardian app raises a live notification.
+  void _broadcastStatusChanges({
+    required api.Trip before,
+    required api.Trip after,
+  }) {
+    final beforeById = {for (final s in before.students) s.id: s.status};
+    final vehicleNumber = after.vehicleNumber ?? after.vehicleId;
+
+    for (final student in after.students) {
+      final prev = beforeById[student.id];
+      final now = api.StudentPickup.normalizeStatus(student.status);
+      final wasSame =
+          prev != null && api.StudentPickup.normalizeStatus(prev) == now;
+      if (wasSame) continue;
+      if (now == 'picked' || now == 'dropped' || now == 'absent') {
+        _publishGuardianStudentStatus(
+          student: student,
+          status: now,
+          tripId: after.id,
+          vehicleNumber: vehicleNumber,
+        );
+      }
+    }
+  }
+
+  void _publishGuardianStudentStatus({
+    required api.StudentPickup student,
+    required String status,
+    required String tripId,
+    String? vehicleNumber,
+  }) {
+    final phone = student.parentPhone;
+    if (phone == null || phone.trim().isEmpty) return;
+    if (!_mqttService.isConnected) return;
+
+    try {
+      _mqttService.publishJson(
+        GuardianTripNotificationService.topicForPhone(phone),
+        GuardianTripNotificationService.buildPayload(
+          studentId: student.id,
+          studentName: student.name,
+          status: status,
+          tripId: tripId,
+          vehicleNumber: vehicleNumber,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Failed to publish guardian status: $e');
+    }
   }
 
   /// Fetch all trips (driver view)
@@ -778,6 +831,7 @@ class TripProvider extends ChangeNotifier {
         _replaceTrip(updatedTrip);
         notifyListeners();
         _persistTripState(updatedTrip);
+        _broadcastStatusChanges(before: existingTrip, after: updatedTrip);
       }
 
       // Show notification based on status
@@ -830,6 +884,7 @@ class TripProvider extends ChangeNotifier {
         _replaceTrip(updatedTrip);
         notifyListeners();
         _persistTripState(updatedTrip);
+        _broadcastStatusChanges(before: trip, after: updatedTrip);
       }
 
       return true;
@@ -866,6 +921,7 @@ class TripProvider extends ChangeNotifier {
         _replaceTrip(updatedTrip);
         notifyListeners();
         _persistTripState(updatedTrip);
+        _broadcastStatusChanges(before: trip, after: updatedTrip);
       }
 
       return true;
