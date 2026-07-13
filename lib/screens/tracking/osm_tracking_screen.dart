@@ -1035,8 +1035,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
           // Map controls
           Positioned(
+            top: 16,
             right: 16,
-            bottom: 200,
             child: Column(
               children: [
                 FloatingActionButton.small(
@@ -1086,249 +1086,274 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         : _actionModeForStudent(nextStudent);
     final nextDistance =
         nextStudent == null ? null : _distanceToStudent(nextStudent);
+    final totalStudents = _students.length;
+    final waitingStudents =
+        _students.where((s) => _getStudentStatus(s) == 'pending').length;
+    final pickedStudents =
+        _students.where((s) => _getStudentStatus(s) == 'picked').length;
+    final maxPanelHeight = MediaQuery.sizeOf(context).height * 0.45;
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9), // Glassmorphism base
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.4),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.55),
+            width: 1,
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 20),
-              height: 4,
-              width: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.14),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
-          ),
-
-          // Driver/Bus info
-          Row(
-            children: [
-              Container(
-                height: 56,
-                width: 56,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF86ba74)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          ],
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxPanelHeight),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Row(
+              children: [
+                Container(
+                  height: 44,
+                  width: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  child: const Icon(
+                    Icons.directions_bus_filled_rounded,
+                    color: Color(0xFF2E6B3D),
+                    size: 24,
+                  ),
                 ),
-                child: const Center(
-                  child: Text('🚌', style: TextStyle(fontSize: 28)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _vehicleLabel,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _vehicleLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF101828),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (_currentPosition != null)
-                      Row(
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
                         children: [
-                          Icon(
-                            Icons.speed,
-                            size: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade600,
+                          if (_currentPosition != null)
+                            _buildVehicleMetric(
+                              icon: Icons.speed_rounded,
+                              label:
+                                  '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
                             ),
+                          if (_currentPosition != null)
+                            _buildVehicleMetric(
+                              icon: Icons.navigation_rounded,
+                              label:
+                                  '${_currentPosition!.heading.toStringAsFixed(0)} deg',
+                            ),
+                          _buildVehicleMetric(
+                            icon: Icons.route_rounded,
+                            label: '${totalStudents.toString()} students',
                           ),
                         ],
                       ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.green.withValues(alpha: 0.2),
+                    ],
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: Colors.green, blurRadius: 4),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'LIVE',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 10),
+                _buildLiveChip(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NextStudentTripActionCard(
+              student:
+                  nextStudent == null ? null : _cardTargetForStudent(nextStudent),
+              students: _cardTargetsForStudents(),
+              mode: nextMode,
+              distanceMeters: nextDistance,
+              modeForStudent: _modeForCardTarget,
+              distanceForStudent: _distanceForCardTarget,
+              isSubmitting: _isUpdatingStudentStatus,
+              errorMessage: _statusErrorMessage,
+              compact: true,
+              embedded: true,
+              padding: EdgeInsets.zero,
+              onPickedUpStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected != null) _updateStudentStatus(selected, 'picked');
+              },
+              onDroppedOffStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected != null) _updateStudentStatus(selected, 'dropped');
+              },
+              onAbsentStudent: (target) {
+                final selected = _studentForCardTarget(target);
+                if (selected != null) _updateStudentStatus(selected, 'absent');
+              },
+              onChat: _openTripChat,
+              onStudents: _openStudentsList,
+              onNotify: _showNotifyOptions,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCompactStat(
+                    icon: Icons.people_outline_rounded,
+                    value: '$totalStudents',
+                    label: 'Total',
+                  ),
                 ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-          NextStudentTripActionCard(
-            student:
-                nextStudent == null ? null : _cardTargetForStudent(nextStudent),
-            students: _cardTargetsForStudents(),
-            mode: nextMode,
-            distanceMeters: nextDistance,
-            modeForStudent: _modeForCardTarget,
-            distanceForStudent: _distanceForCardTarget,
-            isSubmitting: _isUpdatingStudentStatus,
-            errorMessage: _statusErrorMessage,
-            onPickedUpStudent: (target) {
-              final selected = _studentForCardTarget(target);
-              if (selected != null) _updateStudentStatus(selected, 'picked');
-            },
-            onDroppedOffStudent: (target) {
-              final selected = _studentForCardTarget(target);
-              if (selected != null) _updateStudentStatus(selected, 'dropped');
-            },
-            onAbsentStudent: (target) {
-              final selected = _studentForCardTarget(target);
-              if (selected != null) _updateStudentStatus(selected, 'absent');
-            },
-            onChat: _openTripChat,
-            onStudents: _openStudentsList,
-            onNotify: _showNotifyOptions,
-          ),
-
-          const SizedBox(height: 24),
-          const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
-          const SizedBox(height: 24),
-
-          // Students summary
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStat(
-                icon: Icons.people_outline_rounded,
-                value: '${_students.length}',
-                label: 'Total',
-              ),
-              Container(width: 1, height: 40, color: const Color(0xFFEEEEEE)),
-              _buildStat(
-                icon: Icons.check_circle_outline_rounded,
-                value: '${_students.where((s) => s.isStudentPicked).length}',
-                label: 'Picked',
-                iconColor: Colors.green,
-              ),
-              if (_routeResult != null) ...[
-                Container(width: 1, height: 40, color: const Color(0xFFEEEEEE)),
-                _buildStat(
-                  icon: Icons.access_time_rounded,
-                  value: _routeResult!.formattedDuration,
-                  label: 'ETA',
-                  iconColor: Colors.blue,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactStat(
+                    icon: Icons.pending_actions_rounded,
+                    value: '$waitingStudents',
+                    label: 'Waiting',
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactStat(
+                    icon: _routeResult == null
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.access_time_rounded,
+                    value: _routeResult?.formattedDuration ?? '$pickedStudents',
+                    label: _routeResult == null ? 'Picked' : 'ETA',
+                    color: _routeResult == null ? Colors.green : Colors.blue,
+                  ),
                 ),
               ],
-            ],
+            ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleMetric({
+    required IconData icon,
+    required String label,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.grey.shade600),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Colors.green,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.green, blurRadius: 4)],
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'LIVE',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Colors.green,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStat({
+  Widget _buildCompactStat({
     required IconData icon,
     required String value,
     required String label,
-    Color? iconColor,
+    Color color = const Color(0xFF6B9B5B),
   }) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: (iconColor ?? const Color(0xFF6B9B5B)).withValues(
-              alpha: 0.1,
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: Color(0xFF101828),
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
             ),
-            shape: BoxShape.circle,
           ),
-          child: Icon(
-            icon,
-            size: 22,
-            color: iconColor ?? const Color(0xFF6B9B5B),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
