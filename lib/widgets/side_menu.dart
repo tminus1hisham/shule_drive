@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/trip_provider.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme_extension.dart';
+import 'autoload_trips_toggle.dart';
 import 'ui/ui.dart';
 
 class SideMenu extends StatefulWidget {
@@ -65,6 +66,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     final tripProvider = context.watch<TripProvider>();
     final isDriver = authProvider.isDriver;
     final hasActiveTrip = tripProvider.activeTrip != null;
+    final currentRoute = ModalRoute.of(context)?.settings.name;
 
     return Drawer(
       backgroundColor: context.scheme.surface,
@@ -92,11 +94,12 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: AppSpacing.xs),
                       ],
-                      _buildHighlightedMenuItem(
+                      _buildMenuItem(
                         context,
                         Icons.person_rounded,
                         'Profile',
                         () => _navigateTo(context, '/profile'),
+                        isActive: currentRoute == '/profile',
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       _buildMenuItem(
@@ -104,27 +107,40 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                         Icons.directions_bus_outlined,
                         isDriver ? 'Trip History' : 'My Trips',
                         () => _navigateTo(context, '/trips'),
+                        isActive: currentRoute == '/trips',
                       ),
-                      if (isDriver)
+                      if (isDriver) ...[
+                        _buildMenuItem(
+                          context,
+                          Icons.event_available_outlined,
+                          'Scheduled Trips',
+                          () => _navigateTo(context, '/trip-selection'),
+                          isActive: currentRoute == '/trip-selection',
+                        ),
                         _buildMenuItem(
                           context,
                           Icons.edit_note_rounded,
                           'Manage Trips',
                           () => _navigateTo(context, '/manage-master-trips'),
+                          isActive: currentRoute == '/manage-master-trips',
                         ),
+                      ],
                       _buildMenuItem(
                         context,
                         Icons.description_outlined,
                         'About Us',
                         () => _navigateTo(context, '/about'),
+                        isActive: currentRoute == '/about',
                       ),
                       _buildMenuItem(
                         context,
                         Icons.phone_in_talk_outlined,
                         'Contact',
                         () => _navigateTo(context, '/contact'),
+                        isActive: currentRoute == '/contact',
                       ),
                       const SizedBox(height: AppSpacing.md),
+                      if (isDriver) const AutoloadTripsToggle(),
                       _buildThemeToggle(context, provider),
                       const SizedBox(height: AppSpacing.xxl),
                       _buildSocialMediaLinks(context),
@@ -171,15 +187,17 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildHighlightedMenuItem(
+  /// Menu row. When [isActive] the row is highlighted to mark the current page.
+  Widget _buildMenuItem(
     BuildContext context,
     IconData icon,
     String title,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    bool isActive = false,
+  }) {
     final brand = context.colors.brand;
     return Material(
-      color: context.colors.brandSoft,
+      color: isActive ? context.colors.brandSoft : Colors.transparent,
       borderRadius: AppRadius.brMd,
       child: InkWell(
         onTap: onTap,
@@ -191,48 +209,25 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
           ),
           child: Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: brand.withValues(alpha: 0.18),
-                  borderRadius: AppRadius.brSm,
-                ),
-                child: Icon(icon, color: brand, size: 20),
-              ),
+              if (isActive)
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: brand.withValues(alpha: 0.18),
+                    borderRadius: AppRadius.brSm,
+                  ),
+                  child: Icon(icon, color: brand, size: 20),
+                )
+              else
+                Icon(icon, color: context.colors.textSecondary, size: 24),
               const SizedBox(width: AppSpacing.md),
               Text(
                 title,
-                style: context.text.titleMedium?.copyWith(color: brand),
+                style: isActive
+                    ? context.text.titleMedium?.copyWith(color: brand)
+                    : context.text.titleMedium,
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(
-    BuildContext context,
-    IconData icon,
-    String title,
-    VoidCallback onTap,
-  ) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppRadius.brMd,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: context.colors.textSecondary, size: 24),
-              const SizedBox(width: AppSpacing.md),
-              Text(title, style: context.text.titleMedium),
             ],
           ),
         ),
@@ -474,7 +469,9 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
   }
 
   void _navigateTo(BuildContext context, String route) {
+    final currentRoute = ModalRoute.of(context)?.settings.name;
     Navigator.pop(context);
+    if (currentRoute == route) return; // already here, just close the drawer
     Navigator.pushNamed(context, route);
   }
 

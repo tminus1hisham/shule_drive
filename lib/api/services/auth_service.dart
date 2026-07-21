@@ -138,7 +138,7 @@ class AuthService {
   /// Clears local auth token (no API endpoint exists on backend currently)
   Future<void> logout() async {
     try {
-      // await _apiClient.post(Endpoints.logout); // Endpoint does not exist
+      // No backend logout endpoint exists; just clear the local auth token.
       await _apiClient.clearAuthToken();
     } on ApiException {
       rethrow;

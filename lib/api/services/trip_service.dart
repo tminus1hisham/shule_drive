@@ -66,12 +66,19 @@ class TripService {
 
   /// Get active trip with buffer fallback
   /// GET /api/trips/get/student/active/trip?guardianPhone={phone}
+  ///
+  /// The endpoint is guardian-only: it rejects any call without
+  /// `guardianPhone` with a 400. Callers that have no phone (drivers) skip the
+  /// request entirely and read the buffer, which is kept current by
+  /// [cacheActiveTrip].
   Future<Trip?> getActiveTrip({String? guardianPhone}) async {
+    if (guardianPhone == null || guardianPhone.isEmpty) {
+      debugPrint('📡 No guardianPhone - reading active trip from buffer');
+      return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
+    }
+
     try {
-      final queryParams = <String, String>{};
-      if (guardianPhone != null && guardianPhone.isNotEmpty) {
-        queryParams['guardianPhone'] = guardianPhone;
-      }
+      final queryParams = <String, String>{'guardianPhone': guardianPhone};
 
       debugPrint(
         '📡 Fetching active trip from: ${Endpoints.getStudentActiveTrip}',
@@ -80,7 +87,7 @@ class TripService {
 
       final response = await _apiClient.get(
         Endpoints.getStudentActiveTrip,
-        queryParams: queryParams.isNotEmpty ? queryParams : null,
+        queryParams: queryParams,
       );
 
       debugPrint('📡 Active trip response: $response');
@@ -253,6 +260,12 @@ class TripService {
       } else {
         // Try to parse response directly
         trip = Trip.fromJson(Map<String, dynamic>.from(response));
+      }
+
+      // Keep the master trip id on the trip - it is the join key for the
+      // driver-readable server endpoints (master trip students, unique trips).
+      if (trip.masterTripId == null) {
+        trip = trip.copyWith(masterTripId: resolvedMasterTripId);
       }
 
       // Update active trip buffer
@@ -653,7 +666,18 @@ class TripService {
 
   /// Get students in a master trip
   /// GET /api/trips/get/master/trip/students?masterTripId={id}
-  Future<List<TripStudent>> getMasterTripStudents(int masterTripId) async {
+  ///
+  /// Takes no guardianPhone, so drivers can call it. The rows carry
+  /// `isStudentPicked` / `isStudentDropped`, which makes this the one
+  /// server-side read of pick state available to a driver. Pass
+  /// [forceRefresh] to bypass the 5-minute buffer when reconciling live state.
+  Future<List<TripStudent>> getMasterTripStudents(
+    int masterTripId, {
+    bool forceRefresh = false,
+  }) async {
+    if (forceRefresh) {
+      await _buffer.clearBuffer('master_trip_students_$masterTripId');
+    }
     return _buffer.withBuffer<List<TripStudent>>(
       apiCall: () async {
         final response = await _apiClient.get(
@@ -1011,6 +1035,18 @@ class TripService {
     }
   }
 
+  /// Background refreshes currently in flight, keyed by buffer key, so
+  /// concurrent callers share one request instead of each firing their own.
+  static final Map<String, Future<List<MasterTrip>>> _masterTripsInFlight = {};
+
+  /// When each driver's master trips were last refreshed from the network.
+  static final Map<String, DateTime> _masterTripsLastRefresh = {};
+
+  /// Minimum gap between background refreshes of the same driver's trips.
+  /// Several screens poll this on their own timers; without a floor they each
+  /// hit the network on every tick.
+  static const Duration _masterTripsRefreshInterval = Duration(seconds: 60);
+
   /// Get master trips with cache-first pattern
   /// Shows cached data immediately, then refreshes in background
   /// Returns cached trips immediately if available, then updates with fresh data via callback
@@ -1025,30 +1061,54 @@ class TripService {
       key: bufferKey,
     );
 
-    // Fetch fresh data in background
-    Future<void> fetchFresh() async {
-      try {
-        final freshTrips = await getMasterTripsByDriver(driverId);
-        // Save to cache
-        await _buffer.saveBuffer(
-          key: bufferKey,
-          data: freshTrips,
-          expiration: const Duration(minutes: 30),
-        );
-        // Notify with fresh data
-        onRefresh(freshTrips);
-      } catch (e) {
+    // Fetch fresh data, joining an in-flight request if one is already running
+    Future<List<MasterTrip>> fetchFresh() {
+      final inFlight = _masterTripsInFlight[bufferKey];
+      if (inFlight != null) {
         if (kDebugMode) {
-          print('⚠️ Background refresh failed: $e');
+          print('⏳ Joining in-flight master trips request');
         }
+        return inFlight;
       }
+
+      final request = Future(() async {
+        try {
+          final freshTrips = await getMasterTripsByDriver(driverId);
+          await _buffer.saveBuffer(
+            key: bufferKey,
+            data: freshTrips,
+            expiration: const Duration(minutes: 30),
+          );
+          _masterTripsLastRefresh[bufferKey] = DateTime.now();
+          return freshTrips;
+        } finally {
+          _masterTripsInFlight.remove(bufferKey);
+        }
+      });
+
+      _masterTripsInFlight[bufferKey] = request;
+      return request;
     }
 
-    // Start background fetch
-    fetchFresh();
-
-    // Return cached data immediately if available
+    // Return cached data immediately if available, refreshing behind it
     if (cachedTrips != null && cachedTrips.isNotEmpty) {
+      final lastRefresh = _masterTripsLastRefresh[bufferKey];
+      final isFresh =
+          lastRefresh != null &&
+          DateTime.now().difference(lastRefresh) < _masterTripsRefreshInterval;
+
+      if (!isFresh) {
+        unawaited(() async {
+          try {
+            onRefresh(await fetchFresh());
+          } catch (e) {
+            if (kDebugMode) {
+              print('⚠️ Background refresh failed: $e');
+            }
+          }
+        }());
+      }
+
       if (kDebugMode) {
         print('📦 Returning cached trips: ${cachedTrips.length} items');
       }
@@ -1059,13 +1119,7 @@ class TripService {
     if (kDebugMode) {
       print('📡 No cache available, fetching fresh data...');
     }
-    final trips = await getMasterTripsByDriver(driverId);
-    await _buffer.saveBuffer(
-      key: bufferKey,
-      data: trips,
-      expiration: const Duration(minutes: 30),
-    );
-    return trips;
+    return await fetchFresh();
   }
 
   /// Fetch complete trip data including students and guardians

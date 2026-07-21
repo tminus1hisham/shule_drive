@@ -138,8 +138,8 @@ void main() {
                               distanceMeters: 35,
                               modeForStudent: (student) =>
                                   student.status == 'picked'
-                                      ? StudentTripActionMode.dropoff
-                                      : StudentTripActionMode.pickup,
+                                  ? StudentTripActionMode.dropoff
+                                  : StudentTripActionMode.pickup,
                               distanceForStudent: (student) =>
                                   student.id == '42' ? 35 : null,
                               onPickedUpStudent: (student) {
@@ -174,9 +174,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trip students'), findsOneWidget);
+    expect(
+      find.text('3 total - 1 waiting - 1 picked - 1 dropped'),
+      findsOneWidget,
+    );
     expect(find.text('Amina Otieno'), findsOneWidget);
     expect(find.text('Brian Mwangi'), findsOneWidget);
-    expect(find.text('Chao Njeri'), findsOneWidget);
     expect(find.text('35 m away'), findsOneWidget);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Students'), findsOneWidget);
@@ -191,5 +194,17 @@ void main() {
     expect(openedChat, isTrue);
     expect(openedStudents, isTrue);
     expect(pickedStudentId, '42');
+
+    // The roster is taller than its viewport, so later students are only built
+    // once they are scrolled into view.
+    await tester.scrollUntilVisible(
+      find.text('Chao Njeri'),
+      200,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('Chao Njeri'), findsOneWidget);
   });
 }

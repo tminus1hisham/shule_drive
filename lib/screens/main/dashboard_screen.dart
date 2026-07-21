@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../main.dart';
 import '../../providers/app_provider.dart';
@@ -11,6 +12,7 @@ import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
+import '../../utils/next_trip_selector.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/bus_illustration.dart';
 import '../../widgets/ui/ui.dart';
@@ -41,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Duration _tripDuration = Duration.zero;
 
   // Next scheduled master trip (for idle dashboard)
-  MasterTrip? _nextMasterTrip;
+  ScheduledMasterTrip? _nextScheduledTrip;
 
   // Refresh interval (30 seconds)
   static const Duration _refreshInterval = Duration(seconds: 30);
@@ -83,6 +85,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// has one running, resume it immediately on the live trip screen.
   /// Only when there is no active trip do we check for scheduled master trips.
   Future<void> _initDashboard() async {
+    // Make sure the autoload preference is read before we decide whether to
+    // jump the driver straight into their scheduled trips.
+    await context.read<AppProvider>().ensurePreferencesLoaded();
     await _loadData();
     if (!mounted) return;
 
@@ -131,6 +136,16 @@ class _DashboardScreenState extends State<DashboardScreen>
       debugPrint(
         '🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check',
       );
+      setState(() {
+        _hasCheckedMasterTrips = true;
+        _isCheckingMasterTrips = false;
+      });
+      return;
+    }
+
+    // Driver opted out of autoload - they open scheduled trips themselves
+    if (!context.read<AppProvider>().autoloadTrips) {
+      debugPrint('🔍 Autoload is off, skipping master trip check');
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -272,11 +287,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       final now = DateTime.now();
 
+      // Keep the idle dashboard's "next trip" card in step with the clock.
+      _updateNextScheduledTrip(masterTrips, now);
+
       for (final trip in masterTrips) {
         // Skip already-prompted trips
         if (_promptedTripIds.contains(trip.id)) continue;
 
-        final tripDateTime = _parseTripTime(trip.tripTime);
+        final tripDateTime = parseTripTimeOfDay(trip.tripTime, now: now);
         if (tripDateTime == null) continue;
 
         final diff = tripDateTime.difference(now);
@@ -295,29 +313,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Parse tripTime string (e.g. "07:30 AM") to DateTime for today
-  DateTime? _parseTripTime(String tripTime) {
-    try {
-      final cleaned = tripTime.trim().toUpperCase();
-      final isPM = cleaned.contains('PM');
-      final isAM = cleaned.contains('AM');
-      final timePart = cleaned.replaceAll(RegExp(r'[APM\s]'), '').trim();
-      final parts = timePart.split(':');
+  /// Store the trip that is next up for the driver right now, so the idle
+  /// dashboard shows the trip the clock has reached rather than whichever one
+  /// the API happened to list first.
+  void _updateNextScheduledTrip(List<MasterTrip> trips, DateTime now) {
+    if (!mounted) return;
 
-      if (parts.length < 2) return null;
+    final next = selectNextMasterTrip(trips, now: now);
 
-      var hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
+    // Rebuild whenever there is something to show: the countdown label ages
+    // with the clock even when the selected trip is unchanged.
+    if (next == null && _nextScheduledTrip == null) return;
 
-      if (isPM && hour != 12) hour += 12;
-      if (isAM && hour == 12) hour = 0;
-
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day, hour, minute);
-    } catch (e) {
-      debugPrint('⚠️ Failed to parse trip time "$tripTime": $e');
-      return null;
-    }
+    setState(() => _nextScheduledTrip = next);
   }
 
   /// Show a bottom sheet prompting the driver to start an upcoming trip
@@ -547,11 +555,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         onRefresh: (_) {},
       );
 
-      if (mounted && trips.isNotEmpty) {
-        setState(() {
-          _nextMasterTrip = trips.first;
-        });
-      }
+      _updateNextScheduledTrip(trips, DateTime.now());
     } catch (e) {
       if (kDebugMode) print('Failed to load next trip: $e');
     }
@@ -597,10 +601,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
+    final appProvider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
     final tripProvider = context.watch<TripProvider>();
-    final isDarkMode = provider.isDarkMode;
     final userData = authProvider.userData;
     final isDriver = authProvider.isDriver;
     final isGuardian = authProvider.isGuardian;
@@ -616,76 +619,86 @@ class _DashboardScreenState extends State<DashboardScreen>
             onRefresh: _refresh,
             color: context.colors.brand,
             child: SafeArea(
+              bottom: false,
               child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  SliverToBoxAdapter(child: _buildHeader(userData, isDarkMode)),
+                  SliverToBoxAdapter(child: _buildTopBar(userData, appProvider)),
                   SliverToBoxAdapter(
-                    child: _buildGreeting(
-                      userData,
-                      isDriver,
-                      hasActiveTrip,
-                      isDarkMode,
-                    ),
+                    child: _buildGreeting(userData, isDriver, hasActiveTrip),
                   ),
 
-                  // Main content based on role and trip status
+                  // Primary content — adapts to role and live trip status.
                   if (isDriver)
-                    SliverToBoxAdapter(
-                      child: hasActiveTrip
-                          ? _buildDriverActiveTrip(
-                              context,
-                              tripProvider,
-                              isDarkMode,
-                            )
-                          : _buildDriverStartTrip(context, isDarkMode),
-                    )
+                    ..._driverSlivers(tripProvider, hasActiveTrip)
                   else if (isGuardian)
-                    SliverToBoxAdapter(
-                      child: hasActiveTrip
-                          ? _buildGuardianActiveTrip(
-                              context,
-                              tripProvider,
-                              isDarkMode,
-                            )
-                          : _buildGuardianIdle(context, isDarkMode),
-                    ),
+                    ..._guardianSlivers(tripProvider, hasActiveTrip),
 
-                  // Quick actions section
-                  SliverToBoxAdapter(
-                    child: _buildQuickActions(
-                      context,
-                      isDriver,
-                      hasActiveTrip,
-                      isDarkMode,
-                    ),
+                  SliverToBoxAdapter(child: _buildQuickActions(isDriver)),
+
+                  const SliverPadding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.xxl),
                   ),
-
-                  const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
                 ],
               ),
             ),
           ),
-          // Loading overlay when checking master trips
-          if (_isCheckingMasterTrips)
-            Container(
-              color: context.scheme.surface.withValues(alpha: 0.7),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: context.colors.brand),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'Checking for scheduled trips...',
-                      style: context.text.labelLarge?.copyWith(
-                        color: context.colors.brand,
-                      ),
-                    ),
-                  ],
+          if (_isCheckingMasterTrips) _buildCheckingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  /// Horizontal screen gutter shared by every dashboard block, so the whole
+  /// page lines up on one vertical rhythm.
+  Widget _block({required Widget child, double top = 0}) => Padding(
+    padding: EdgeInsets.fromLTRB(AppSpacing.lg, top, AppSpacing.lg, 0),
+    child: child,
+  );
+
+  List<Widget> _driverSlivers(TripProvider tripProvider, bool hasActiveTrip) {
+    if (hasActiveTrip) {
+      return [
+        SliverToBoxAdapter(child: _block(child: _buildDriverActiveTrip(tripProvider))),
+      ];
+    }
+    return [
+      SliverToBoxAdapter(child: _block(child: _buildDriverStartTrip())),
+      if (_nextScheduledTrip != null)
+        SliverToBoxAdapter(
+          child: _block(top: AppSpacing.sm, child: _buildNextTripCard()),
+        ),
+    ];
+  }
+
+  List<Widget> _guardianSlivers(TripProvider tripProvider, bool hasActiveTrip) {
+    if (!hasActiveTrip) {
+      return [SliverToBoxAdapter(child: _block(child: _buildGuardianIdle()))];
+    }
+    return [
+      SliverToBoxAdapter(child: _block(child: _buildGuardianActiveTrip(tripProvider))),
+    ];
+  }
+
+  Widget _buildCheckingOverlay() {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: context.scheme.surface.withValues(alpha: 0.82),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: context.colors.brand),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Checking for scheduled trips...',
+                style: context.text.labelLarge?.copyWith(
+                  color: context.colors.textSecondary,
                 ),
               ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -732,59 +745,60 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  // ==================== HEADER & GREETING ====================
+  // ==================== TOP BAR & GREETING ====================
 
-  Widget _buildHeader(Map<String, dynamic> userData, bool isDarkMode) {
+  /// Slim app bar: drawer, wordmark, notifications and profile. Kept to a
+  /// single 44pt row so the greeting below is the first thing that reads.
+  Widget _buildTopBar(Map<String, dynamic> userData, AppProvider appProvider) {
+    final unread = appProvider.unreadAlertCount;
+
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.xs,
+        AppSpacing.lg,
+        0,
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Builder(
-                builder: (context) => IconButton(
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(Icons.menu_rounded),
-                  color: context.scheme.onSurface,
-                  tooltip: 'Menu',
-                  style: IconButton.styleFrom(
-                    backgroundColor: context.colors.surfaceSubtle,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.xs),
-                decoration: BoxDecoration(
-                  gradient: context.colors.brandGradient,
-                  borderRadius: AppRadius.brSm,
-                  boxShadow: context.colors.shadowSm,
-                ),
-                child: const Icon(
-                  Icons.directions_bus_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ShuleDrive', style: context.text.titleLarge),
-                  Text(
-                    'Safe School Transport',
-                    style: context.text.labelSmall?.copyWith(
-                      color: context.colors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          Builder(
+            builder: (context) => _CircleIconButton(
+              icon: Icons.menu_rounded,
+              tooltip: 'Menu',
+              onTap: () => Scaffold.of(context).openDrawer(),
+            ),
           ),
+          const SizedBox(width: AppSpacing.xs),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: context.colors.brandGradient,
+              borderRadius: AppRadius.brSm,
+            ),
+            child: const Icon(
+              Icons.directions_bus_rounded,
+              color: Colors.white,
+              size: AppIconSize.md,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'ShuleDrive',
+              style: context.text.titleLarge?.copyWith(fontSize: 18),
+            ),
+          ),
+          _CircleIconButton(
+            icon: Icons.notifications_none_rounded,
+            tooltip: 'Notifications',
+            badgeCount: unread,
+            onTap: () => Navigator.pushNamed(context, '/notifications'),
+          ),
+          const SizedBox(width: AppSpacing.xs),
           AppAvatar(
             imageUrl: userData['avatar'] as String?,
             name: userData['name'] as String?,
+            size: 40,
             heroTag: 'profile_avatar',
             borderColor: context.scheme.surface,
             onTap: () => Navigator.pushNamed(context, '/profile'),
@@ -798,43 +812,65 @@ class _DashboardScreenState extends State<DashboardScreen>
     Map<String, dynamic> userData,
     bool isDriver,
     bool hasActiveTrip,
-    bool isDarkMode,
   ) {
-    final hour = DateTime.now().hour;
-    String greeting;
+    final now = DateTime.now();
+    final hour = now.hour;
+    final String greeting;
     if (hour < 12) {
-      greeting = 'Good Morning';
+      greeting = 'Good morning';
     } else if (hour < 17) {
-      greeting = 'Good Afternoon';
+      greeting = 'Good afternoon';
     } else {
-      greeting = 'Good Evening';
+      greeting = 'Good evening';
     }
 
-    String subtitle;
+    final String subtitle;
     if (isDriver) {
       subtitle = hasActiveTrip
-          ? 'Trip in progress. Drive safe!'
+          ? 'Trip in progress — drive safe.'
           : 'Ready to start your next trip?';
     } else {
       subtitle = hasActiveTrip
-          ? 'Your child\'s bus is on the way'
-          : 'Track your child\'s journey safely';
+          ? 'Your child\'s bus is on the way.'
+          : 'Track your child\'s journey safely.';
     }
+
+    final firstName = (userData['name'] as String?)?.split(' ').first ?? 'there';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
-        0,
+        AppSpacing.lg,
         AppSpacing.lg,
         AppSpacing.lg,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$greeting, ${userData['name']?.split(' ').first ?? 'User'}',
-            style: context.text.headlineMedium,
+          Row(
+            children: [
+              _MetaChip(
+                icon: Icons.calendar_today_rounded,
+                label: DateFormat('EEE, d MMM').format(now),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              _MetaChip(
+                icon: isDriver
+                    ? Icons.local_shipping_rounded
+                    : Icons.family_restroom_rounded,
+                label: isDriver ? 'Driver' : 'Guardian',
+                tint: context.colors.brand,
+              ),
+            ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            '$greeting,',
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          Text(firstName, style: context.text.displaySmall),
           const SizedBox(height: AppSpacing.xxs),
           Text(
             subtitle,
@@ -849,107 +885,137 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // ==================== DRIVER VIEWS ====================
 
-  Widget _buildDriverStartTrip(BuildContext context, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: GradientHeroCard(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 2,
-                ),
-              ),
-              child: const Icon(
-                Icons.directions_bus_rounded,
-                color: Colors.white,
-                size: 48,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Ready to Start?',
-              style: context.text.headlineSmall?.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Begin your route and ensure students arrive safely',
-              textAlign: TextAlign.center,
-              style: context.text.bodyMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.9),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (_nextMasterTrip != null) ...[
+  /// Idle driver hero. The scheduled-trip details moved out to their own
+  /// "Up next" card so this stays a single, unambiguous call to action.
+  Widget _buildDriverStartTrip() {
+    return GradientHeroCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  vertical: AppSpacing.xs,
-                  horizontal: AppSpacing.sm,
-                ),
+                padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: AppRadius.brSm,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    width: 1.5,
+                  ),
                 ),
-                child: Row(
+                child: const Icon(
+                  Icons.directions_bus_rounded,
+                  color: Colors.white,
+                  size: AppIconSize.xl,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.schedule_rounded,
-                      color: Colors.white70,
-                      size: 18,
+                    Text(
+                      'Ready to roll',
+                      style: context.text.headlineSmall?.copyWith(
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Next: ${_nextMasterTrip!.tripName}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.text.labelMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${_nextMasterTrip!.route} • ${_nextMasterTrip!.tripTime}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.text.labelSmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.8),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      'Begin your route and get every student there safely.',
+                      style: context.text.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        height: 1.45,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
             ],
-            AppButton(
-              label: 'Start Trip',
-              icon: Icons.play_arrow_rounded,
-              variant: AppButtonVariant.onBrand,
-              onPressed: _goToStartTrip,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppButton(
+            label: 'Start Trip',
+            icon: Icons.play_arrow_rounded,
+            variant: AppButtonVariant.onBrand,
+            onPressed: _goToStartTrip,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildDriverActiveTrip(
-    BuildContext context,
-    TripProvider tripProvider,
-    bool isDarkMode,
-  ) {
+  /// The driver's next scheduled master trip, promoted to its own tappable row
+  /// so the countdown is scannable at a glance.
+  Widget _buildNextTripCard() {
+    final next = _nextScheduledTrip!;
+    return AppCard(
+      onTap: () => Navigator.pushNamed(
+        context,
+        '/trip-selection',
+        arguments: {'autoSelectTripId': next.trip.id},
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: context.colors.accentSoft,
+              borderRadius: AppRadius.brSm,
+            ),
+            child: Icon(
+              Icons.schedule_rounded,
+              color: context.colors.accent,
+              size: AppIconSize.lg,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'UP NEXT',
+                  style: context.text.labelSmall?.copyWith(
+                    color: context.colors.textMuted,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  next.trip.tripName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.titleMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${next.trip.route} • ${next.trip.tripTime}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.bodySmall?.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          StatusPill(
+            label: formatNextTripCountdown(next),
+            color: context.colors.accent,
+            showDot: false,
+            dense: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDriverActiveTrip(TripProvider tripProvider) {
     final trip = tripProvider.activeTrip!;
     final pickedCount = trip.students.where((s) => s.status == 'picked').length;
     final totalCount = trip.students.length;
@@ -960,336 +1026,346 @@ class _DashboardScreenState extends State<DashboardScreen>
       _startDurationTimer(tripProvider);
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        shadow: context.colors.shadowMd,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.xs),
-                  decoration: BoxDecoration(
-                    color: context.colors.brandSoft,
-                    borderRadius: AppRadius.brSm,
-                  ),
-                  child: Icon(
-                    Icons.directions_bus_rounded,
-                    color: context.colors.brand,
-                  ),
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      shadow: context.colors.shadowMd,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                decoration: BoxDecoration(
+                  color: context.colors.brandSoft,
+                  borderRadius: AppRadius.brSm,
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(trip.routeName, style: context.text.titleMedium),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.timer_outlined,
-                            size: 14,
+                child: Icon(
+                  Icons.directions_bus_rounded,
+                  color: context.colors.brand,
+                  size: AppIconSize.lg,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      trip.routeName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.timer_outlined,
+                          size: AppIconSize.xs,
+                          color: context.colors.textSecondary,
+                        ),
+                        const SizedBox(width: AppSpacing.xxs),
+                        Text(
+                          _formatDuration(_tripDuration),
+                          style: context.text.labelMedium?.copyWith(
                             color: context.colors.textSecondary,
                           ),
-                          const SizedBox(width: AppSpacing.xxs),
-                          Text(
-                            _formatDuration(_tripDuration),
-                            style: context.text.labelMedium?.copyWith(
-                              color: context.colors.brand,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                StatusPill(label: 'Active', color: context.colors.success),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // Progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: context.colors.surfaceSubtle,
-                valueColor: AlwaysStoppedAnimation(context.colors.brand),
-                minHeight: 10,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$pickedCount of $totalCount students picked up',
-                  style: context.text.bodyMedium?.copyWith(
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-                Text(
-                  '${(progress * 100).toInt()}%',
-                  style: context.text.titleSmall?.copyWith(
-                    color: context.colors.brand,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // PRIMARY: Resume live map button
-            AppButton(
-              label: 'View Live Map',
-              icon: Icons.map_outlined,
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                Navigator.pushNamed(
-                  context,
-                  '/osm-tracking',
-                  arguments: {
-                    'tripId': tripProvider.activeTrip?.id ?? '',
-                    'preloadedData': null,
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-
-            // SECONDARY: Students + End trip row
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Students',
-                    icon: Icons.people_outline,
-                    variant: AppButtonVariant.outline,
-                    onPressed: () => Navigator.pushNamed(
-                      context,
-                      '/students-list',
-                      arguments: {'tripId': tripProvider.activeTrip?.id},
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppButton(
-                    label: 'End Trip',
-                    icon: Icons.stop_circle_outlined,
-                    variant: AppButtonVariant.danger,
-                    onPressed: () => _showEndTripDialog(context),
-                  ),
+              ),
+              StatusPill(
+                label: 'LIVE',
+                color: context.colors.success,
+                pulse: true,
+                dense: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // Pickup progress
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$pickedCount of $totalCount picked up',
+                style: context.text.bodyMedium?.copyWith(
+                  color: context.colors.textSecondary,
                 ),
-              ],
+              ),
+              Text(
+                '${(progress * 100).toInt()}%',
+                style: context.text.titleMedium?.copyWith(
+                  color: context.colors.brand,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ClipRRect(
+            borderRadius: AppRadius.brPill,
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: context.colors.surfaceSubtle,
+              valueColor: AlwaysStoppedAnimation(context.colors.brand),
+              minHeight: 8,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // PRIMARY: Resume live map button
+          AppButton(
+            label: 'View Live Map',
+            icon: Icons.map_outlined,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.pushNamed(
+                context,
+                '/osm-tracking',
+                arguments: {
+                  'tripId': tripProvider.activeTrip?.id ?? '',
+                  'preloadedData': null,
+                },
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.sm),
+
+          // SECONDARY: Students + End trip row
+          Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  label: 'Students',
+                  icon: Icons.people_outline,
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    '/students-list',
+                    arguments: {'tripId': tripProvider.activeTrip?.id},
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppButton(
+                  label: 'End Trip',
+                  icon: Icons.stop_circle_outlined,
+                  variant: AppButtonVariant.danger,
+                  onPressed: () => _showEndTripDialog(context),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   // ==================== GUARDIAN VIEWS ====================
 
-  Widget _buildGuardianIdle(BuildContext context, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        shadow: context.colors.shadowMd,
-        child: Column(
-          children: [
-            const BusIllustration(height: 120),
-            const SizedBox(height: AppSpacing.lg),
-            Text('No Active Trips', style: context.text.titleLarge),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'When the school bus starts its route, you\'ll see live updates here',
-              textAlign: TextAlign.center,
-              style: context.text.bodyMedium?.copyWith(
-                color: context.colors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            AppButton(
-              label: 'Manage Children',
-              icon: Icons.child_care_rounded,
-              variant: AppButtonVariant.outline,
-              onPressed: () => Navigator.pushNamed(context, '/manage-children'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuardianActiveTrip(
-    BuildContext context,
-    TripProvider tripProvider,
-    bool isDarkMode,
-  ) {
-    final trip = tripProvider.activeTrip!;
-    final guardianChildren = trip.students.toList();
-    final total = trip.students.length;
-    final picked = trip.students.where((s) => s.status == 'picked').length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+  Widget _buildGuardianIdle() {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      shadow: context.colors.shadowMd,
       child: Column(
         children: [
-          // Live tracking card — tappable to open unified trip view
-          GradientHeroCard(
-            onTap: () => Navigator.pushNamed(context, '/start-trip'),
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.xs),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.directions_bus_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trip.routeName,
-                            style: context.text.titleMedium?.copyWith(
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            'Bus ${trip.vehicleNumber ?? '...'}',
-                            style: context.text.bodySmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const StatusPill(
-                      label: 'LIVE',
-                      color: Colors.white,
-                      pulse: true,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    StatTile(
-                      icon: Icons.groups_outlined,
-                      value: '$total',
-                      label: 'Students',
-                      onLight: true,
-                    ),
-                    StatTile(
-                      icon: Icons.check_circle_outline,
-                      value: '$picked',
-                      label: 'Picked up',
-                      onLight: true,
-                    ),
-                    StatTile(
-                      icon: Icons.timelapse_outlined,
-                      value: '${total - picked}',
-                      label: 'Remaining',
-                      onLight: true,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Track',
-                        icon: Icons.map_outlined,
-                        variant: AppButtonVariant.onBrand,
-                        onPressed: () => Navigator.pushNamed(
-                          context,
-                          '/osm-tracking',
-                          arguments: {
-                            'tripId': trip.id,
-                            'busId': trip.vehicleId,
-                            'routeId': trip.routeId,
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: SizedBox(
-                        height: 52,
-                        child: FilledButton.icon(
-                          onPressed: () => _openTripChat(context, trip),
-                          icon: const Icon(Icons.chat_bubble_outline, size: 20),
-                          label: const Text('Chat'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.2),
-                            foregroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: AppRadius.brMd,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
+          const BusIllustration(height: 120),
           const SizedBox(height: AppSpacing.lg),
-
-          // Child status section
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Your Child\'s Status', style: context.text.headlineSmall),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          ...guardianChildren.map(
-            (student) => _buildChildStatusCard(student, isDarkMode),
-          ),
-
-          if (guardianChildren.isEmpty)
-            AppCard(
-              color: context.colors.surfaceSubtle,
-              shadow: const [],
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: context.colors.textSecondary),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'Your child is not assigned to this trip',
-                      style: context.text.bodyMedium?.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          Text('No active trips', style: context.text.headlineSmall),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'When the school bus starts its route, live updates will appear right here.',
+            textAlign: TextAlign.center,
+            style: context.text.bodyMedium?.copyWith(
+              color: context.colors.textSecondary,
+              height: 1.45,
             ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          AppButton(
+            label: 'Manage Children',
+            icon: Icons.child_care_rounded,
+            variant: AppButtonVariant.outline,
+            onPressed: () => Navigator.pushNamed(context, '/manage-children'),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildChildStatusCard(StudentPickup student, bool isDarkMode) {
+  Widget _buildGuardianActiveTrip(TripProvider tripProvider) {
+    final trip = tripProvider.activeTrip!;
+    final guardianChildren = trip.students.toList();
+    final total = trip.students.length;
+    final picked = trip.students.where((s) => s.status == 'picked').length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Live tracking hero — tappable to open the unified trip view
+        GradientHeroCard(
+          onTap: () => Navigator.pushNamed(context, '/start-trip'),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.directions_bus_rounded,
+                      color: Colors.white,
+                      size: AppIconSize.lg,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          trip.routeName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.text.titleMedium?.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'Bus ${trip.vehicleNumber ?? '...'}',
+                          style: context.text.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const StatusPill(
+                    label: 'LIVE',
+                    color: Colors.white,
+                    pulse: true,
+                    dense: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              // Divider keeps the metrics visually separate from the header.
+              Divider(
+                color: Colors.white.withValues(alpha: 0.18),
+                height: 1,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  StatTile(
+                    icon: Icons.groups_outlined,
+                    value: '$total',
+                    label: 'Students',
+                    onLight: true,
+                  ),
+                  StatTile(
+                    icon: Icons.check_circle_outline,
+                    value: '$picked',
+                    label: 'Picked up',
+                    onLight: true,
+                  ),
+                  StatTile(
+                    icon: Icons.timelapse_outlined,
+                    value: '${total - picked}',
+                    label: 'Remaining',
+                    onLight: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Track',
+                      icon: Icons.map_outlined,
+                      variant: AppButtonVariant.onBrand,
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        '/osm-tracking',
+                        arguments: {
+                          'tripId': trip.id,
+                          'busId': trip.vehicleId,
+                          'routeId': trip.routeId,
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: () => _openTripChat(context, trip),
+                        icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                        label: const Text('Chat'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          foregroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: AppRadius.brMd,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: AppSpacing.xl),
+
+        SectionHeader(
+          title: guardianChildren.length == 1 ? 'Your child' : 'Your children',
+          subtitle: 'Live pickup status on this trip',
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        ...guardianChildren.map(_buildChildStatusCard),
+
+        if (guardianChildren.isEmpty)
+          AppCard(
+            color: context.colors.surfaceSubtle,
+            shadow: const [],
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: context.colors.textSecondary),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Your child is not assigned to this trip',
+                    style: context.text.bodyMedium?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildChildStatusCard(StudentPickup student) {
     final isPicked = student.status == 'picked';
     final isDropped = student.status == 'dropped';
     final isAbsent = student.status == 'absent';
@@ -1300,14 +1376,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     if (isPicked) {
       statusColor = context.colors.success;
-      statusText = 'Picked Up';
-      statusIcon = Icons.check_circle;
+      statusText = 'Picked up';
+      statusIcon = Icons.check_circle_rounded;
     } else if (isDropped) {
       statusColor = context.colors.info;
-      statusText = 'Dropped Off';
+      statusText = 'Dropped off';
       statusIcon = Icons.home_rounded;
     } else if (isAbsent) {
-      statusColor = context.colors.warning;
+      statusColor = context.colors.error;
       statusText = 'Absent';
       statusIcon = Icons.person_off_rounded;
     } else {
@@ -1316,43 +1392,56 @@ class _DashboardScreenState extends State<DashboardScreen>
       statusIcon = Icons.schedule_rounded;
     }
 
+    final time = student.pickupTime;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
-        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+        padding: const EdgeInsets.all(AppSpacing.sm),
         child: Row(
           children: [
+            // Child avatar with a status ring, so state reads before the text.
             Container(
-              padding: const EdgeInsets.all(AppSpacing.xs),
+              padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.45),
+                  width: 2,
+                ),
               ),
-              child: Icon(statusIcon, color: statusColor),
+              child: AppAvatar(name: student.name, size: 40),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(student.name, style: context.text.titleMedium),
-                  const SizedBox(height: 2),
                   Text(
-                    statusText,
-                    style: context.text.labelMedium?.copyWith(
-                      color: statusColor,
-                    ),
+                    student.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.text.titleMedium,
                   ),
+                  if (time != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'at ${DateFormat('h:mm a').format(time)}',
+                      style: context.text.bodySmall?.copyWith(
+                        color: context.colors.textMuted,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            if (student.pickupTime != null)
-              Text(
-                '${student.pickupTime!.hour}:${student.pickupTime!.minute.toString().padLeft(2, '0')}',
-                style: context.text.bodySmall?.copyWith(
-                  color: context.colors.textMuted,
-                ),
-              ),
+            const SizedBox(width: AppSpacing.xs),
+            StatusPill(
+              label: statusText,
+              color: statusColor,
+              icon: statusIcon,
+              dense: true,
+            ),
           ],
         ),
       ),
@@ -1361,175 +1450,95 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // ==================== QUICK ACTIONS ====================
 
-  Widget _buildQuickActions(
-    BuildContext context,
-    bool isDriver,
-    bool hasActiveTrip,
-    bool isDarkMode,
-  ) {
+  /// Balanced 2×2 grid. Tints come from the theme tokens only, so the set reads
+  /// as one family in both light and dark rather than a bag of stock colors.
+  Widget _buildQuickActions(bool isDriver) {
+    final colors = context.colors;
+
+    final actions = isDriver
+        ? <_QuickAction>[
+            _QuickAction(
+              icon: Icons.play_circle_outline_rounded,
+              label: 'Start Trip',
+              subtitle: 'Begin a new journey',
+              tint: colors.brand,
+              onTap: _goToStartTrip,
+            ),
+            _QuickAction(
+              icon: Icons.event_note_rounded,
+              label: 'Manage Trips',
+              subtitle: 'View schedules',
+              tint: colors.info,
+              onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
+            ),
+            _QuickAction(
+              icon: Icons.history_rounded,
+              label: 'Trip History',
+              subtitle: 'Past journeys',
+              tint: colors.accent,
+              onTap: () => Navigator.pushNamed(context, '/trips'),
+            ),
+            _QuickAction(
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'Messages',
+              subtitle: 'Chat with guardians',
+              tint: colors.brand,
+              onTap: () => Navigator.pushNamed(context, '/chat'),
+            ),
+          ]
+        : <_QuickAction>[
+            _QuickAction(
+              icon: Icons.child_care_rounded,
+              label: 'My Children',
+              subtitle: 'Manage profiles',
+              tint: colors.brand,
+              onTap: () => Navigator.pushNamed(context, '/manage-children'),
+            ),
+            _QuickAction(
+              icon: Icons.route_rounded,
+              label: 'My Trips',
+              subtitle: 'Track journeys',
+              tint: colors.info,
+              onTap: () => Navigator.pushNamed(context, '/trips'),
+            ),
+            _QuickAction(
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'Messages',
+              subtitle: 'Chat with driver',
+              tint: colors.accent,
+              onTap: () => Navigator.pushNamed(context, '/chat'),
+            ),
+            _QuickAction(
+              icon: Icons.notifications_none_rounded,
+              label: 'Alerts',
+              subtitle: 'Trip notifications',
+              tint: colors.brand,
+              onTap: () => Navigator.pushNamed(context, '/notifications'),
+            ),
+          ];
+
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionHeader(title: 'Quick Actions'),
-          const SizedBox(height: AppSpacing.md),
-
-          // Modern grid layout for quick actions
-          if (isDriver)
-            _buildDriverQuickActionsGrid(context, isDarkMode)
-          else
-            _buildGuardianQuickActionsGrid(context, isDarkMode),
-        ],
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.xl,
+        AppSpacing.lg,
+        0,
       ),
-    );
-  }
-
-  /// Modern grid layout for driver quick actions (2x2 grid, no Live Track)
-  Widget _buildDriverQuickActionsGrid(BuildContext context, bool isDarkMode) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.add_circle_outline,
-                label: 'Start Trip',
-                subtitle: 'Begin new journey',
-                color: context.colors.brand,
-                onTap: _goToStartTrip,
-                isDarkMode: isDarkMode,
-                isPrimary: true,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.settings,
-                label: 'Manage Trips',
-                subtitle: 'View schedules',
-                color: const Color(0xFF2196F3),
-                onTap: () =>
-                    Navigator.pushNamed(context, '/manage-master-trips'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.history,
-                label: 'Trip History',
-                subtitle: 'Past journeys',
-                color: const Color(0xFF9C27B0),
-                onTap: () => Navigator.pushNamed(context, '/trips'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.chat_bubble_outline,
-                label: 'Messages',
-                subtitle: 'Chat with guardians',
-                color: const Color(0xFFFF9800),
-                onTap: () => Navigator.pushNamed(context, '/chat'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Modern grid layout for guardian quick actions (2x2 grid)
-  Widget _buildGuardianQuickActionsGrid(BuildContext context, bool isDarkMode) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.child_care,
-                label: 'My Children',
-                subtitle: 'Manage profiles',
-                color: const Color(0xFFE91E63),
-                onTap: () => Navigator.pushNamed(context, '/manage-children'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.local_shipping,
-                label: 'My Trips',
-                subtitle: 'Track journeys',
-                color: context.colors.brand,
-                onTap: () => Navigator.pushNamed(context, '/trips'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildModernQuickActionCard(
-                icon: Icons.chat_bubble_outline,
-                label: 'Messages',
-                subtitle: 'Chat with driver',
-                color: const Color(0xFFFF9800),
-                onTap: () => Navigator.pushNamed(context, '/chat'),
-                isDarkMode: isDarkMode,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Spacer(),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Modern quick action card with subtitle and better styling
-  Widget _buildModernQuickActionCard({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-    required bool isDarkMode,
-    bool isPrimary = false,
-  }) {
-    return AppCard(
-      onTap: onTap,
-      border: isPrimary
-          ? Border.all(color: color.withValues(alpha: 0.4), width: 1.5)
-          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: AppRadius.brSm,
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(label, style: context.text.titleSmall),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: context.text.labelSmall?.copyWith(
-              color: context.colors.textSecondary,
-            ),
+          const SectionHeader(title: 'Quick actions'),
+          const SizedBox(height: AppSpacing.md),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: AppSpacing.sm,
+            crossAxisSpacing: AppSpacing.sm,
+            childAspectRatio: 1.35,
+            children: [
+              for (final action in actions) _ActionTile(action: action),
+            ],
           ),
         ],
       ),
@@ -1565,9 +1574,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => Center(
-        child: CircularProgressIndicator(color: ctx.colors.brand),
-      ),
+      builder: (ctx) =>
+          Center(child: CircularProgressIndicator(color: ctx.colors.brand)),
     );
 
     try {
@@ -1614,6 +1622,187 @@ class _DashboardScreenState extends State<DashboardScreen>
         'receiverRole': 'Driver',
         'isTripChat': true,
       },
+    );
+  }
+}
+
+// ==================== DASHBOARD PIECES ====================
+
+/// Soft circular icon button used in the dashboard top bar, with an optional
+/// unread badge.
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+    this.badgeCount = 0,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button = Material(
+      color: context.colors.surfaceSubtle,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: AppIconSize.md, color: context.scheme.onSurface),
+        ),
+      ),
+    );
+
+    if (tooltip != null) {
+      button = Tooltip(message: tooltip!, child: button);
+    }
+
+    if (badgeCount <= 0) return button;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        button,
+        Positioned(
+          top: -1,
+          right: -1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 18),
+            decoration: BoxDecoration(
+              color: context.colors.error,
+              borderRadius: AppRadius.brPill,
+              border: Border.all(color: context.scheme.surface, width: 1.5),
+            ),
+            child: Text(
+              badgeCount > 9 ? '9+' : '$badgeCount',
+              textAlign: TextAlign.center,
+              style: context.text.labelSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 10,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small pill showing a piece of context (date, role) above the greeting.
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.icon, required this.label, this.tint});
+
+  final IconData icon;
+  final String label;
+
+  /// Defaults to a neutral tint; pass a token color to emphasise the chip.
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = tint ?? context.colors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: tint == null
+            ? context.colors.surfaceSubtle
+            : tint!.withValues(alpha: 0.12),
+        borderRadius: AppRadius.brPill,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: AppIconSize.xs, color: fg),
+          const SizedBox(width: AppSpacing.xxs),
+          Text(
+            label,
+            style: context.text.labelMedium?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One entry in the quick-actions grid.
+class _QuickAction {
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.tint,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color tint;
+  final VoidCallback onTap;
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({required this.action});
+
+  final _QuickAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      onTap: action.onTap,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: action.tint.withValues(alpha: 0.12),
+              borderRadius: AppRadius.brSm,
+            ),
+            child: Icon(
+              action.icon,
+              color: action.tint,
+              size: AppIconSize.lg,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                action.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.titleSmall,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                action.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.labelSmall?.copyWith(
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

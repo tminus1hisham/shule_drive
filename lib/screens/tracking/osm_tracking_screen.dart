@@ -10,6 +10,7 @@ import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../utils/student_trip_logic.dart';
 import '../../widgets/next_student_trip_action_card.dart';
@@ -75,10 +76,15 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   bool _isLoading = true;
   bool _isLoadingRoute = false;
   bool _isUpdatingStudentStatus = false;
+  bool _isEndingTrip = false;
   String? _errorMessage;
   String? _statusErrorMessage;
   final Map<int, String> _studentStatusUpdates = {};
   final Set<String> _shownStudentProximityAlerts = {};
+
+  // Provider reference kept for listener add/remove. The provider is the single
+  // source of truth for student status shared with the students-list screen.
+  TripProvider? _tripProvider;
 
   @override
   void initState() {
@@ -91,7 +97,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     _initializeMapbox();
     _loadPreloadedData();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _tripProvider = context.read<TripProvider>();
+      _tripProvider?.addListener(_onTripProviderChanged);
       await _loadProviderTripData();
+      _onTripProviderChanged();
       _initializeLocation();
       _loadTripData();
     });
@@ -99,14 +109,46 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   @override
   void dispose() {
+    _tripProvider?.removeListener(_onTripProviderChanged);
     _animationController.dispose();
     _positionStream?.cancel();
     _mapboxMap?.dispose();
     super.dispose();
   }
 
+  /// Mirror status changes made elsewhere (e.g. picks on the students-list
+  /// screen, which go through TripProvider) into this screen's local status
+  /// cache so the info panel and next-pickup card stay in sync. Keyed by
+  /// student id: [StudentPickup.id] parses to [TripStudent.studentId].
+  void _onTripProviderChanged() {
+    if (!mounted) return;
+    final providerTrip = _tripProvider?.activeTrip;
+    if (providerTrip == null || providerTrip.students.isEmpty) return;
+
+    var changed = false;
+    for (final student in providerTrip.students) {
+      final key = int.tryParse(student.id);
+      if (key == null) continue;
+      final normalized = StudentPickup.normalizeStatus(student.status);
+      if (_studentStatusUpdates[key] != normalized) {
+        _studentStatusUpdates[key] = normalized;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      setState(() {});
+      _updateMarkers();
+    }
+  }
+
   String? get _tripDirection =>
       _trip?.tripDirection ?? _preloadedData?.masterTrip.tripDirection;
+
+  String? get _activeTripId {
+    final id = widget.tripId ?? _trip?.id ?? _tripProvider?.activeTrip?.id;
+    return id == null || id.trim().isEmpty ? null : id;
+  }
 
   String get _routeName =>
       _trip?.routeName ??
@@ -646,12 +688,12 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     TripStudent student,
     StudentTripActionMode mode,
   ) {
-    final latitude = mode == StudentTripActionMode.dropoff &&
-            student.pickedLatitude != 0
+    final latitude =
+        mode == StudentTripActionMode.dropoff && student.pickedLatitude != 0
         ? student.pickedLatitude
         : student.latitude;
-    final longitude = mode == StudentTripActionMode.dropoff &&
-            student.pickedLongitude != 0
+    final longitude =
+        mode == StudentTripActionMode.dropoff && student.pickedLongitude != 0
         ? student.pickedLongitude
         : student.longitude;
 
@@ -685,10 +727,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       destinationLabel: student.address.isNotEmpty
           ? student.address
           : student.route.isNotEmpty
-              ? student.route
-              : mode == StudentTripActionMode.dropoff
-                  ? 'Saved home destination'
-                  : 'Pickup location',
+          ? student.route
+          : mode == StudentTripActionMode.dropoff
+          ? 'Saved home destination'
+          : 'Pickup location',
       latitude: target?.latitude,
       longitude: target?.longitude,
     );
@@ -815,6 +857,18 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       setState(() {
         _studentStatusUpdates[student.studentId] = status;
       });
+
+      // Reflect this change in the shared TripProvider so provider-bound
+      // screens (the students-list screen) stay in sync and guardians are
+      // notified over MQTT. The API call above already persisted it, so this
+      // only updates local provider state.
+      context.read<TripProvider>().reflectStudentStatusLocally(
+        tripId: widget.tripId!,
+        studentId: student.studentId.toString(),
+        status: status,
+        latitude: _currentPosition?.latitude,
+        longitude: _currentPosition?.longitude,
+      );
 
       await _calculateRoute();
       await _updateMarkers();
@@ -943,6 +997,89 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         backgroundColor: const Color(0xFF6B9B5B),
       ),
     );
+  }
+
+  void _showTripCompletionError(String? message) {
+    final errorMessage = message ?? 'Unknown error';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Failed to complete trip: $errorMessage'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  Future<void> _completeTrip() async {
+    if (_isEndingTrip) return;
+
+    final tripId = _activeTripId;
+    if (tripId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to complete this trip')),
+      );
+      return;
+    }
+
+    final remaining = _students.where((student) {
+      final status = _getStudentStatus(student);
+      return status == 'pending' || status == 'picked';
+    }).length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Complete Trip?'),
+        content: Text(
+          remaining == 0
+              ? 'This will end live tracking and return to the dashboard.'
+              : '$remaining students still have actions remaining. Complete the trip anyway?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Complete Trip'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isEndingTrip = true);
+    final authProvider = context.read<AuthProvider>();
+    final tripProvider = context.read<TripProvider>();
+    try {
+      final success = await tripProvider.endTrip(
+        tripId,
+        driverId: authProvider.userId,
+        driverName: authProvider.userName,
+      );
+      if (!mounted) return;
+
+      if (!success) {
+        _showTripCompletionError(tripProvider.errorMessage);
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Trip completed successfully'),
+          backgroundColor: Color(0xFF6B9B5B),
+        ),
+      );
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/dashboard',
+        (route) => false,
+        arguments: {'fromTripEnd': true},
+      );
+    } catch (error) {
+      if (mounted) _showTripCompletionError(error.toString());
+    } finally {
+      if (mounted) setState(() => _isEndingTrip = false);
+    }
   }
 
   @override
@@ -1084,13 +1221,19 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     final nextMode = nextStudent == null
         ? StudentTripActionMode.pickup
         : _actionModeForStudent(nextStudent);
-    final nextDistance =
-        nextStudent == null ? null : _distanceToStudent(nextStudent);
+    final nextDistance = nextStudent == null
+        ? null
+        : _distanceToStudent(nextStudent);
     final totalStudents = _students.length;
-    final waitingStudents =
-        _students.where((s) => _getStudentStatus(s) == 'pending').length;
-    final pickedStudents =
-        _students.where((s) => _getStudentStatus(s) == 'picked').length;
+    final waitingStudents = _students
+        .where((s) => _getStudentStatus(s) == 'pending')
+        .length;
+    final pickedStudents = _students
+        .where((s) => _getStudentStatus(s) == 'picked')
+        .length;
+    final canCompleteTrip = context.select<AuthProvider, bool>(
+      (authProvider) => authProvider.isDriver,
+    );
     final maxPanelHeight = MediaQuery.sizeOf(context).height * 0.45;
 
     return SafeArea(
@@ -1120,128 +1263,140 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Row(
-              children: [
-                Container(
-                  height: 44,
-                  width: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.directions_bus_filled_rounded,
-                    color: Color(0xFF2E6B3D),
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _vehicleLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF101828),
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6B9B5B).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 4,
+                      child: const Icon(
+                        Icons.directions_bus_filled_rounded,
+                        color: Color(0xFF2E6B3D),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_currentPosition != null)
-                            _buildVehicleMetric(
-                              icon: Icons.speed_rounded,
-                              label:
-                                  '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
+                          Text(
+                            _vehicleLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF101828),
                             ),
-                          if (_currentPosition != null)
-                            _buildVehicleMetric(
-                              icon: Icons.navigation_rounded,
-                              label:
-                                  '${_currentPosition!.heading.toStringAsFixed(0)} deg',
-                            ),
-                          _buildVehicleMetric(
-                            icon: Icons.route_rounded,
-                            label: '${totalStudents.toString()} students',
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 4,
+                            children: [
+                              if (_currentPosition != null)
+                                _buildVehicleMetric(
+                                  icon: Icons.speed_rounded,
+                                  label:
+                                      '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
+                                ),
+                              if (_currentPosition != null)
+                                _buildVehicleMetric(
+                                  icon: Icons.navigation_rounded,
+                                  label:
+                                      '${_currentPosition!.heading.toStringAsFixed(0)} deg',
+                                ),
+                              _buildVehicleMetric(
+                                icon: Icons.route_rounded,
+                                label: '${totalStudents.toString()} students',
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 10),
+                    _buildLiveChip(),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                _buildLiveChip(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            NextStudentTripActionCard(
-              student:
-                  nextStudent == null ? null : _cardTargetForStudent(nextStudent),
-              students: _cardTargetsForStudents(),
-              mode: nextMode,
-              distanceMeters: nextDistance,
-              modeForStudent: _modeForCardTarget,
-              distanceForStudent: _distanceForCardTarget,
-              isSubmitting: _isUpdatingStudentStatus,
-              errorMessage: _statusErrorMessage,
-              compact: true,
-              embedded: true,
-              padding: EdgeInsets.zero,
-              onPickedUpStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected != null) _updateStudentStatus(selected, 'picked');
-              },
-              onDroppedOffStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected != null) _updateStudentStatus(selected, 'dropped');
-              },
-              onAbsentStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected != null) _updateStudentStatus(selected, 'absent');
-              },
-              onChat: _openTripChat,
-              onStudents: _openStudentsList,
-              onNotify: _showNotifyOptions,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildCompactStat(
-                    icon: Icons.people_outline_rounded,
-                    value: '$totalStudents',
-                    label: 'Total',
-                  ),
+                const SizedBox(height: 12),
+                NextStudentTripActionCard(
+                  student: nextStudent == null
+                      ? null
+                      : _cardTargetForStudent(nextStudent),
+                  students: _cardTargetsForStudents(),
+                  mode: nextMode,
+                  distanceMeters: nextDistance,
+                  modeForStudent: _modeForCardTarget,
+                  distanceForStudent: _distanceForCardTarget,
+                  isSubmitting: _isUpdatingStudentStatus,
+                  errorMessage: _statusErrorMessage,
+                  compact: true,
+                  embedded: true,
+                  padding: EdgeInsets.zero,
+                  onPickedUpStudent: (target) {
+                    final selected = _studentForCardTarget(target);
+                    if (selected != null)
+                      _updateStudentStatus(selected, 'picked');
+                  },
+                  onDroppedOffStudent: (target) {
+                    final selected = _studentForCardTarget(target);
+                    if (selected != null)
+                      _updateStudentStatus(selected, 'dropped');
+                  },
+                  onAbsentStudent: (target) {
+                    final selected = _studentForCardTarget(target);
+                    if (selected != null)
+                      _updateStudentStatus(selected, 'absent');
+                  },
+                  onChat: _openTripChat,
+                  onStudents: _openStudentsList,
+                  onNotify: _showNotifyOptions,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildCompactStat(
-                    icon: Icons.pending_actions_rounded,
-                    value: '$waitingStudents',
-                    label: 'Waiting',
-                    color: Colors.orange,
-                  ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildCompactStat(
+                        icon: Icons.people_outline_rounded,
+                        value: '$totalStudents',
+                        label: 'Total',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildCompactStat(
+                        icon: Icons.pending_actions_rounded,
+                        value: '$waitingStudents',
+                        label: 'Waiting',
+                        color: Colors.orange,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildCompactStat(
+                        icon: _routeResult == null
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.access_time_rounded,
+                        value:
+                            _routeResult?.formattedDuration ??
+                            '$pickedStudents',
+                        label: _routeResult == null ? 'Picked' : 'ETA',
+                        color: _routeResult == null
+                            ? Colors.green
+                            : Colors.blue,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildCompactStat(
-                    icon: _routeResult == null
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.access_time_rounded,
-                    value: _routeResult?.formattedDuration ?? '$pickedStudents',
-                    label: _routeResult == null ? 'Picked' : 'ETA',
-                    color: _routeResult == null ? Colors.green : Colors.blue,
-                  ),
-                ),
-              ],
-            ),
+                if (canCompleteTrip) ...[
+                  const SizedBox(height: 12),
+                  _buildCompleteTripButton(),
+                ],
               ],
             ),
           ),
@@ -1250,10 +1405,43 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     );
   }
 
-  Widget _buildVehicleMetric({
-    required IconData icon,
-    required String label,
-  }) {
+  Widget _buildCompleteTripButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: _activeTripId == null || _isEndingTrip
+            ? null
+            : _completeTrip,
+        icon: _isEndingTrip
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.check_circle_outline_rounded),
+        label: Text(
+          _isEndingTrip ? 'Completing...' : 'Complete Trip',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF6B9B5B),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey.shade300,
+          disabledForegroundColor: Colors.grey.shade600,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleMetric({required IconData icon, required String label}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

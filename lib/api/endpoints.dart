@@ -28,14 +28,12 @@ class Endpoints {
   static const String resetPassword = '/api/auth/reset/password';
   static const String changePassword = '/api/auth/change/password';
   static const String updateProfilePicture = '/api/auth/update/profile/picture';
-  static const String logout = '/api/auth/logout'; // Legacy, not in api.md
   static String deleteAccount(String id) => '/api/auth/delete/$id';
 
   // ==========================================================================
   // USER / PROFILE ENDPOINTS
   // ==========================================================================
   static const String userProfile = '/api/auth/get/account';
-  static const String deleteAccountUser = '/api/auth/delete';
 
   // ==========================================================================
   // BUS ENDPOINTS

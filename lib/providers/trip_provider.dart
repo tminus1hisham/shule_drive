@@ -352,12 +352,57 @@ class TripProvider extends ChangeNotifier {
       }
       _activeTrip = fetched;
       notifyListeners();
+
+      // Drivers have no active-trip endpoint, but the master trip roster is
+      // readable without a guardian phone and carries server pick state.
+      if (fetched != null && driverId != null && driverId.isNotEmpty) {
+        await syncActiveTripStudentsFromServer();
+      }
     } on api.ApiException catch (e) {
       _setError(e.message);
     } catch (e) {
       _setError('Failed to fetch active trip');
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Reconcile the active trip's students with the server.
+  ///
+  /// `GET /api/trips/get/master/trip/students` needs only a masterTripId, so
+  /// unlike the active-trip endpoint a driver can call it. Its rows carry
+  /// `isStudentPicked` / `isStudentDropped`, which is the closest thing to a
+  /// server-side read of pick state the driver has.
+  ///
+  /// Statuses are merged further-along-wins, so a server row that has not
+  /// caught up yet can never downgrade a pick this device just recorded.
+  Future<void> syncActiveTripStudentsFromServer() async {
+    final trip = _activeTrip;
+    final masterTripId = trip?.masterTripId;
+    if (trip == null || masterTripId == null) return;
+
+    try {
+      final rows = await _tripService.getMasterTripStudents(
+        masterTripId,
+        forceRefresh: true,
+      );
+      if (rows.isEmpty) return;
+
+      final serverTrip = trip.copyWith(
+        students: rows
+            .map((row) => api.StudentPickup.fromJson(row.toJson()))
+            .toList(),
+      );
+
+      final merged = mergeWithLocalStatuses(serverTrip, trip);
+      if (_activeTrip?.id != trip.id) return; // trip changed while awaiting
+
+      _activeTrip = merged;
+      _persistTripState(merged);
+      notifyListeners();
+    } catch (e) {
+      // Best-effort reconciliation - local state stays authoritative on failure
+      debugPrint('⚠️ Failed to sync trip students from server: $e');
     }
   }
 
@@ -781,6 +826,40 @@ class TripProvider extends ChangeNotifier {
     return apiSuccess;
   }
 
+  /// Apply a student status change to local provider state (active trip, trips
+  /// list, active-trip cache and history) and notify listeners + guardians,
+  /// WITHOUT calling the pick/drop API.
+  ///
+  /// Use when the caller has already persisted the change through the API
+  /// itself (e.g. the map tracking screen, which supplies its own richer
+  /// student reg / guardian phone / number plate) but still needs every screen
+  /// bound to this provider — the students-list screen in particular — to
+  /// reflect it. No-op if this trip/student isn't tracked here.
+  void reflectStudentStatusLocally({
+    required String tripId,
+    required String studentId,
+    required String status,
+    String? notes,
+    double? latitude,
+    double? longitude,
+  }) {
+    final existingTrip = _findTrip(tripId);
+    if (existingTrip == null) return;
+
+    final updatedTrip = _withStudentStatus(
+      trip: existingTrip,
+      studentId: studentId,
+      status: api.StudentPickup.normalizeStatus(status),
+      notes: notes,
+      latitude: latitude,
+      longitude: longitude,
+    );
+    _replaceTrip(updatedTrip);
+    notifyListeners();
+    _persistTripState(updatedTrip);
+    _broadcastStatusChanges(before: existingTrip, after: updatedTrip);
+  }
+
   /// Update student pickup status
   Future<bool> updateStudentStatus({
     required String tripId,
@@ -819,20 +898,14 @@ class TripProvider extends ChangeNotifier {
         numberPlate: existingTrip?.vehicleNumber ?? existingTrip?.vehicleId,
       );
 
-      if (existingTrip != null) {
-        final updatedTrip = _withStudentStatus(
-          trip: existingTrip,
-          studentId: studentId,
-          status: normalizedStatus,
-          notes: notes,
-          latitude: latitude,
-          longitude: longitude,
-        );
-        _replaceTrip(updatedTrip);
-        notifyListeners();
-        _persistTripState(updatedTrip);
-        _broadcastStatusChanges(before: existingTrip, after: updatedTrip);
-      }
+      reflectStudentStatusLocally(
+        tripId: tripId,
+        studentId: studentId,
+        status: normalizedStatus,
+        notes: notes,
+        latitude: latitude,
+        longitude: longitude,
+      );
 
       // Show notification based on status
       if (studentName != null) {

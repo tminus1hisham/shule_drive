@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart' as api;
 import '../models/student.dart';
 import '../models/trip.dart';
@@ -46,6 +47,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   AppProvider() {
     WidgetsBinding.instance.addObserver(this);
+    // Warm the persisted preferences so the UI shows the saved values as soon
+    // as possible; screens that need a guaranteed value await
+    // ensurePreferencesLoaded().
+    ensurePreferencesLoaded();
   }
 
   @override
@@ -93,6 +98,57 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   void useSystemTheme() {
     _manualDarkMode = null;
     notifyListeners();
+  }
+
+  // ==========================================================================
+  // USER PREFERENCES
+  // ==========================================================================
+
+  static const String _autoloadTripsKey = 'autoload_scheduled_trips';
+
+  /// When enabled, the app fetches the driver's scheduled trips on login and
+  /// takes them straight to trip selection. When disabled the driver lands on
+  /// the dashboard and opens their scheduled trips themselves.
+  bool _autoloadTrips = true;
+  bool get autoloadTrips => _autoloadTrips;
+
+  Future<void>? _preferencesLoad;
+
+  /// Loads persisted preferences once. Safe to await from anywhere — repeat
+  /// calls share the same in-flight future.
+  Future<void> ensurePreferencesLoaded() {
+    return _preferencesLoad ??= _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _autoloadTrips = prefs.getBool(_autoloadTripsKey) ?? true;
+      if (kDebugMode) {
+        print('⚙️ AppProvider: autoload trips = $_autoloadTrips');
+      }
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Failed to load preferences - $e');
+      }
+    }
+  }
+
+  /// Persist the autoload preference.
+  Future<void> setAutoloadTrips(bool value) async {
+    if (_autoloadTrips == value) return;
+    _autoloadTrips = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_autoloadTripsKey, value);
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ AppProvider: Failed to save autoload preference - $e');
+      }
+    }
   }
 
   Color get backgroundColor => isDarkMode ? darkBackground : lightBackground;

@@ -5,8 +5,12 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/trip_history_service.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../utils/permission_helper.dart';
+import '../../widgets/autoload_trips_toggle.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -93,6 +97,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildStatsCard(provider, isDarkMode),
 
             const SizedBox(height: 24),
+
+            // Preferences (driver only)
+            if (authProvider.isDriver) ...[
+              _buildPreferencesSection(context),
+              const SizedBox(height: 24),
+            ],
 
             // Menu Section
             _buildMenuSection(context, isDarkMode),
@@ -568,6 +578,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(
             fontSize: 11,
             color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Driver preferences card — currently just the autoload switch.
+  Widget _buildPreferencesSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          title: 'Preferences',
+          padding: EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.sm),
+        ),
+        AppCard(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          borderRadius: BorderRadius.circular(20),
+          shadow: context.colors.shadowSm,
+          child: const AutoloadTripsToggle(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.sm,
+            ),
           ),
         ),
       ],
