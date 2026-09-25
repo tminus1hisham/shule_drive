@@ -104,8 +104,14 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
         });
         _animationController.forward();
 
-        // Auto-select and advance if there's only 1 trip
-        if (trips.length == 1) {
+        // Dashboard's "trip starting soon" prompt names the trip to open;
+        // otherwise auto-advance when there's only one.
+        final args = ModalRoute.of(context)?.settings.arguments;
+        final autoId = args is Map ? args['autoSelectTripId'] : null;
+        final requested = trips.where((t) => t.id == autoId).firstOrNull;
+        if (requested != null) {
+          _onTripSelected(requested);
+        } else if (trips.length == 1) {
           _onTripSelected(trips.first);
         }
       }
