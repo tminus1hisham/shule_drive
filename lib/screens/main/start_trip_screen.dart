@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../api/api.dart' as api;
+import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
 /// Start Trip Screen - Unified trip view for both drivers and guardians
@@ -235,35 +237,113 @@ class _StartTripScreenState extends State<StartTripScreen>
     }
   }
 
-  /// Try to auto-start trip if all required data is available
+  /// Route and bus are chosen: start straight away.
   Future<void> _tryAutoStartTrip() async {
-    // Check if we have both trip and vehicle selected
     if (_preSelectedMasterTrip != null && _selectedVehicle != null) {
-      if (kDebugMode) {
-        print('🚀 Auto-navigating to select students...');
-        print('   Trip: ${_preSelectedMasterTrip!.tripName}');
-        print('   Vehicle: $_selectedVehicle');
-        print('   Preloaded Students: ${_preloadedData?.students.length ?? 0}');
+      await _startTrip();
+    }
+  }
+
+  bool _isStartingTrip = false;
+
+  String get _selectedNumberPlate {
+    for (final bus in _driverBuses) {
+      if (bus.id == _selectedVehicle) return bus.registrationNumber;
+    }
+    return _preSelectedMasterTrip?.numberPlate ?? _selectedVehicle ?? '';
+  }
+
+  /// Start the trip on the server and open the live map. Students are added
+  /// from the map (its Add button is always there), not beforehand.
+  Future<void> _startTrip() async {
+    if (_isStartingTrip || !_canStartTrip) return;
+    setState(() => _isStartingTrip = true);
+
+    final tripProvider = context.read<TripProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // Refuse a second trip while one is still running, possibly left
+      // active from an earlier session or another device.
+      await tripProvider.fetchActiveTrip(driverId: authProvider.userId);
+      final existing = tripProvider.activeTrip;
+      if (existing != null && existing.isActive) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'A trip is already in progress. End it before starting a new one.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        navigator.pushReplacementNamed(
+          '/osm-tracking',
+          arguments: {'tripId': existing.id, 'preloadedData': null},
+        );
+        return;
       }
 
-      // Small delay to let the UI render the loading state
-      await Future.delayed(const Duration(milliseconds: 300));
+      final masterTrip = _preSelectedMasterTrip;
+      final roster = _preloadedData?.students ?? const <TripStudent>[];
+      final plate = _selectedNumberPlate;
+      final routeName = _preSelectedRouteName ?? masterTrip?.route ?? '';
+      final trip = await tripProvider.startTrip(
+        routeId: _selectedRoute!,
+        vehicleId: _selectedVehicle!,
+        studentIds: [for (final s in roster) s.studentId.toString()],
+        masterTripId: masterTrip?.id,
+        route: routeName,
+        tripName: masterTrip?.tripName ?? 'Trip',
+        driverName: authProvider.userName ?? 'Unknown Driver',
+        driverPhoneNumber: authProvider.userPhone ?? '',
+        numberPlate: plate,
+      );
+      if (trip == null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(tripProvider.errorMessage ?? 'Failed to start trip'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-      if (mounted) {
-        // Navigate to Select Students screen which will call the startTrip API
-        // This ensures the trip is properly started before going to active trip
-        Navigator.pushReplacementNamed(
-          context,
-          '/select-students',
-          arguments: {
-            'masterTrip': _preSelectedMasterTrip,
-            'vehicleId': _selectedVehicle,
-            'routeId': _selectedRoute,
-            'routeName': _preSelectedRouteName,
-            'preloadedData': _preloadedData?.toJson(),
-          },
+      // The start API returns no students; seed them (with their saved
+      // coordinates) so status changes and guardian alerts have a roster.
+      tripProvider.hydrateActiveTrip(
+        roster: [
+          for (final s in roster) api.StudentPickup.fromJson(s.toJson()),
+        ],
+        vehicleNumber: plate,
+        routeName: routeName,
+      );
+      if (authProvider.isDriver) {
+        await TripHistoryService().saveTripToHistory(
+          trip: tripProvider.activeTrip ?? trip,
+          driverId: authProvider.userId ?? '',
+          driverName: authProvider.userName ?? '',
         );
       }
+      // MQTT up before the first pick so the guardian alert goes out live.
+      unawaited(tripProvider.initialize());
+
+      navigator.pushReplacementNamed(
+        '/osm-tracking',
+        arguments: {
+          'tripId': trip.id,
+          'preloadedData': _preloadedData?.toJson(),
+        },
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error starting trip: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isStartingTrip = false);
     }
   }
 
@@ -1993,21 +2073,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: _canStartTrip
-                ? () {
-                    Navigator.pushNamed(
-                      context,
-                      '/select-students',
-                      arguments: {
-                        'masterTrip': _preSelectedMasterTrip,
-                        'routeId': _selectedRoute,
-                        'vehicleId': _selectedVehicle,
-                        'routeName': _preSelectedRouteName,
-                        'preloadedData': _preloadedData?.toJson(),
-                      },
-                    );
-                  }
-                : null,
+            onPressed: _canStartTrip && !_isStartingTrip ? _startTrip : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6B9B5B),
               foregroundColor: Colors.white,

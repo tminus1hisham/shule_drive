@@ -19,7 +19,6 @@ import 'screens/auth/verify_reset_otp_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/main/dashboard_screen.dart';
 import 'screens/main/start_trip_screen.dart';
-import 'screens/main/select_students_screen.dart';
 import 'screens/main/active_trip_screen.dart';
 import 'screens/main/students_list_screen.dart';
 import 'screens/driver/trip_selection_screen.dart';
@@ -377,11 +376,6 @@ Route _buildPageRoute(RouteSettings settings) {
       page = VehicleSelectionScreen(
         masterTrip: args?['masterTrip'] as MasterTrip?,
       );
-      protected = true;
-      allowedRoles = [UserRole.driver];
-      break;
-    case '/select-students':
-      page = const SelectStudentsScreen();
       protected = true;
       allowedRoles = [UserRole.driver];
       break;
