@@ -5,6 +5,8 @@ import '../endpoints.dart';
 import '../../utils/buffer_manager.dart';
 import '../../services/token_storage.dart';
 import '../../models/guardian.dart';
+import 'bus_service.dart';
+import 'guardian_service.dart';
 
 /// Student Service - Handles student/children-related API calls with fallback buffers
 class StudentService {
@@ -411,6 +413,31 @@ class StudentService {
   /// Clear all student-related buffers
   Future<void> clearStudentBuffers() async {
     await _buffer.clearCategory('students');
+  }
+
+  /// Every student in the driver's school. The API has no school-wide list
+  /// for drivers, so: driver's bus -> school id -> its guardians -> their
+  /// students by phone.
+  Future<List<Student>> getSchoolStudents() async {
+    String? orgId;
+    try {
+      final buses = await BusService().getBusesByUser();
+      if (buses.isNotEmpty) orgId = buses.first.schoolId;
+    } catch (e) {
+      debugPrint('getSchoolStudents: no bus for driver: $e');
+    }
+    if (orgId == null || orgId.isEmpty) return getAllStudents(limit: 1000);
+
+    final guardians = await GuardianService().getAllGuardians(
+      companyOrgId: orgId,
+    );
+    final phones = guardians
+        .map((g) => g.bestPhoneNumber)
+        .whereType<String>()
+        .where((p) => p.isNotEmpty)
+        .toSet();
+    if (phones.isEmpty) return [];
+    return getStudentsByPhonesParallel(phones.toList(), useCache: true);
   }
 
   /// Get students from multiple phone numbers in PARALLEL

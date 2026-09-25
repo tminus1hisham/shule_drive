@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../../../api/services/student_service.dart' as student_service;
 import '../../../api/services/route_service.dart' as route_service;
 import '../../../api/services/bus_service.dart' as bus_service;
-import '../../../api/services/guardian_service.dart' as guardian_service;
 import '../../../models/master_trip.dart';
 import '../../../providers/app_provider.dart';
 import '../../../providers/auth_provider.dart';
@@ -219,66 +218,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     setState(() => _isLoadingStudents = true);
 
     try {
-      debugPrint('📚 Loading students using companyOrgId approach...');
-      final studentService = student_service.StudentService();
-      final guardianService = guardian_service.GuardianService();
-      final busService = bus_service.BusService();
-
-      // Get driver's companyOrgId from bus
-      String? companyOrgId;
-      try {
-        final buses = await busService.getBusesByUser();
-        if (buses.isNotEmpty) {
-          companyOrgId = buses.first.schoolId;
-          debugPrint('🚌 Got companyOrgId from bus: $companyOrgId');
-        }
-      } catch (e) {
-        debugPrint('❌ Failed to get bus: $e');
-      }
-
-      if (companyOrgId == null || companyOrgId.isEmpty) {
-        // Fallback to getAllStudents
-        debugPrint('⚠️ No companyOrgId, falling back to getAllStudents');
-        final students = await studentService.getAllStudents(limit: 100);
-        if (mounted) {
-          setState(() {
-            _students = students;
-          });
-        }
-      } else {
-        // Get guardians with same companyOrgId
-        final guardians = await guardianService.getAllGuardians(
-          companyOrgId: companyOrgId,
-        );
-
-        // Collect unique phone numbers
-        final uniquePhones = guardians
-            .map((g) => g.bestPhoneNumber)
-            .where((p) => p != null && p.isNotEmpty)
-            .cast<String>()
-            .toSet();
-
-        debugPrint(
-          '👥 Found ${guardians.length} guardians with ${uniquePhones.length} unique phones',
-        );
-
-        if (uniquePhones.isNotEmpty) {
-          final students = await studentService.getStudentsByPhonesParallel(
-            uniquePhones.toList(),
-            useCache: true,
-          );
-          if (mounted) {
-            setState(() {
-              _students = students;
-            });
-            debugPrint('✅ Loaded ${students.length} students in parallel');
-          }
-        } else {
-          setState(() {
-            _students = [];
-          });
-        }
-      }
+      final students = await student_service.StudentService()
+          .getSchoolStudents();
+      if (mounted) setState(() => _students = students);
     } catch (e) {
       debugPrint('❌ Error loading students: $e');
       // Try fallback endpoint

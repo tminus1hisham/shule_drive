@@ -7,12 +7,14 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../config/map_config.dart';
 import '../../services/mapbox_service.dart';
+import '../../api/services/student_service.dart' as student_api;
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../utils/student_trip_logic.dart';
+import '../../widgets/add_trip_student_sheet.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
 
@@ -86,6 +88,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   String? _statusErrorMessage;
   final Map<int, String> _studentStatusUpdates = {};
   final Set<String> _shownStudentProximityAlerts = {};
+  Future<List<student_api.Student>>? _schoolStudents;
 
   // Provider reference kept for listener add/remove. The provider is the single
   // source of truth for student status shared with the students-list screen.
@@ -988,7 +991,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       );
       if (!mounted) return;
       if (!ok) {
-        _showStatusError(tripProvider.errorMessage ?? 'Failed to update status');
+        _showStatusError(
+          tripProvider.errorMessage ?? 'Failed to update status',
+        );
         return;
       }
 
@@ -1083,6 +1088,90 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     setState(() => _statusErrorMessage = message);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  /// Add a student who isn't on this trip yet. Their spot is saved as the
+  /// bus's current GPS on the trip's student row, so the next run of this
+  /// trip can prompt the driver when approaching it.
+  Future<void> _addStudent() async {
+    final masterTripId = _resolvedMasterTripId;
+    if (_activeTripId == null || masterTripId == null || masterTripId <= 0) {
+      _showStatusError('Trip is still loading, try again in a moment');
+      return;
+    }
+
+    final choice = await showAddTripStudentSheet(
+      context,
+      students: _schoolStudents ??= student_api.StudentService()
+          .getSchoolStudents(),
+      excludeIds: _students.map((s) => s.studentId.toString()).toSet(),
+      suggested: isReturnTripDirection(_tripDirection)
+          ? AddStudentAction.drop
+          : AddStudentAction.pick,
+    );
+    if (choice == null || !mounted) return;
+
+    final student = choice.student;
+    final studentId = int.tryParse(student.id) ?? 0;
+    final phone = student.guardianPhone?.trim() ?? '';
+    final position = _currentPosition;
+    if (studentId <= 0 || phone.isEmpty) {
+      _showStatusError(
+        '${student.name} has no guardian phone on file, so they can\'t be '
+        'added or notified',
+      );
+      return;
+    }
+    if (position == null) {
+      _showStatusError('Waiting for GPS, try again in a moment');
+      return;
+    }
+
+    setState(() => _isUpdatingStudentStatus = true);
+    final tripProvider = context.read<TripProvider>();
+    final added = await tripProvider.addStudentToMasterTrip(
+      masterTripId: masterTripId,
+      fullname: student.name,
+      studentRegNumber: student.studentRegNumber ?? '',
+      studentId: studentId,
+      guardianPhoneNumber: phone,
+      schoolname: student.schoolName ?? '',
+      classname: student.className,
+      route: _routeName,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    if (!mounted) return;
+    setState(() => _isUpdatingStudentStatus = false);
+    if (added == null) {
+      _showStatusError(tripProvider.errorMessage ?? 'Could not add student');
+      return;
+    }
+
+    final tripStudent = _tripStudentFromPickup(
+      id: student.id,
+      masterTripId: masterTripId,
+      name: student.name,
+      parentPhone: phone,
+      route: _routeName,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      status: 'pending',
+      photo: student.photo,
+      studentRegNumber: student.studentRegNumber,
+      className: student.className,
+      schoolName: student.schoolName,
+    );
+    setState(() {
+      _students = [..._students, tripStudent];
+      _errorMessage = null;
+    });
+    _syncRosterToProvider();
+
+    await _updateStudentStatus(
+      tripStudent,
+      choice.action == AddStudentAction.pick ? 'picked' : 'dropped',
     );
   }
 
@@ -1365,6 +1454,19 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             right: 16,
             child: Column(
               children: [
+                if (context.select<AuthProvider, bool>((a) => a.isDriver)) ...[
+                  FloatingActionButton.small(
+                    heroTag: 'add-student',
+                    tooltip: 'Add student',
+                    onPressed: _isUpdatingStudentStatus ? null : _addStudent,
+                    backgroundColor: const Color(0xFF6B9B5B),
+                    child: const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 FloatingActionButton.small(
                   heroTag: 'center',
                   onPressed: () {
