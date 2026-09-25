@@ -139,34 +139,40 @@ class StudentService {
       try {
         current = await getStudentById(studentId);
       } catch (e) {
-        debugPrint(
-          'StudentService.updateStudent: using provided fields because lookup failed: $e',
+        debugPrint('StudentService.updateStudent: lookup failed: $e');
+      }
+      // PUT replaces the whole record. Without the current one we would reset
+      // paid status and expiry (and blank unknown fields), so refuse.
+      if (current == null) {
+        throw ApiException(
+          message: 'Student $studentId not found; refusing to overwrite it',
         );
       }
       body['id'] = int.tryParse(studentId) ?? 0;
-      body['fullname'] = name ?? current?.name ?? '';
+      body['fullname'] = name ?? current.name;
       body['guardianPhoneNumber'] =
           guardianPhoneNumber ??
-          current?.guardianPhone ??
+          current.guardianPhone ??
           await _tokenStorage.getUserPhone() ??
           '';
       body['studentRegNumber'] =
-          studentRegNumber ?? current?.studentRegNumber ?? '';
-      body['schoolname'] = schoolName ?? schoolId ?? current?.schoolName ?? '';
-      body['transportOrg'] = transportOrg ?? current?.transportOrg ?? '';
-      body['classname'] = className ?? current?.className ?? '';
-      body['route'] = pickupLocation ?? current?.route ?? '';
-      body['latitude'] = latitude ?? current?.latitude ?? 0;
-      body['longitude'] = longitude ?? current?.longitude ?? 0;
-      body['profileImage'] = photo ?? current?.photo ?? '';
-      body['hasStudentPaid'] = false;
-      body['isStudentActive'] = isActive ?? current?.isActive ?? true;
+          studentRegNumber ?? current.studentRegNumber ?? '';
+      body['schoolname'] = schoolName ?? schoolId ?? current.schoolName ?? '';
+      body['transportOrg'] = transportOrg ?? current.transportOrg ?? '';
+      body['classname'] = className ?? current.className;
+      body['route'] = pickupLocation ?? current.route ?? '';
+      body['latitude'] = latitude ?? current.latitude;
+      body['longitude'] = longitude ?? current.longitude;
+      body['profileImage'] = photo ?? current.photo ?? '';
+      body['hasStudentPaid'] = current.hasStudentPaid;
+      body['isStudentActive'] = isActive ?? current.isActive;
       body['isStudentDeleted'] = false;
-      body['expirelyDate'] = DateTime.now().toUtc().toIso8601String();
+      if (current.expiryDate != null) {
+        body['expirelyDate'] = current.expiryDate;
+      }
       body['createdAt'] =
           createdAt?.toUtc().toIso8601String() ??
-          current?.createdAt.toUtc().toIso8601String() ??
-          DateTime.now().toUtc().toIso8601String();
+          current.createdAt.toUtc().toIso8601String();
       body['updatedAt'] = DateTime.now().toUtc().toIso8601String();
 
       final response = await _apiClient.put(
@@ -186,12 +192,14 @@ class StudentService {
               guardianPhone: body['guardianPhoneNumber']?.toString(),
               photo: body['profileImage']?.toString(),
               isActive: body['isStudentActive'] == true,
-              createdAt: current?.createdAt ?? DateTime.now(),
+              createdAt: current.createdAt,
               route: body['route']?.toString(),
               studentRegNumber: body['studentRegNumber']?.toString(),
               transportOrg: body['transportOrg']?.toString(),
               latitude: (body['latitude'] as num?)?.toDouble() ?? 0,
               longitude: (body['longitude'] as num?)?.toDouble() ?? 0,
+              hasStudentPaid: current.hasStudentPaid,
+              expiryDate: current.expiryDate,
             );
 
       // Update buffers
@@ -566,6 +574,9 @@ class Student {
   // Location fields
   final double latitude;
   final double longitude;
+  // Billing fields: must be echoed back unchanged on update.
+  final bool hasStudentPaid;
+  final String? expiryDate;
 
   Student({
     required this.id,
@@ -588,6 +599,8 @@ class Student {
     this.transportOrg,
     this.latitude = 0.0,
     this.longitude = 0.0,
+    this.hasStudentPaid = false,
+    this.expiryDate,
   });
 
   factory Student.fromJson(Map<String, dynamic> json) {
@@ -628,6 +641,8 @@ class Student {
       transportOrg: json['transportOrg'],
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      hasStudentPaid: json['hasStudentPaid'] == true,
+      expiryDate: json['expirelyDate']?.toString(),
       isActive:
           json['isStudentActive'] ??
           json['is_active'] ??
@@ -652,10 +667,10 @@ class Student {
       'latitude': latitude,
       'longitude': longitude,
       'profileImage': photo ?? '',
-      'hasStudentPaid': false,
+      'hasStudentPaid': hasStudentPaid,
       'isStudentActive': isActive,
       'isStudentDeleted': false,
-      'expirelyDate': DateTime.now().toUtc().toIso8601String(),
+      'expirelyDate': ?expiryDate,
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
     };

@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
-import '../../api/services/student_service.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
@@ -47,7 +46,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   final NotificationService _notificationService = NotificationService();
   final MqttService _mqttService = MqttService();
   final MapboxService _mapboxService = MapboxService();
-  final StudentService _studentService = StudentService();
 
   // State
   BusLocation? _currentLocation;
@@ -1721,65 +1719,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         );
   }
 
-  Future<bool> _saveHomeDestinationIfNeeded(
-    Map<String, dynamic> student,
-  ) async {
-    if (_studentHasSavedHomeDestination(student)) return true;
-
-    final location = _currentLocation;
-    if (location == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Current location is required before pickup'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
-    }
-
-    final guardianPhone = student['guardianPhone']?.toString() ?? '';
-    if (guardianPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Guardian phone is required to save home location'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
-    }
-
-    try {
-      await _studentService.saveStudentHomeDestination(
-        studentId: student['id'].toString(),
-        name: student['name']?.toString() ?? 'Student',
-        guardianPhoneNumber: guardianPhone,
-        latitude: location.position.latitude,
-        longitude: location.position.longitude,
-        studentRegNumber: student['studentRegNumber']?.toString(),
-        schoolName: student['schoolName']?.toString(),
-        className: student['className']?.toString(),
-        route: student['route']?.toString() ?? student['stopName']?.toString(),
-        photo: student['photo']?.toString(),
-        transportOrg: student['transportOrg']?.toString(),
-      );
-
-      student['latitude'] = location.position.latitude;
-      student['longitude'] = location.position.longitude;
-      student['homeLatitude'] = location.position.latitude;
-      student['homeLongitude'] = location.position.longitude;
-      return true;
-    } catch (e) {
-      if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to save home destination: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return false;
-    }
-  }
-
   /// Show student action dialog - Modern UI with Pick/Absent/Drop actions
   void _showStudentDetails(Map<String, dynamic> student) {
     final status = student['status'] ?? 'pending';
@@ -1814,15 +1753,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop();
-    }
-
-    final student = _findStudentById(studentId);
-    if (newStatus == 'picked' && student != null) {
-      final savedHomeDestination = await _saveHomeDestinationIfNeeded(student);
-      if (!savedHomeDestination) {
-        if (mounted) setState(() => _isUpdatingStudentStatus = false);
-        return;
-      }
     }
 
     final tripProvider = context.read<TripProvider>();
