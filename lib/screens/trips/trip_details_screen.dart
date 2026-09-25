@@ -51,10 +51,10 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
       final driverId = authProvider.userData['id'] ?? '';
       final history = await TripHistoryService().getTripHistory(driverId);
 
-      final tripHistory = history.firstWhere(
-        (h) => h.trip.id == args['tripId'],
-        orElse: () => throw Exception('Trip not found'),
-      );
+      // Not in local history -> show the empty state, don't spin forever.
+      final tripHistory = history
+          .where((h) => h.trip.id == args['tripId'])
+          .firstOrNull;
 
       if (mounted) {
         setState(() {

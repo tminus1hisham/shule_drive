@@ -1432,7 +1432,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         title: const Text('Complete Trip?'),
         content: Text(
           remaining == 0
-              ? 'This will end live tracking and return to the dashboard.'
+              ? 'This will end live tracking and show the trip details.'
               : '$remaining students still have actions remaining. Complete the trip anyway?',
         ),
         actions: [
@@ -1474,12 +1474,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           backgroundColor: Color(0xFF6B9B5B),
         ),
       );
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/dashboard',
-        (route) => false,
-        arguments: {'fromTripEnd': true},
-      );
+      // Show the finished trip; Back from there lands on the dashboard.
+      Navigator.of(context)
+        ..pushNamedAndRemoveUntil(
+          '/dashboard',
+          (route) => false,
+          arguments: {'fromTripEnd': true},
+        )
+        ..pushNamed('/trip-details', arguments: {'tripId': tripId});
     } catch (error) {
       if (mounted) _showTripCompletionError(error.toString());
     } finally {
