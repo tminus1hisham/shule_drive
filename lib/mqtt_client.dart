@@ -166,11 +166,15 @@ class MqttService {
       for (final topic in _subscriptions.keys) {
         _client.subscribe(topic, MqttQos.atLeastOnce);
       }
+    } on UnauthorizedException {
+      rethrow; // No session yet; login connects again.
     } on SocketException catch (e) {
       print('❌ MQTT CONNECTION FAILED: Network error - $e');
+      if (!_manualDisconnect) _scheduleReconnect();
       throw NetworkException();
     } catch (e) {
       print('❌ MQTT CONNECTION FAILED: $e');
+      if (!_manualDisconnect) _scheduleReconnect();
       throw ApiException(message: 'MQTT connection failed: $e');
     }
   }

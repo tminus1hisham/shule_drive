@@ -86,14 +86,16 @@ class GuardianTripNotificationService {
 
     await stop();
 
+    // MqttService keeps the callback registered even if this first connect
+    // fails, and subscribes it once a reconnect succeeds.
+    _subscribedTopic = topic;
     try {
       await _mqtt.subscribe(topic, _onMessage);
-      _subscribedTopic = topic;
       if (kDebugMode) {
         print('🔔 Guardian listening for student updates on $topic');
       }
     } catch (e) {
-      if (kDebugMode) print('⚠️ Failed to subscribe guardian topic: $e');
+      if (kDebugMode) print('⚠️ Guardian topic pending MQTT reconnect: $e');
     }
   }
 

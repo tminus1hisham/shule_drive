@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../api/api.dart' as api;
@@ -150,6 +151,7 @@ class AuthProvider extends ChangeNotifier {
         }
         _userRole = UserRole.fromString(role);
         _isAuthenticated = true;
+        _startLiveAlerts();
         // Defer notifyListeners to avoid build-phase errors
         WidgetsBinding.instance.addPostFrameCallback((_) {
           notifyListeners();
@@ -362,6 +364,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = response.user;
         _userRole = UserRole.fromString(response.user?.role ?? 'unknown');
         _isAuthenticated = true;
+        _startLiveAlerts();
         notifyListeners();
         return true;
       } else {
@@ -381,6 +384,15 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Guardians listen for pick/drop/absent alerts for the whole session,
+  /// whichever screen is showing. Stopped in [logout].
+  void _startLiveAlerts() {
+    final phone = _currentUser?.phone;
+    if (isGuardian && phone != null && phone.isNotEmpty) {
+      unawaited(GuardianTripNotificationService().start(phone));
+    }
+  }
+
   /// Verify OTP and complete login
   Future<bool> verifyOtp(String phoneNumber, String otp) async {
     _setLoading(true);
@@ -392,6 +404,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = response.user;
         _userRole = UserRole.fromString(response.user!.role);
         _isAuthenticated = true;
+        _startLiveAlerts();
         notifyListeners();
         return true;
       } else {
