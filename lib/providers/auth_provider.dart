@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
 import '../api/services/bus_service.dart';
@@ -83,6 +84,20 @@ class AuthProvider extends ChangeNotifier {
   UserRole _userRole = UserRole.unknown;
   UserRole get userRole => _userRole;
 
+  // Persisted so an app restart before the change still asks.
+  static const _mustChangePasswordKey = 'must_change_password';
+  bool _mustChangePassword = false;
+  bool get mustChangePassword => _mustChangePassword;
+
+  Future<void> _setMustChangePassword(bool value) async {
+    _mustChangePassword = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mustChangePasswordKey, value);
+  }
+
+  /// Call once the first-login password change has gone through.
+  Future<void> clearMustChangePassword() => _setMustChangePassword(false);
+
   bool get isDriver => _userRole == UserRole.driver;
   bool get isGuardian => _userRole == UserRole.guardian;
 
@@ -151,6 +166,11 @@ class AuthProvider extends ChangeNotifier {
         }
         _userRole = UserRole.fromString(role);
         _isAuthenticated = true;
+        _mustChangePassword =
+            (await SharedPreferences.getInstance()).getBool(
+              _mustChangePasswordKey,
+            ) ??
+            false;
         _startLiveAlerts();
         // Defer notifyListeners to avoid build-phase errors
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -364,6 +384,7 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = response.user;
         _userRole = UserRole.fromString(response.user?.role ?? 'unknown');
         _isAuthenticated = true;
+        await _setMustChangePassword(response.mustChangePassword);
         _startLiveAlerts();
         notifyListeners();
         return true;
@@ -461,6 +482,8 @@ class AuthProvider extends ChangeNotifier {
 
     // 3. Clear buffers
     await BufferManager().clearAllBuffers();
+
+    await _setMustChangePassword(false);
 
     // Stop live alerts so the next user on this device doesn't get them.
     await GuardianTripNotificationService().stop();

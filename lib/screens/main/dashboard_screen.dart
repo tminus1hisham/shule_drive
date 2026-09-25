@@ -15,6 +15,7 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../utils/next_trip_selector.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/mandatory_password_dialog.dart';
 import '../../widgets/bus_illustration.dart';
 import '../../widgets/ui/ui.dart';
 
@@ -105,6 +106,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     final authProvider = context.read<AuthProvider>();
     final tripProvider = context.read<TripProvider>();
     final navigator = Navigator.of(context);
+
+    // App restarted before the first-login password change: ask again
+    // before anything navigates away.
+    if (authProvider.mustChangePassword) {
+      await showMandatoryPasswordChange(context);
+      if (!_canRunScheduledWork) return;
+    }
 
     // Make sure the autoload preference is read before we decide whether to
     // jump the driver straight into their scheduled trips.

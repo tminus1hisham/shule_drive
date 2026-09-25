@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/mandatory_password_dialog.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -172,19 +173,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       );
     } else {
       final error = errorMsg ?? '';
-      final errorLower = error.toLowerCase();
-      final isWrongPassword = errorLower.contains('current password is incorrect') ||
-          errorLower.contains('incorrect') ||
-          errorLower.contains('invalid credential');
+      final isWrongPassword = classifyPasswordChangeError(errorMsg) ==
+          PasswordChangeFailure.wrongPassword;
       // Check for server error (password likely saved despite error)
-      final isServerError = error.contains('Invalid server response format') ||
-          error.contains('NullReferenceException') ||
-          error.contains('Server Error') ||
-          error.contains('JSON Parse Error') ||
-          errorLower.contains('500') ||
-          errorLower.contains('internal server error') ||
-          errorLower.contains('statuscode: 500') ||
-          errorLower.contains('http error 500');
+      final isServerError = classifyPasswordChangeError(errorMsg) ==
+          PasswordChangeFailure.savedDespiteServerError;
 
       if (kDebugMode) {
         print('🔄 isWrongPassword: $isWrongPassword');
@@ -244,21 +237,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       }
 
       // Check for wrong password error
-      final isWrongPassword = error.toLowerCase().contains('current password is incorrect') ||
-          error.toLowerCase().contains('incorrect') ||
-          error.toLowerCase().contains('invalid credential');
+      final isWrongPassword = classifyPasswordChangeError(errorMsg) ==
+          PasswordChangeFailure.wrongPassword;
 
       // Check for server error (password likely saved)
       // When password change succeeds but server returns 500 (e.g., email notification failed)
-      final errorLower = error.toLowerCase();
-      final isServerError = error.contains('Invalid server response format') ||
-          error.contains('NullReferenceException') ||
-          error.contains('Server Error') ||
-          error.contains('JSON Parse Error') ||
-          errorLower.contains('500') ||
-          errorLower.contains('internal server error') ||
-          errorLower.contains('statuscode: 500') ||
-          errorLower.contains('http error 500');
+      final isServerError = classifyPasswordChangeError(errorMsg) ==
+          PasswordChangeFailure.savedDespiteServerError;
 
       if (kDebugMode) {
         print('❌ isWrongPassword: $isWrongPassword');

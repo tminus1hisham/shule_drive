@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../widgets/mandatory_password_dialog.dart';
 import '../../widgets/ui/ui.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -102,6 +103,13 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (success) {
       _failedAttempts = 0;
+      if (authProvider.mustChangePassword) {
+        await showMandatoryPasswordChange(
+          context,
+          currentPassword: _passwordController.text,
+        );
+        if (!mounted) return;
+      }
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/dashboard',

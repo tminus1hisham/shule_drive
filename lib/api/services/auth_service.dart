@@ -548,6 +548,9 @@ class LoginResponse {
   final User? user;
   final List<String>? errors;
 
+  /// Backend asks the user to replace an initial/reset password.
+  final bool mustChangePassword;
+
   LoginResponse({
     required this.success,
     this.message,
@@ -555,7 +558,20 @@ class LoginResponse {
     this.refreshToken,
     this.user,
     this.errors,
+    this.mustChangePassword = false,
   });
+
+  static bool _readMustChangePassword(Map<String, dynamic> json) {
+    for (final key in const [
+      'mustChangePassword',
+      'requirePasswordChange',
+      'isFirstLogin',
+    ]) {
+      final v = json[key];
+      if (v == true || v?.toString().toLowerCase() == 'true') return true;
+    }
+    return false;
+  }
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     if (json['data'] is Map<String, dynamic>) {
@@ -637,6 +653,7 @@ class LoginResponse {
       refreshToken: json['refreshToken'] ?? json['refresh_token'],
       user: user,
       errors: json['errors'] != null ? List<String>.from(json['errors']) : null,
+      mustChangePassword: _readMustChangePassword(json),
     );
   }
 
