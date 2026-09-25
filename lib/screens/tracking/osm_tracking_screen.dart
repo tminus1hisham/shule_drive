@@ -91,6 +91,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   final Map<int, String> _studentStatusUpdates = {};
   final Set<String> _shownStudentProximityAlerts = {};
   TripStudent? _proximityStudent;
+
+  // Navigation
+  bool _followBus = true;
+  int _offRouteFixes = 0;
+  DateTime? _lastRouteRequestAt;
+  static const _offRouteMeters = 50.0;
+  static const _offRouteFixesBeforeReroute = 3;
+  static const _rerouteCooldown = Duration(seconds: 20);
   Future<List<student_api.Student>>? _schoolStudents;
 
   // Provider reference kept for listener add/remove. The provider is the single
@@ -114,7 +122,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       await _loadProviderTripData();
       _syncRosterToProvider();
       _onTripProviderChanged();
-      _initializeLocation();
+      await _initializeLocation();
       _loadTripData();
     });
   }
@@ -368,6 +376,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       });
       await _updateDriverMarker();
       _maybeShowNextStudentProximityPrompt();
+      _followBusCamera(position);
 
       _positionStream = geo.Geolocator.getPositionStream(
         locationSettings: const geo.LocationSettings(
@@ -419,6 +428,53 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     _animationController.forward(from: 0.0);
     _updateDriverMarker();
     _maybeShowNextStudentProximityPrompt();
+    _followBusCamera(position);
+    _maybeReroute(position);
+  }
+
+  /// Keep the bus centred, pointing the way it drives. GPS heading is noise
+  /// when standing still, so the bearing only updates while moving.
+  void _followBusCamera(geo.Position position) {
+    final map = _mapboxMap;
+    if (!_followBus || map == null) return;
+    final moving = position.speed > 1.5; // m/s
+    map.easeTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(position.longitude, position.latitude),
+        ),
+        zoom: 16,
+        pitch: 45,
+        bearing: moving ? position.heading : null,
+      ),
+      MapAnimationOptions(duration: 900),
+    );
+  }
+
+  /// Draw the route if it's missing, and recalculate it when the bus has
+  /// been off it for a few fixes in a row (wrong turn).
+  void _maybeReroute(geo.Position position) {
+    if (_isLoadingRoute) return;
+    final last = _lastRouteRequestAt;
+    if (last != null && DateTime.now().difference(last) < _rerouteCooldown) {
+      return;
+    }
+
+    final line = _routeResult?.coordinates;
+    if (line == null || line.isEmpty) {
+      _calculateRoute();
+      return;
+    }
+
+    final offBy = distanceToPolylineMeters(
+      (lat: position.latitude, lng: position.longitude),
+      [for (final p in line) (lat: p.latitude, lng: p.longitude)],
+    );
+    _offRouteFixes = offBy > _offRouteMeters ? _offRouteFixes + 1 : 0;
+    if (_offRouteFixes >= _offRouteFixesBeforeReroute) {
+      _offRouteFixes = 0;
+      _calculateRoute();
+    }
   }
 
   void _loadPreloadedData() {
@@ -633,25 +689,47 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     setState(() => _isLoadingRoute = true);
 
     try {
-      final waypoints = <Map<String, double>>[
-        {'lat': _currentPosition!.latitude, 'lng': _currentPosition!.longitude},
-      ];
-
-      // Add pending students with valid locations
+      final here = (
+        lat: _currentPosition!.latitude,
+        lng: _currentPosition!.longitude,
+      );
+      // Stops still ahead: homes to pick from on the way to school, homes to
+      // drop at on the way back.
+      final stopStatus = isReturnTripDirection(_tripDirection)
+          ? 'picked'
+          : 'pending';
+      final stops = <GeoPoint>[];
       for (final student in _students) {
-        final status = _getStudentStatus(student);
-        if (status == 'pending' &&
-            (student.latitude != 0 || student.longitude != 0)) {
-          waypoints.add({'lat': student.latitude, 'lng': student.longitude});
+        if (_getStudentStatus(student) != stopStatus) continue;
+        final target = _targetLocationForStudent(
+          student,
+          _actionModeForStudent(student),
+        );
+        if (target != null) {
+          stops.add((lat: target.latitude, lng: target.longitude));
         }
       }
 
-      if (waypoints.length >= 2) {
-        final result = await _mapboxService.getRoute(waypoints);
-        if (result.success) {
-          setState(() => _routeResult = result);
-          _updateRouteLine();
+      if (stops.isEmpty) {
+        // Nothing left to drive to: clear the old line.
+        if (_routeResult != null) {
+          setState(() => _routeResult = null);
+          await _polylineAnnotationManager?.deleteAll();
         }
+        return;
+      }
+
+      // Mapbox Directions takes at most 25 coordinates (bus + 24 stops).
+      final ordered = orderNearestFirst(here, stops, (p) => p).take(24);
+      final waypoints = [
+        for (final p in [here, ...ordered]) {'lat': p.lat, 'lng': p.lng},
+      ];
+      _lastRouteRequestAt = DateTime.now();
+      final result = await _mapboxService.getRoute(waypoints);
+      if (result.success && mounted) {
+        _offRouteFixes = 0;
+        setState(() => _routeResult = result);
+        _updateRouteLine();
       }
     } catch (e) {
       developer.log('Route error: $e', name: 'TrackingScreen');
@@ -1428,6 +1506,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           // Mapbox MapWidget
           MapWidget(
             onMapCreated: _onMapCreated,
+            onScrollListener: (_) {
+              if (_followBus) setState(() => _followBus = false);
+            },
             cameraOptions: CameraOptions(
               center: Point(
                 coordinates: Position(
@@ -1527,25 +1608,16 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                 ],
                 FloatingActionButton.small(
                   heroTag: 'center',
+                  tooltip: 'Follow bus',
                   onPressed: () {
-                    if (_mapboxMap != null && _currentPosition != null) {
-                      _mapboxMap!.setCamera(
-                        CameraOptions(
-                          center: Point(
-                            coordinates: Position(
-                              _currentPosition!.longitude,
-                              _currentPosition!.latitude,
-                            ),
-                          ),
-                          zoom: 16,
-                        ),
-                      );
-                    }
+                    setState(() => _followBus = true);
+                    final position = _currentPosition;
+                    if (position != null) _followBusCamera(position);
                   },
                   backgroundColor: Colors.white,
-                  child: const Icon(
-                    Icons.my_location,
-                    color: Color(0xFF6B9B5B),
+                  child: Icon(
+                    _followBus ? Icons.navigation_rounded : Icons.my_location,
+                    color: const Color(0xFF6B9B5B),
                   ),
                 ),
               ],
@@ -1651,7 +1723,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                                 _buildVehicleMetric(
                                   icon: Icons.speed_rounded,
                                   label:
-                                      '${_currentPosition!.speed.toStringAsFixed(0)} km/h',
+                                      '${(_currentPosition!.speed * 3.6).toStringAsFixed(0)} km/h',
                                 ),
                               if (_currentPosition != null)
                                 _buildVehicleMetric(

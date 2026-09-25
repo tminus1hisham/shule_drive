@@ -44,6 +44,34 @@ void main() {
       expect(formatStudentDistance(1240), '1.2 km');
     });
 
+    test('off-route distance: on the line ~0, one street over ~111 m', () {
+      // A road running east along latitude -1.2921 (Nairobi).
+      final road = [(lat: -1.2921, lng: 36.8200), (lat: -1.2921, lng: 36.8300)];
+      expect(
+        distanceToPolylineMeters((lat: -1.2921, lng: 36.8250), road),
+        lessThan(1),
+      );
+      // 0.001 deg of latitude north of the road ~= 111 m -> off route.
+      final off = distanceToPolylineMeters((lat: -1.2911, lng: 36.8250), road);
+      expect(off, closeTo(111, 2));
+      // Past the end of the road, distance is to the endpoint.
+      final past = distanceToPolylineMeters((lat: -1.2921, lng: 36.8310), road);
+      expect(past, closeTo(111, 2));
+    });
+
+    test('orders stops nearest-first from the bus', () {
+      const bus = (lat: 0.0, lng: 0.0);
+      final stops = {
+        'far': (lat: 0.0, lng: 0.03),
+        'near': (lat: 0.0, lng: 0.01),
+        'mid': (lat: 0.0, lng: 0.02),
+      };
+      expect(
+        orderNearestFirst(bus, stops.keys, (k) => stops[k]!),
+        ['near', 'mid', 'far'],
+      );
+    });
+
     test('recognizes API trip direction values for return trips', () {
       expect(isReturnTripDirection('from_school'), isTrue);
       expect(isReturnTripDirection('Dropoff'), isTrue);
