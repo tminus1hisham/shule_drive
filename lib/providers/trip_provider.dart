@@ -960,16 +960,9 @@ class TripProvider extends ChangeNotifier {
     return apiSuccess;
   }
 
-  /// Apply a student status change to local provider state (active trip, trips
-  /// list, active-trip cache and history) and notify listeners + guardians,
-  /// WITHOUT calling the pick/drop API.
-  ///
-  /// Use when the caller has already persisted the change through the API
-  /// itself (e.g. the map tracking screen, which supplies its own richer
-  /// student reg / guardian phone / number plate) but still needs every screen
-  /// bound to this provider — the students-list screen in particular — to
-  /// reflect it. No-op if this trip/student isn't tracked here.
-  void reflectStudentStatusLocally({
+  /// Apply a status change locally (after the API call), persist it, and
+  /// alert the guardian. No-op if this trip/student isn't tracked here.
+  void _reflectStudentStatus({
     required String tripId,
     required String studentId,
     required String status,
@@ -995,6 +988,9 @@ class TripProvider extends ChangeNotifier {
   }
 
   /// Update student pickup status
+  ///
+  /// [studentReg], [guardianPhoneNumber] and [numberPlate] override what the
+  /// provider's roster holds (the map screen has richer data).
   Future<bool> updateStudentStatus({
     required String tripId,
     required String studentId,
@@ -1002,6 +998,9 @@ class TripProvider extends ChangeNotifier {
     String? notes,
     double? latitude,
     double? longitude,
+    String? studentReg,
+    String? guardianPhoneNumber,
+    String? numberPlate,
   }) async {
     try {
       final normalizedStatus = api.StudentPickup.normalizeStatus(status);
@@ -1027,12 +1026,16 @@ class TripProvider extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
         // Required by the single-student pick/drop endpoint.
-        studentReg: existingStudent?.studentRegNumber,
-        guardianPhoneNumber: existingStudent?.parentPhone,
-        numberPlate: existingTrip?.vehicleNumber ?? existingTrip?.vehicleId,
+        studentReg: _nonBlank(studentReg) ?? existingStudent?.studentRegNumber,
+        guardianPhoneNumber:
+            _nonBlank(guardianPhoneNumber) ?? existingStudent?.parentPhone,
+        numberPlate:
+            _nonBlank(numberPlate) ??
+            existingTrip?.vehicleNumber ??
+            existingTrip?.vehicleId,
       );
 
-      reflectStudentStatusLocally(
+      _reflectStudentStatus(
         tripId: tripId,
         studentId: studentId,
         status: normalizedStatus,
@@ -1066,6 +1069,9 @@ class TripProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  static String? _nonBlank(String? v) =>
+      v == null || v.trim().isEmpty ? null : v;
 
   /// Pick all students in a trip
   Future<bool> pickAllStudents(

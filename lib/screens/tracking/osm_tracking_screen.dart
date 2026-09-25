@@ -14,6 +14,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../utils/student_trip_logic.dart';
 import '../../widgets/next_student_trip_action_card.dart';
+import '../../widgets/ui/ui.dart';
 
 /// Mapbox Tracking Screen - Real-time trip tracking with Mapbox native SDK
 ///
@@ -105,6 +106,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       _tripProvider = context.read<TripProvider>();
       _tripProvider?.addListener(_onTripProviderChanged);
       await _loadProviderTripData();
+      _syncRosterToProvider();
       _onTripProviderChanged();
       _initializeLocation();
       _loadTripData();
@@ -151,6 +153,18 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       setState(() {});
       _updateMarkers();
     }
+  }
+
+  /// Seed the provider with this screen's roster. Every pick/drop/absent goes
+  /// through TripProvider, and it can only alert a guardian for a student it
+  /// holds. Merge keeps whichever status is further along.
+  void _syncRosterToProvider() {
+    if (_students.isEmpty) return;
+    _tripProvider?.hydrateActiveTrip(
+      roster: _students.map((s) => StudentPickup.fromJson(s.toJson())).toList(),
+      vehicleNumber: _numberPlate,
+      routeName: _routeName,
+    );
   }
 
   String? get _tripDirection =>
@@ -561,6 +575,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         if (fetchedStudents.isEmpty) {
           await _loadMasterTripStudentsFallback(_resolvedMasterTripId);
         }
+        _syncRosterToProvider();
         _calculateRoute();
       } else {
         setState(() {
@@ -596,6 +611,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         _isLoading = false;
         _errorMessage = null;
       });
+      _syncRosterToProvider();
     } catch (e) {
       developer.log(
         'Failed to load master trip students: $e',
@@ -947,16 +963,21 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   Future<void> _updateStudentStatus(TripStudent student, String status) async {
-    if (widget.tripId == null || _isUpdatingStudentStatus) return;
+    final tripId = _activeTripId;
+    if (tripId == null || _isUpdatingStudentStatus) return;
 
     setState(() {
       _isUpdatingStudentStatus = true;
       _statusErrorMessage = null;
     });
 
+    final tripProvider = context.read<TripProvider>();
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await _tripService.updateStudentStatus(
-        tripId: widget.tripId!,
+      // The provider calls the API, updates every screen and alerts the
+      // guardian (MQTT + push, queued if offline).
+      final ok = await tripProvider.updateStudentStatus(
+        tripId: tripId,
         studentId: student.studentId.toString(),
         status: status,
         latitude: _currentPosition?.latitude,
@@ -965,29 +986,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         guardianPhoneNumber: student.guardianPhoneNumber,
         numberPlate: _numberPlate,
       );
-
       if (!mounted) return;
-      setState(() {
-        _studentStatusUpdates[student.studentId] = status;
-      });
+      if (!ok) {
+        _showStatusError(tripProvider.errorMessage ?? 'Failed to update status');
+        return;
+      }
 
-      // Reflect this change in the shared TripProvider so provider-bound
-      // screens (the students-list screen) stay in sync and guardians are
-      // notified over MQTT. The API call above already persisted it, so this
-      // only updates local provider state.
-      context.read<TripProvider>().reflectStudentStatusLocally(
-        tripId: widget.tripId!,
-        studentId: student.studentId.toString(),
-        status: status,
-        latitude: _currentPosition?.latitude,
-        longitude: _currentPosition?.longitude,
-      );
-
+      setState(() => _studentStatusUpdates[student.studentId] = status);
       await _calculateRoute();
       await _updateMarkers();
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('${student.fullname} ${_statusMessage(status)}'),
           backgroundColor: status == 'absent'
@@ -995,22 +1004,86 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
               : const Color(0xFF6B9B5B),
         ),
       );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _statusErrorMessage = 'Failed to update status: $e';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_statusErrorMessage!),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       if (mounted) {
         setState(() => _isUpdatingStudentStatus = false);
       }
     }
+  }
+
+  /// Pick every waiting student, or drop every picked one.
+  Future<void> _updateAllStudents({required bool pick}) async {
+    final tripId = _activeTripId;
+    if (tripId == null || _isUpdatingStudentStatus) return;
+
+    final from = pick ? 'pending' : 'picked';
+    final count = _students.where((s) => _getStudentStatus(s) == from).length;
+    final confirmed = await confirmDialog(
+      context,
+      title: pick ? 'Pick all students?' : 'Drop all students?',
+      message: pick
+          ? 'Mark all $count waiting students as picked up? '
+                'Each guardian will be notified.'
+          : 'Mark all $count picked students as dropped off? '
+                'Each guardian will be notified.',
+      confirmLabel: pick ? 'Pick all' : 'Drop all',
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _isUpdatingStudentStatus = true;
+      _statusErrorMessage = null;
+    });
+    final tripProvider = context.read<TripProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final lat = _currentPosition?.latitude ?? 0;
+      final lng = _currentPosition?.longitude ?? 0;
+      final ok = pick
+          ? await tripProvider.pickAllStudents(
+              tripId,
+              latitude: lat,
+              longitude: lng,
+            )
+          : await tripProvider.dropAllStudents(
+              tripId,
+              latitude: lat,
+              longitude: lng,
+            );
+      if (!mounted) return;
+      if (!ok) {
+        _showStatusError(tripProvider.errorMessage ?? 'Failed to update');
+        return;
+      }
+
+      final to = pick ? 'picked' : 'dropped';
+      setState(() {
+        for (final s in _students) {
+          if (_getStudentStatus(s) == from) {
+            _studentStatusUpdates[s.studentId] = to;
+          }
+        }
+      });
+      await _calculateRoute();
+      await _updateMarkers();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            pick ? '$count students picked up' : '$count students dropped off',
+          ),
+          backgroundColor: const Color(0xFF6B9B5B),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingStudentStatus = false);
+    }
+  }
+
+  void _showStatusError(String message) {
+    setState(() => _statusErrorMessage = message);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   String _statusMessage(String status) {
@@ -1512,6 +1585,36 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                     ),
                   ],
                 ),
+                if (canCompleteTrip &&
+                    (waitingStudents > 0 || pickedStudents > 0)) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (waitingStudents > 0)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isUpdatingStudentStatus
+                                ? null
+                                : () => _updateAllStudents(pick: true),
+                            icon: const Icon(Icons.done_all_rounded),
+                            label: const Text('Pick all'),
+                          ),
+                        ),
+                      if (waitingStudents > 0 && pickedStudents > 0)
+                        const SizedBox(width: 8),
+                      if (pickedStudents > 0)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isUpdatingStudentStatus
+                                ? null
+                                : () => _updateAllStudents(pick: false),
+                            icon: const Icon(Icons.home_rounded),
+                            label: const Text('Drop all'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 if (canCompleteTrip) ...[
                   const SizedBox(height: 12),
                   _buildCompleteTripButton(),

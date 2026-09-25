@@ -1463,8 +1463,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
 
     try {
       final tripProvider = context.read<TripProvider>();
-      
-      // Update local state immediately
+      final ok = await tripProvider.pickAllStudents(_trip!.id);
+      if (!ok) throw Exception(tripProvider.errorMessage ?? 'Request failed');
+
       setState(() {
         for (var i = 0; i < students.length; i++) {
           if (students[i].status == StudentStatus.pending) {
@@ -1472,9 +1473,6 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           }
         }
       });
-
-      // Call API
-      await tripProvider.pickAllStudents(_trip!.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1509,8 +1507,9 @@ class _StudentsListScreenState extends State<StudentsListScreen>
 
     try {
       final tripProvider = context.read<TripProvider>();
-      
-      // Update local state immediately
+      final ok = await tripProvider.dropAllStudents(_trip!.id);
+      if (!ok) throw Exception(tripProvider.errorMessage ?? 'Request failed');
+
       setState(() {
         for (var i = 0; i < students.length; i++) {
           if (students[i].status == StudentStatus.picked) {
@@ -1518,9 +1517,6 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           }
         }
       });
-
-      // Call API
-      await tripProvider.dropAllStudents(_trip!.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
