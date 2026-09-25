@@ -48,9 +48,9 @@ dependencies:
   mapbox_maps_flutter: ^2.11.0
   
   # Push Notifications (Choose your backend)
-  # OPTION 1: Firebase (Google) - Uncomment to use
-  # firebase_core: ^3.1.0
-  # firebase_messaging: ^15.0.1
+  # Firebase: Android guardians only (iOS relies on MQTT)
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
   
   # OPTION 2: OneSignal (Alternative) - Uncomment to use
   # onesignal_flutter: ^5.2.8

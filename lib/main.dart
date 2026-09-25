@@ -126,7 +126,12 @@ void _initNonCriticalServices() {
 
   // Notifications - can be slow
   NotificationService()
-      .initialize(preferredBackend: NotificationBackend.localOnly)
+      .initialize(
+        // Android guardians get Firebase push; everyone also gets MQTT.
+        preferredBackend: Platform.isAndroid
+            ? NotificationBackend.firebase
+            : NotificationBackend.localOnly,
+      )
       .then((_) {
         if (kDebugMode) print('🔔 Notifications initialized');
       })

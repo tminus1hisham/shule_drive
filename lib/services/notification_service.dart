@@ -8,6 +8,7 @@ import 'notification_backends/firebase_backend.dart';
 import 'notification_backends/mqtt_backend.dart';
 import 'notification_backends/onesignal_backend.dart';
 
+import 'guardian_trip_notification_service.dart';
 import 'local_database_service.dart';
 
 /// Background message handler for Firebase (must be top-level)
@@ -368,13 +369,12 @@ class NotificationService {
     if (data['type'] == 'geofence_alert' || data.containsKey('geofence_type')) {
       await _handleGeofenceAlert(data);
     }
-    // Handle regular notifications
+    // Pick/drop/absent alerts also arrive over MQTT; showOnce de-dups them.
     else {
-      await showLocalNotification(
+      await GuardianTripNotificationService().showOnce(
         title: data['title']?.toString() ?? 'ShuleDrive',
         body: data['body']?.toString() ?? '',
         payload: jsonEncode(data),
-        channelId: _getChannelIdForType(data['type']?.toString()),
       );
     }
   }

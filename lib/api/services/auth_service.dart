@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
+import '../../services/notification_backends/firebase_backend.dart';
 import '../../services/token_storage.dart';
 import '../../utils/buffer_manager.dart';
 
@@ -40,7 +41,7 @@ class AuthService {
         body: {
           'phoneNumber': normalizedPhone,
           'password': password,
-          'firebaseToken': '',
+          'firebaseToken': await FirebaseNotificationBackend.currentToken() ?? '',
         },
         requiresAuth: false,
       );

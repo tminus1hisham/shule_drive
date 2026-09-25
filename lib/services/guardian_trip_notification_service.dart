@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import '../mqtt_client.dart';
 import '../utils/student_trip_logic.dart';
 import 'notification_service.dart';
@@ -199,6 +200,15 @@ class GuardianTripNotificationService {
   }
 
   Future<void> _showNotification(GuardianStudentStatusEvent e) async {
+    // With Firebase active (Android), the OS already shows the push copy
+    // while backgrounded, and a system notification can't be de-duped.
+    final backgrounded =
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+    if (backgrounded &&
+        _notifications.currentBackend == NotificationBackend.firebase) {
+      return;
+    }
+
     final text = describe(
       status: e.status,
       studentName: e.studentName,
