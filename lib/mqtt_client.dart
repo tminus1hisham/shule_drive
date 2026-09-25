@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:math';
 import 'api/api_exceptions.dart';
 import 'services/app_config.dart';
@@ -55,12 +57,29 @@ class MqttService {
     );
   }
 
-  /// Initialize and connect to MQTT broker
-  Future<void> connect() async {
-    if (_isConnected) {
-      print('ℹ️ MQTT already connected');
-      return;
+  Future<void>? _connecting;
+
+  /// Stable per-install id so the broker keeps this client's session (and
+  /// queues QoS 1 messages) across reconnects instead of starting fresh.
+  static Future<String> _installId() async {
+    const key = 'mqtt_install_id';
+    final prefs = await SharedPreferences.getInstance();
+    var id = prefs.getString(key);
+    if (id == null) {
+      id = const Uuid().v4();
+      await prefs.setString(key, id);
     }
+    return id;
+  }
+
+  /// Initialize and connect to MQTT broker. Concurrent callers share one
+  /// attempt so two clients are never created.
+  Future<void> connect() {
+    if (_isConnected) return Future.value();
+    return _connecting ??= _connect().whenComplete(() => _connecting = null);
+  }
+
+  Future<void> _connect() async {
 
     print('🔄 Connecting to MQTT broker...');
 
@@ -105,10 +124,7 @@ class MqttService {
 
       // Set up the connection message
       final connMess = MqttConnectMessage()
-          .withClientIdentifier(
-            'shuledrive_${userId}_${DateTime.now().millisecondsSinceEpoch}',
-          )
-          .startClean()
+          .withClientIdentifier('shuledrive_${userId}_${await _installId()}')
           .withWillTopic('users/$userId/status')
           .withWillMessage(
             jsonEncode({
@@ -142,7 +158,13 @@ class MqttService {
 
       final senderPhone = await _tokenStorage.getUserPhone();
       if (senderPhone != null && senderPhone.isNotEmpty) {
-        await subscribe('chats/$senderPhone', handleMessage);
+        _subscriptions.putIfAbsent('chats/$senderPhone', () => [handleMessage]);
+      }
+
+      // A reconnect builds a new client, so every known topic (guardian
+      // status, trip events, chat) must be subscribed again.
+      for (final topic in _subscriptions.keys) {
+        _client.subscribe(topic, MqttQos.atLeastOnce);
       }
     } on SocketException catch (e) {
       print('❌ MQTT CONNECTION FAILED: Network error - $e');
@@ -180,6 +202,8 @@ class MqttService {
       _client.disconnect();
     }
 
+    // Manual disconnect means logout: don't resubscribe the old user's topics.
+    _subscriptions.clear();
     _isConnected = false;
     _connectionController.add(false);
   }
@@ -189,16 +213,17 @@ class MqttService {
     String topic,
     Function(String topic, String message) callback,
   ) async {
+    // Register before connecting: connect() subscribes every known topic,
+    // and queued session messages can arrive right after the handshake.
+    final isNewTopic = !_subscriptions.containsKey(topic);
+    final callbacks = _subscriptions.putIfAbsent(topic, () => []);
+    if (!callbacks.contains(callback)) callbacks.add(callback);
+
     if (!_isConnected) {
       await connect();
-    }
-
-    if (!_subscriptions.containsKey(topic)) {
-      _subscriptions[topic] = [];
+    } else if (isNewTopic) {
       _client.subscribe(topic, MqttQos.atLeastOnce);
     }
-
-    _subscriptions[topic]!.add(callback);
   }
 
   /// Unsubscribe from a topic

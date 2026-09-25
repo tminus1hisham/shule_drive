@@ -41,10 +41,10 @@ class ChatService {
     }
   }
 
-  /// Disconnect
+  /// Stop chat listening. The MQTT connection is shared with trip events and
+  /// guardian alerts, so it stays up (logout closes it).
   Future<void> disconnect() async {
     _messageSubscription?.cancel();
-    await _mqttService.disconnect();
   }
 
   /// Start a chat with another user (using phone numbers)

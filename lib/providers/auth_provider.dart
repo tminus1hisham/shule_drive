@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
 import '../api/services/bus_service.dart';
+import '../mqtt_client.dart' show MqttService;
+import '../services/guardian_trip_notification_service.dart';
 import '../services/token_storage.dart';
 import '../utils/buffer_manager.dart';
 
@@ -446,6 +448,10 @@ class AuthProvider extends ChangeNotifier {
 
     // 3. Clear buffers
     await BufferManager().clearAllBuffers();
+
+    // Stop live alerts so the next user on this device doesn't get them.
+    await GuardianTripNotificationService().stop();
+    await MqttService().disconnect();
 
     // 4. Reset all local state
     _currentUser = null;

@@ -43,23 +43,14 @@ class TripProvider extends ChangeNotifier {
       _trips.where((t) => t.students.any((s) => s.status != 'absent')).toList();
 
   /// Initialize and connect to MQTT for real-time updates
+  /// Safe to call repeatedly: MqttService dedupes the callback and
+  /// re-subscribes known topics on every reconnect.
   Future<void> initialize() async {
-    await _mqttService.connect();
-
-    // Listen to connection status
-    _mqttService.connectionStatus.listen((connected) {
-      if (connected) {
-        _subscribeToTripTopics();
-      }
-    });
-  }
-
-  /// Subscribe to trip-related MQTT topics
-  void _subscribeToTripTopics() {
-    // Subscribe to trip events
-    _mqttService.subscribe('trips/+/events', (topic, message) {
-      _handleTripEvent(topic, message);
-    });
+    try {
+      await _mqttService.subscribe('trips/+/events', _handleTripEvent);
+    } catch (e) {
+      debugPrint('⚠️ MQTT connect failed, will retry on reconnect: $e');
+    }
   }
 
   void _handleTripEvent(String topic, String message) {
