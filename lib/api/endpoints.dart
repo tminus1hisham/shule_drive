@@ -28,6 +28,9 @@ class Endpoints {
   static const String resetPassword = '/api/auth/reset/password';
   static const String changePassword = '/api/auth/change/password';
   static const String updateProfilePicture = '/api/auth/update/profile/picture';
+
+  /// Firebase push to a guardian's device; backend resolves the token by phone.
+  static const String sendGuardianPush = '/api/auth/send/notification';
   static String deleteAccount(String id) => '/api/auth/delete/$id';
 
   // ==========================================================================

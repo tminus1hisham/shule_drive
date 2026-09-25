@@ -141,34 +141,74 @@ class GuardianTripNotificationService {
     }
   }
 
-  Future<void> _showNotification(GuardianStudentStatusEvent e) async {
-    final bus = (e.vehicleNumber != null && e.vehicleNumber!.isNotEmpty)
-        ? ' (bus ${e.vehicleNumber})'
+  /// Title/body for a status alert. Driver push and guardian MQTT both use
+  /// this, so the body doubles as the de-dup key across the two channels.
+  static ({String title, String body})? describe({
+    required String status,
+    required String studentName,
+    String? vehicleNumber,
+  }) {
+    final bus = (vehicleNumber != null && vehicleNumber.isNotEmpty)
+        ? ' (bus $vehicleNumber)'
         : '';
-
-    String title;
-    String body;
-    switch (e.status) {
+    switch (status) {
       case 'picked':
-        title = '✅ ${e.studentName} picked up';
-        body = '${e.studentName} has been picked up$bus.';
-        break;
+        return (
+          title: '✅ $studentName picked up',
+          body: '$studentName has been picked up$bus.',
+        );
       case 'dropped':
-        title = '🏠 ${e.studentName} dropped off';
-        body = '${e.studentName} has been dropped off$bus.';
-        break;
+        return (
+          title: '🏠 $studentName dropped off',
+          body: '$studentName has been dropped off$bus.',
+        );
       case 'absent':
-        title = '⚠️ ${e.studentName} marked absent';
-        body = '${e.studentName} was marked absent for this trip.';
-        break;
-      default:
-        return;
+        return (
+          title: '⚠️ $studentName marked absent',
+          body: '$studentName was marked absent for this trip.',
+        );
     }
+    return null;
+  }
 
+  final List<String> _recentBodies = [];
+
+  /// Show a local notification unless the same alert was shown recently
+  /// (it can arrive over both MQTT and Firebase).
+  Future<void> showOnce({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    if (!markSeen(body)) return;
     await _notifications.showLocalNotification(
       title: title,
       body: body,
       channelId: 'trip_updates',
+      payload: payload,
+    );
+  }
+
+  /// Returns false if [body] was already seen. Keeps the last 50.
+  @visibleForTesting
+  bool markSeen(String body) {
+    if (_recentBodies.contains(body)) return false;
+    _recentBodies.add(body);
+    if (_recentBodies.length > 50) _recentBodies.removeAt(0);
+    return true;
+  }
+
+  Future<void> _showNotification(GuardianStudentStatusEvent e) async {
+    final text = describe(
+      status: e.status,
+      studentName: e.studentName,
+      vehicleNumber: e.vehicleNumber,
+    );
+    if (text == null) return;
+
+    await showOnce(
+      title: text.title,
+      body: text.body,
       payload: jsonEncode({
         'type': 'guardian_student_status',
         'studentId': e.studentId,

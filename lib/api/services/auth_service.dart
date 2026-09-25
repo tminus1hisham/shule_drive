@@ -355,6 +355,24 @@ class AuthService {
     }
   }
 
+  /// Push a notification to a guardian's phone (Android via Firebase).
+  /// POST /api/auth/send/notification
+  Future<void> sendGuardianPush({
+    required String guardianPhone,
+    required String title,
+    required String message,
+  }) async {
+    await _apiClient.post(
+      Endpoints.sendGuardianPush,
+      body: {
+        'title': title,
+        'message': message,
+        'guardianPhoneNumber': _normalizePhone(guardianPhone),
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+  }
+
   /// Update profile picture
   /// POST /api/auth/update/profile/picture
   /// Returns the new image URL

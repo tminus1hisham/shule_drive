@@ -344,21 +344,148 @@ class TripProvider extends ChangeNotifier {
   }) {
     final phone = student.parentPhone;
     if (phone == null || phone.trim().isEmpty) return;
-    if (!_mqttService.isConnected) return;
+    final text = GuardianTripNotificationService.describe(
+      status: status,
+      studentName: student.name,
+      vehicleNumber: vehicleNumber,
+    );
+    if (text == null) return;
 
-    try {
-      _mqttService.publishJson(
-        GuardianTripNotificationService.topicForPhone(phone),
-        GuardianTripNotificationService.buildPayload(
+    unawaited(
+      _queueGuardianAlert({
+        'topic': GuardianTripNotificationService.topicForPhone(phone),
+        'payload': GuardianTripNotificationService.buildPayload(
           studentId: student.id,
           studentName: student.name,
           status: status,
           tripId: tripId,
           vehicleNumber: vehicleNumber,
         ),
-      );
-    } catch (e) {
-      if (kDebugMode) print('⚠️ Failed to publish guardian status: $e');
+        'phone': phone,
+        'title': text.title,
+        'message': text.body,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+      }),
+    );
+  }
+
+  // ==========================================================================
+  // GUARDIAN ALERT OUTBOX
+  // ==========================================================================
+  // Every alert is persisted first, then delivered over MQTT and Firebase
+  // push. Whatever fails is retried on the next alert or MQTT reconnect, so
+  // a driver in a dead zone doesn't silently drop a pick/drop alert.
+
+  static const _outboxKey = 'guardian_alert_outbox';
+
+  /// Alerts older than this aren't worth delivering any more.
+  static const guardianAlertMaxAge = Duration(hours: 2);
+
+  final api.AuthService _authService = api.AuthService();
+  Future<List<Map<String, dynamic>>>? _outboxLoad;
+  StreamSubscription<bool>? _mqttStatusSub;
+  bool _flushing = false;
+  bool _flushAgain = false;
+
+  Future<List<Map<String, dynamic>>> _guardianOutbox() {
+    _mqttStatusSub ??= _mqttService.connectionStatus.listen((connected) {
+      if (connected) unawaited(flushGuardianAlerts());
+    });
+    return _outboxLoad ??= () async {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_outboxKey);
+      if (raw == null) return <Map<String, dynamic>>[];
+      try {
+        return (jsonDecode(raw) as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }();
+  }
+
+  Future<void> _queueGuardianAlert(Map<String, dynamic> alert) async {
+    (await _guardianOutbox()).add(alert);
+    await flushGuardianAlerts();
+  }
+
+  /// Try to deliver every queued guardian alert. Safe to call any time.
+  Future<void> flushGuardianAlerts() async {
+    if (_flushing) {
+      _flushAgain = true;
+      return;
+    }
+    _flushing = true;
+    try {
+      do {
+        _flushAgain = false;
+        final outbox = await _guardianOutbox();
+        if (!_mqttService.isConnected) {
+          // Reconnect fires connectionStatus, which flushes again.
+          unawaited(_mqttService.connect().catchError((_) {}));
+        }
+        await deliverGuardianAlerts(
+          outbox,
+          mqttConnected: _mqttService.isConnected,
+          publish: (alert) => _mqttService.publishJson(
+            alert['topic'] as String,
+            Map<String, dynamic>.from(alert['payload'] as Map),
+          ),
+          push: (alert) => _authService.sendGuardianPush(
+            guardianPhone: alert['phone'] as String,
+            title: alert['title'] as String,
+            message: alert['message'] as String,
+          ),
+        );
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_outboxKey, jsonEncode(outbox));
+      } while (_flushAgain);
+    } finally {
+      _flushing = false;
+    }
+  }
+
+  /// Deliver [outbox] in place: each alert is removed once both MQTT and
+  /// push succeeded, or once it is older than [guardianAlertMaxAge]. After
+  /// the first push failure the rest of this pass skips push (no network),
+  /// so a long offline queue doesn't wait on a timeout per alert.
+  @visibleForTesting
+  static Future<void> deliverGuardianAlerts(
+    List<Map<String, dynamic>> outbox, {
+    required bool mqttConnected,
+    required Future<void> Function(Map<String, dynamic> alert) publish,
+    required Future<void> Function(Map<String, dynamic> alert) push,
+    DateTime? now,
+  }) async {
+    final cutoff = (now ?? DateTime.now()).subtract(guardianAlertMaxAge);
+    outbox.removeWhere((alert) {
+      final created = DateTime.tryParse(alert['createdAt']?.toString() ?? '');
+      return created == null || created.isBefore(cutoff);
+    });
+
+    var pushDown = false;
+    for (final alert in List.of(outbox)) {
+      if (alert['mqttSent'] != true && mqttConnected) {
+        try {
+          await publish(alert);
+          alert['mqttSent'] = true;
+        } catch (e) {
+          if (kDebugMode) print('⚠️ Guardian MQTT alert failed: $e');
+        }
+      }
+      if (alert['pushSent'] != true && !pushDown) {
+        try {
+          await push(alert);
+          alert['pushSent'] = true;
+        } catch (e) {
+          pushDown = true;
+          if (kDebugMode) print('⚠️ Guardian push alert failed: $e');
+        }
+      }
+      if (alert['mqttSent'] == true && alert['pushSent'] == true) {
+        outbox.remove(alert);
+      }
     }
   }
 
@@ -1387,6 +1514,7 @@ class TripProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _mqttStatusSub?.cancel();
     _mqttService.disconnect();
     super.dispose();
   }
