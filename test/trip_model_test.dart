@@ -55,11 +55,7 @@ void main() {
     });
 
     test('copyWith replaces students without mutating original trip', () {
-      final student = StudentPickup(
-        id: 's1',
-        name: 'Brian',
-        status: 'pending',
-      );
+      final student = StudentPickup(id: 's1', name: 'Brian', status: 'pending');
       final trip = Trip(
         id: 't1',
         routeName: 'Morning Route',
@@ -96,6 +92,14 @@ void main() {
         'isDroppingAll': false,
         'updatedAt': '2026-06-09T10:30:00.000Z',
       });
+    });
+
+    test('treats a message-only end response as an acknowledgement', () {
+      final trip = TripService.parseEndTripResponse({
+        'message': 'Drop all success.',
+      }, tripId: 'trip-123');
+
+      expect(trip, isNull);
     });
 
     test('builds api.md student not picked payload', () {

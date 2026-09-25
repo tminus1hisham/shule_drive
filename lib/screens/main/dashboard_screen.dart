@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -60,6 +61,18 @@ class _DashboardScreenState extends State<DashboardScreen>
   final Set<int> _promptedTripIds = {};
   bool _isShowingUpcomingPrompt = false;
 
+  // Timer callbacks must not look up inherited widgets while this element is
+  // deactivated. Keep stable provider references and explicit lifecycle state.
+  AuthProvider? _scheduledAuthProvider;
+  TripProvider? _scheduledTripProvider;
+  bool _isElementActive = true;
+  bool _isRouteVisible = true;
+  bool _isAppActive = true;
+
+  bool get _canUseContext => mounted && _isElementActive;
+  bool get _canRunScheduledWork =>
+      _canUseContext && _isRouteVisible && _isAppActive;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_canUseContext) return;
       // Check if we arrived from trip end
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is Map && args['fromTripEnd'] == true) {
@@ -85,32 +99,40 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// has one running, resume it immediately on the live trip screen.
   /// Only when there is no active trip do we check for scheduled master trips.
   Future<void> _initDashboard() async {
-    // Make sure the autoload preference is read before we decide whether to
-    // jump the driver straight into their scheduled trips.
-    await context.read<AppProvider>().ensurePreferencesLoaded();
-    await _loadData();
-    if (!mounted) return;
+    if (!_canRunScheduledWork) return;
 
+    final appProvider = context.read<AppProvider>();
     final authProvider = context.read<AuthProvider>();
     final tripProvider = context.read<TripProvider>();
+    final navigator = Navigator.of(context);
+
+    // Make sure the autoload preference is read before we decide whether to
+    // jump the driver straight into their scheduled trips.
+    await appProvider.ensurePreferencesLoaded();
+    if (!_canRunScheduledWork) return;
+
+    await _loadData();
+    if (!mounted || !_canRunScheduledWork || !navigator.mounted) return;
+
     final activeTrip = tripProvider.activeTrip;
 
     if (authProvider.isDriver && activeTrip != null && !_fromTripEnd) {
       debugPrint('🚌 Active trip found on open, resuming: ${activeTrip.id}');
-      Navigator.pushNamed(
-        context,
+      navigator.pushNamed(
         '/osm-tracking',
         arguments: {'tripId': activeTrip.id, 'preloadedData': null},
       );
       return;
     }
 
-    _checkMasterTripsForDriver();
+    unawaited(_checkMasterTripsForDriver());
     _startUpcomingTripChecker();
   }
 
   /// Check if driver has master trips and redirect accordingly
   Future<void> _checkMasterTripsForDriver() async {
+    if (!_canRunScheduledWork) return;
+
     if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
       debugPrint(
         '🔍 Master trip check already performed or in progress, skipping',
@@ -155,6 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Check if there's an active trip - if so, skip master trip check
     final tripProvider = context.read<TripProvider>();
+    final navigator = Navigator.of(context);
     if (tripProvider.activeTrip != null) {
       debugPrint('🔍 Active trip exists, skipping master trip check');
       setState(() {
@@ -188,12 +211,15 @@ class _DashboardScreenState extends State<DashboardScreen>
         onRefresh: (freshTrips) {
           debugPrint('🔄 Background refresh: ${freshTrips.length} trips');
           // Only redirect on background refresh if NOT coming from trip end
-          if (freshTrips.isNotEmpty && mounted && !_fromTripEnd) {
+          if (freshTrips.isNotEmpty &&
+              _canRunScheduledWork &&
+              navigator.mounted &&
+              !_fromTripEnd) {
             if (firstTrip == null) {
               debugPrint(
                 '✅ Fresh data available, redirecting to trip selection',
               );
-              Navigator.pushReplacementNamed(context, '/trip-selection');
+              navigator.pushReplacementNamed('/trip-selection');
             }
           }
         },
@@ -213,8 +239,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
       }
 
-      if (!mounted) {
-        debugPrint('🔍 Widget not mounted');
+      if (!mounted || !_canRunScheduledWork || !navigator.mounted) {
+        _isCheckingMasterTrips = false;
+        debugPrint('🔍 Dashboard is no longer active');
         return;
       }
 
@@ -222,7 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         debugPrint('✅ Redirecting to trip selection screen');
 
         // Redirect to trip selection screen
-        Navigator.pushReplacementNamed(context, '/trip-selection');
+        navigator.pushReplacementNamed('/trip-selection');
       } else {
         if (_fromTripEnd) {
           debugPrint('📍 Skipping auto-redirect (came from trip end)');
@@ -237,16 +264,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (e, stackTrace) {
       debugPrint('❌ Error: $e');
       debugPrint('❌ Stack: $stackTrace');
-      setState(() {
+      void finishCheck() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
-      });
+      }
+
+      if (_canUseContext) {
+        setState(finishCheck);
+      } else {
+        finishCheck();
+      }
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _scheduledAuthProvider = context.read<AuthProvider>();
+    _scheduledTripProvider = context.read<TripProvider>();
     // Subscribe to route observer
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
@@ -255,24 +290,30 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Start periodic check for upcoming trips (every 30 seconds)
   void _startUpcomingTripChecker() {
-    final authProvider = context.read<AuthProvider>();
+    if (!_canRunScheduledWork) return;
+    final authProvider = _scheduledAuthProvider;
+    if (authProvider == null) return;
     if (!authProvider.isDriver) return;
 
+    _upcomingTripTimer?.cancel();
+
     // Check immediately
-    _checkUpcomingTrips();
+    unawaited(_checkUpcomingTrips());
 
     // Then check every 30 seconds
-    _upcomingTripTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _checkUpcomingTrips(),
-    );
+    _upcomingTripTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_canRunScheduledWork) {
+        unawaited(_checkUpcomingTrips());
+      }
+    });
   }
 
   /// Check if any master trip is starting within the next 5 minutes
   Future<void> _checkUpcomingTrips() async {
-    if (!mounted || _isShowingUpcomingPrompt) return;
+    if (!_canRunScheduledWork || _isShowingUpcomingPrompt) return;
 
-    final authProvider = context.read<AuthProvider>();
+    final authProvider = _scheduledAuthProvider;
+    if (authProvider == null) return;
     if (!authProvider.isDriver) return;
 
     final driverId = authProvider.currentUser?.id;
@@ -284,6 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         driverId,
         onRefresh: (_) {},
       );
+      if (!_canRunScheduledWork) return;
 
       final now = DateTime.now();
 
@@ -302,7 +344,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Trip starts within 5 minutes (but not in the past by more than 2 min)
         if (diff.inMinutes <= 5 && diff.inMinutes >= -2) {
           _promptedTripIds.add(trip.id);
-          if (mounted) {
+          if (_canRunScheduledWork) {
             _showUpcomingTripPrompt(trip, tripDateTime);
           }
           break; // Only show one prompt at a time
@@ -317,7 +359,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// dashboard shows the trip the clock has reached rather than whichever one
   /// the API happened to list first.
   void _updateNextScheduledTrip(List<MasterTrip> trips, DateTime now) {
-    if (!mounted) return;
+    if (!_canRunScheduledWork) return;
 
     final next = selectNextMasterTrip(trips, now: now);
 
@@ -328,164 +370,133 @@ class _DashboardScreenState extends State<DashboardScreen>
     setState(() => _nextScheduledTrip = next);
   }
 
-  /// Show a bottom sheet prompting the driver to start an upcoming trip
+  /// Show a frosted prompt inviting the driver to start an upcoming trip.
   void _showUpcomingTripPrompt(MasterTrip trip, DateTime scheduledTime) {
-    if (!mounted) return;
+    if (!_canRunScheduledWork) return;
     _isShowingUpcomingPrompt = true;
 
     final minutesAway = scheduledTime.difference(DateTime.now()).inMinutes;
 
-    showAppBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Pulsing icon
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.85, end: 1.0),
-            duration: const Duration(milliseconds: 1000),
-            curve: Curves.easeInOut,
-            builder: (context, value, child) =>
-                Transform.scale(scale: value, child: child),
-            child: Container(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                gradient: ctx.colors.brandGradient,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: ctx.colors.brand.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.access_time_filled,
-                color: Colors.white,
-                size: 36,
-              ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(
+        alpha: context.isDark ? 0.52 : 0.28,
+      ),
+      elevation: 0,
+      showDragHandle: false,
+      builder: (ctx) => SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: _UpcomingTripGlassPrompt(
+              trip: trip,
+              minutesAway: minutesAway,
+              onDismiss: () => Navigator.pop(ctx),
+              onStart: () {
+                Navigator.pop(ctx);
+                _isShowingUpcomingPrompt = false;
+                Navigator.pushNamed(
+                  context,
+                  '/trip-selection',
+                  arguments: {'autoSelectTripId': trip.id},
+                );
+              },
+              onViewAll: () {
+                Navigator.pop(ctx);
+                _isShowingUpcomingPrompt = false;
+                Navigator.pushNamed(context, '/trip-selection');
+              },
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            minutesAway > 0
-                ? 'Trip starting in $minutesAway min'
-                : 'Trip starting now!',
-            textAlign: TextAlign.center,
-            style: ctx.text.headlineSmall,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          AppCard(
-            color: ctx.colors.surfaceSubtle,
-            shadow: const [],
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.xs),
-                  decoration: BoxDecoration(
-                    color: ctx.colors.brandSoft,
-                    borderRadius: AppRadius.brSm,
-                  ),
-                  child: Icon(
-                    Icons.directions_bus_rounded,
-                    color: ctx.colors.brand,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(trip.tripName, style: ctx.text.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${trip.route} • ${trip.tripTime}',
-                        style: ctx.text.bodySmall?.copyWith(
-                          color: ctx.colors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          AppButton(
-            label: 'Start Now',
-            icon: Icons.play_arrow_rounded,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _isShowingUpcomingPrompt = false;
-              Navigator.pushNamed(
-                context,
-                '/trip-selection',
-                arguments: {'autoSelectTripId': trip.id},
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          AppButton(
-            label: 'View All Trips',
-            icon: Icons.list_alt_rounded,
-            variant: AppButtonVariant.outline,
-            onPressed: () {
-              Navigator.pop(ctx);
-              _isShowingUpcomingPrompt = false;
-              Navigator.pushNamed(context, '/trip-selection');
-            },
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _isShowingUpcomingPrompt = false;
-            },
-            child: const Text('Dismiss'),
-          ),
-        ],
+        ),
       ),
     ).whenComplete(() => _isShowingUpcomingPrompt = false);
   }
 
   @override
   void dispose() {
-    // Stop timers and unsubscribe
-    _refreshTimer?.cancel();
-    _durationTimer?.cancel();
-    _upcomingTripTimer?.cancel();
+    _isElementActive = false;
+    _isRouteVisible = false;
+    _isAppActive = false;
+    _cancelScheduledWork();
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
+  void deactivate() {
+    _isElementActive = false;
+    _cancelScheduledWork();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _isElementActive = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resumeScheduledWork();
+    });
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Refresh when app comes to foreground
     if (state == AppLifecycleState.resumed) {
-      _refresh();
-      _startPeriodicRefresh();
-    } else if (state == AppLifecycleState.paused) {
-      // Stop timer when app is in background
-      _refreshTimer?.cancel();
+      _isAppActive = true;
+      _resumeScheduledWork();
+    } else {
+      _isAppActive = false;
+      _cancelScheduledWork();
     }
+  }
+
+  /// Pause polling while another route covers the dashboard.
+  @override
+  void didPushNext() {
+    _isRouteVisible = false;
+    _cancelScheduledWork();
   }
 
   /// Called when the route is popped and this screen becomes visible again
   @override
   void didPopNext() {
-    // Reload data when coming back from another screen
-    _refresh();
+    _isRouteVisible = true;
+    _resumeScheduledWork();
+  }
+
+  void _cancelScheduledWork() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+    _durationTimer?.cancel();
+    _durationTimer = null;
+    _upcomingTripTimer?.cancel();
+    _upcomingTripTimer = null;
+  }
+
+  void _resumeScheduledWork() {
+    if (!_canRunScheduledWork) return;
+
+    _startPeriodicRefresh();
+    _startUpcomingTripChecker();
+    final tripProvider = _scheduledTripProvider;
+    if (tripProvider?.activeTrip != null) {
+      _startDurationTimer(tripProvider!);
+    }
+    unawaited(_refresh());
   }
 
   /// Start periodic refresh timer
   void _startPeriodicRefresh() {
+    if (!_canRunScheduledWork) return;
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(_refreshInterval, (_) {
-      if (mounted) {
-        _refresh();
+      if (_canRunScheduledWork) {
+        unawaited(_refresh());
       }
     });
   }
@@ -535,7 +546,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _tripDuration = DateTime.now().difference(activeTrip.startTime);
 
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
+      if (_canRunScheduledWork) {
         setState(() {
           _tripDuration += const Duration(seconds: 1);
         });
@@ -573,8 +584,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _refresh() async {
-    final tripProvider = context.read<TripProvider>();
-    final authProvider = context.read<AuthProvider>();
+    if (!_canRunScheduledWork) return;
+    final tripProvider = _scheduledTripProvider;
+    final authProvider = _scheduledAuthProvider;
+    if (tripProvider == null || authProvider == null) return;
 
     if (kDebugMode) {
       print('📱 Dashboard _refresh:');
@@ -583,19 +596,28 @@ class _DashboardScreenState extends State<DashboardScreen>
       print('  userPhone: ${authProvider.userPhone}');
     }
 
-    // Fetch active trips for both
-    if (authProvider.isGuardian) {
-      final hasPhone =
-          authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty;
-      if (hasPhone) {
+    try {
+      // Fetch active trips for both roles without looking up an ancestor from
+      // this timer-driven method.
+      if (authProvider.isGuardian) {
+        final hasPhone =
+            authProvider.userPhone != null &&
+            authProvider.userPhone!.isNotEmpty;
+        if (hasPhone) {
+          await tripProvider.fetchActiveTrip(
+            guardianPhone: authProvider.userPhone,
+          );
+        }
+      } else if (authProvider.isDriver) {
         await tripProvider.fetchActiveTrip(
-          guardianPhone: authProvider.userPhone,
+          driverId: authProvider.currentUser?.id,
         );
       }
-    } else if (authProvider.isDriver) {
-      await tripProvider.fetchActiveTrip(
-        driverId: authProvider.currentUser?.id,
-      );
+    } catch (error, stackTrace) {
+      if (kDebugMode && _canUseContext) {
+        debugPrint('Dashboard refresh failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
     }
   }
 
@@ -615,6 +637,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       onBottomNavTap: (index) => _handleNavigation(index, isDriver),
       body: Stack(
         children: [
+          const Positioned.fill(child: _DashboardBackdrop()),
           RefreshIndicator(
             onRefresh: _refresh,
             color: context.colors.brand,
@@ -623,7 +646,9 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  SliverToBoxAdapter(child: _buildTopBar(userData, appProvider)),
+                  SliverToBoxAdapter(
+                    child: _buildTopBar(userData, appProvider),
+                  ),
                   SliverToBoxAdapter(
                     child: _buildGreeting(userData, isDriver, hasActiveTrip),
                   ),
@@ -659,7 +684,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<Widget> _driverSlivers(TripProvider tripProvider, bool hasActiveTrip) {
     if (hasActiveTrip) {
       return [
-        SliverToBoxAdapter(child: _block(child: _buildDriverActiveTrip(tripProvider))),
+        SliverToBoxAdapter(
+          child: _block(child: _buildDriverActiveTrip(tripProvider)),
+        ),
       ];
     }
     return [
@@ -676,7 +703,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       return [SliverToBoxAdapter(child: _block(child: _buildGuardianIdle()))];
     }
     return [
-      SliverToBoxAdapter(child: _block(child: _buildGuardianActiveTrip(tripProvider))),
+      SliverToBoxAdapter(
+        child: _block(child: _buildGuardianActiveTrip(tripProvider)),
+      ),
     ];
   }
 
@@ -835,7 +864,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           : 'Track your child\'s journey safely.';
     }
 
-    final firstName = (userData['name'] as String?)?.split(' ').first ?? 'there';
+    final firstName =
+        (userData['name'] as String?)?.split(' ').first ?? 'there';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -951,64 +981,231 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// so the countdown is scannable at a glance.
   Widget _buildNextTripCard() {
     final next = _nextScheduledTrip!;
-    return AppCard(
+    return _DashboardGlassPanel(
       onTap: () => Navigator.pushNamed(
         context,
         '/trip-selection',
         arguments: {'autoSelectTripId': next.trip.id},
       ),
-      child: Row(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      tint: context.colors.accent,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: context.colors.accentSoft,
-              borderRadius: AppRadius.brSm,
-            ),
-            child: Icon(
-              Icons.schedule_rounded,
+          Positioned(
+            top: -52,
+            right: -44,
+            child: _GlassGlow(
               color: context.colors.accent,
-              size: AppIconSize.lg,
+              diameter: 140,
+              opacity: context.isDark ? 0.13 : 0.10,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'UP NEXT',
-                  style: context.text.labelSmall?.copyWith(
-                    color: context.colors.textMuted,
-                    letterSpacing: 0.8,
-                    fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [context.colors.accent, context.colors.brand],
+                  ),
+                  borderRadius: AppRadius.brPill,
+                  boxShadow: [
+                    BoxShadow(
+                      color: context.colors.accent.withValues(alpha: 0.28),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      context.colors.brand.withValues(alpha: 0.22),
+                      context.colors.accent.withValues(alpha: 0.12),
+                    ],
+                  ),
+                  borderRadius: AppRadius.brMd,
+                  border: Border.all(
+                    color: context.colors.brand.withValues(alpha: 0.18),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  next.trip.tripName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.titleMedium,
+                child: Icon(
+                  Icons.directions_bus_rounded,
+                  color: context.colors.brand,
+                  size: AppIconSize.lg,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${next.trip.route} • ${next.trip.tripTime}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.bodySmall?.copyWith(
-                    color: context.colors.textSecondary,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.colors.accent.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: AppRadius.brPill,
+                            border: Border.all(
+                              color: context.colors.accent.withValues(
+                                alpha: 0.20,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.near_me_rounded,
+                                size: 11,
+                                color: context.colors.accent,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'UP NEXT',
+                                style: context.text.labelSmall?.copyWith(
+                                  color: context.colors.accent,
+                                  letterSpacing: 0.7,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xxs),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.scheme.surface.withValues(
+                                alpha: context.isDark ? 0.28 : 0.64,
+                              ),
+                              borderRadius: AppRadius.brPill,
+                              border: Border.all(
+                                color: context.colors.outline.withValues(
+                                  alpha: 0.72,
+                                ),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.schedule_rounded,
+                                  size: 11,
+                                  color: context.colors.textSecondary,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    formatNextTripCountdown(next),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: context.text.labelSmall?.copyWith(
+                                      color: context.colors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      next.trip.tripName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.route_rounded,
+                          size: 12,
+                          color: context.colors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            next.trip.route,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.text.labelSmall?.copyWith(
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          child: Container(
+                            width: 3,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: context.colors.textMuted,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          next.trip.tripTime,
+                          maxLines: 1,
+                          style: context.text.labelSmall?.copyWith(
+                            color: context.colors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: context.scheme.surface.withValues(
+                    alpha: context.isDark ? 0.24 : 0.62,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: context.colors.outline.withValues(alpha: 0.72),
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          StatusPill(
-            label: formatNextTripCountdown(next),
-            color: context.colors.accent,
-            showDot: false,
-            dense: true,
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: AppIconSize.xs,
+                  color: context.colors.brand,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1261,10 +1458,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
               const SizedBox(height: AppSpacing.lg),
               // Divider keeps the metrics visually separate from the header.
-              Divider(
-                color: Colors.white.withValues(alpha: 0.18),
-                height: 1,
-              ),
+              Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
               const SizedBox(height: AppSpacing.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1450,8 +1644,8 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // ==================== QUICK ACTIONS ====================
 
-  /// Balanced 2×2 grid. Tints come from the theme tokens only, so the set reads
-  /// as one family in both light and dark rather than a bag of stock colors.
+  /// Compact action dock. One glass surface keeps all four destinations
+  /// visible without letting shortcuts dominate the page.
   Widget _buildQuickActions(bool isDriver) {
     final colors = context.colors;
 
@@ -1466,14 +1660,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             _QuickAction(
               icon: Icons.event_note_rounded,
-              label: 'Manage Trips',
+              label: 'Schedules',
               subtitle: 'View schedules',
               tint: colors.info,
               onTap: () => Navigator.pushNamed(context, '/manage-master-trips'),
             ),
             _QuickAction(
               icon: Icons.history_rounded,
-              label: 'Trip History',
+              label: 'History',
               subtitle: 'Past journeys',
               tint: colors.accent,
               onTap: () => Navigator.pushNamed(context, '/trips'),
@@ -1489,7 +1683,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         : <_QuickAction>[
             _QuickAction(
               icon: Icons.child_care_rounded,
-              label: 'My Children',
+              label: 'Children',
               subtitle: 'Manage profiles',
               tint: colors.brand,
               onTap: () => Navigator.pushNamed(context, '/manage-children'),
@@ -1520,7 +1714,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
-        AppSpacing.xl,
+        AppSpacing.md,
         AppSpacing.lg,
         0,
       ),
@@ -1528,17 +1722,28 @@ class _DashboardScreenState extends State<DashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SectionHeader(title: 'Quick actions'),
-          const SizedBox(height: AppSpacing.md),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: AppSpacing.sm,
-            crossAxisSpacing: AppSpacing.sm,
-            childAspectRatio: 1.35,
-            children: [
-              for (final action in actions) _ActionTile(action: action),
-            ],
+          const SizedBox(height: AppSpacing.xs),
+          _DashboardGlassPanel(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xxs,
+              vertical: AppSpacing.xs,
+            ),
+            tint: colors.brand,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var index = 0; index < actions.length; index++) ...[
+                  Expanded(child: _ActionTile(action: actions[index])),
+                  if (index < actions.length - 1)
+                    Container(
+                      width: 1,
+                      height: 48,
+                      margin: const EdgeInsets.only(top: AppSpacing.xxs),
+                      color: colors.outline.withValues(alpha: 0.72),
+                    ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1628,6 +1833,487 @@ class _DashboardScreenState extends State<DashboardScreen>
 
 // ==================== DASHBOARD PIECES ====================
 
+/// A focused, low-opacity glass prompt for imminent departures. The backdrop
+/// remains visible through the sheet while the borders and type retain enough
+/// contrast to stay legible in dark mode.
+class _UpcomingTripGlassPrompt extends StatelessWidget {
+  const _UpcomingTripGlassPrompt({
+    required this.trip,
+    required this.minutesAway,
+    required this.onDismiss,
+    required this.onStart,
+    required this.onViewAll,
+  });
+
+  final MasterTrip trip;
+  final int minutesAway;
+  final VoidCallback onDismiss;
+  final VoidCallback onStart;
+  final VoidCallback onViewAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    final glassColors = isDark
+        ? [
+            Colors.white.withValues(alpha: 0.11),
+            context.scheme.surface.withValues(alpha: 0.36),
+          ]
+        : [
+            Colors.white.withValues(alpha: 0.72),
+            Colors.white.withValues(alpha: 0.44),
+          ];
+    final edgeColor = Colors.white.withValues(alpha: isDark ? 0.17 : 0.72);
+    final countdown = minutesAway > 0 ? '$minutesAway min' : 'Now';
+
+    return Semantics(
+      namesRoute: true,
+      label: minutesAway > 0
+          ? 'Trip starts in $minutesAway minutes'
+          : 'Trip starts now',
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.brXl,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.16),
+              blurRadius: 40,
+              offset: const Offset(0, 18),
+            ),
+            BoxShadow(
+              color: context.colors.brand.withValues(alpha: 0.10),
+              blurRadius: 34,
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadius.brXl,
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: glassColors,
+                ),
+                borderRadius: AppRadius.brXl,
+                border: Border.all(color: edgeColor),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: -72,
+                    right: -50,
+                    child: _GlassGlow(
+                      color: context.colors.accent,
+                      diameter: 190,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: -86,
+                    left: -68,
+                    child: _GlassGlow(
+                      color: context.colors.brand,
+                      diameter: 220,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: context.colors.accent.withValues(
+                                  alpha: isDark ? 0.13 : 0.11,
+                                ),
+                                borderRadius: AppRadius.brPill,
+                                border: Border.all(
+                                  color: context.colors.accent.withValues(
+                                    alpha: 0.24,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.notifications_active_rounded,
+                                    size: AppIconSize.xs,
+                                    color: context.colors.accent,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'DEPARTURE REMINDER',
+                                    style: context.text.labelSmall?.copyWith(
+                                      color: context.colors.accent,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.7,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: onDismiss,
+                              tooltip: 'Dismiss',
+                              visualDensity: VisualDensity.compact,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: isDark ? 0.08 : 0.36,
+                                ),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(
+                                    alpha: isDark ? 0.11 : 0.52,
+                                  ),
+                                ),
+                              ),
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: AppIconSize.md,
+                                color: context.colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.88, end: 1),
+                          duration: const Duration(milliseconds: 650),
+                          curve: Curves.easeOutBack,
+                          builder: (context, value, child) =>
+                              Transform.scale(scale: value, child: child),
+                          child: Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  context.colors.brand.withValues(alpha: 0.28),
+                                  context.colors.accent.withValues(alpha: 0.16),
+                                ],
+                              ),
+                              border: Border.all(
+                                color: context.colors.brand.withValues(
+                                  alpha: 0.34,
+                                ),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: context.colors.brand.withValues(
+                                    alpha: 0.22,
+                                  ),
+                                  blurRadius: 28,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.access_time_filled_rounded,
+                              color: context.colors.brand,
+                              size: AppIconSize.xxl,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          minutesAway > 0
+                              ? 'Your next trip starts in'
+                              : 'Your next trip starts',
+                          textAlign: TextAlign.center,
+                          style: context.text.titleMedium?.copyWith(
+                            color: context.colors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          countdown,
+                          textAlign: TextAlign.center,
+                          style: context.text.displaySmall?.copyWith(
+                            color: context.scheme.onSurface,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1.2,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(
+                              alpha: isDark ? 0.065 : 0.34,
+                            ),
+                            borderRadius: AppRadius.brMd,
+                            border: Border.all(
+                              color: Colors.white.withValues(
+                                alpha: isDark ? 0.11 : 0.52,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: context.colors.brand.withValues(
+                                    alpha: 0.14,
+                                  ),
+                                  borderRadius: AppRadius.brSm,
+                                ),
+                                child: Icon(
+                                  Icons.directions_bus_rounded,
+                                  color: context.colors.brand,
+                                  size: AppIconSize.lg,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      trip.tripName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: context.text.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${trip.route} • ${trip.tripTime}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: context.text.bodySmall?.copyWith(
+                                        color: context.colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        AppButton(
+                          label: 'Start trip now',
+                          icon: Icons.play_arrow_rounded,
+                          onPressed: onStart,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        AppButton(
+                          label: 'View all trips',
+                          icon: Icons.list_alt_rounded,
+                          variant: AppButtonVariant.outline,
+                          onPressed: onViewAll,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassGlow extends StatelessWidget {
+  const _GlassGlow({
+    required this.color,
+    required this.diameter,
+    this.opacity = 0.17,
+  });
+
+  final Color color;
+  final double diameter;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: diameter,
+        height: diameter,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color.withValues(alpha: opacity),
+              Colors.transparent,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet tinted canvas gives translucent cards something to refract on light
+/// themes while remaining subtle enough to keep the dashboard content primary.
+class _DashboardBackdrop extends StatelessWidget {
+  const _DashboardBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final base = context.theme.scaffoldBackgroundColor;
+
+    return IgnorePointer(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(
+                    context.colors.brand.withValues(
+                      alpha: context.isDark ? 0.08 : 0.055,
+                    ),
+                    base,
+                  ),
+                  base,
+                  Color.alphaBlend(
+                    context.colors.accent.withValues(
+                      alpha: context.isDark ? 0.06 : 0.04,
+                    ),
+                    base,
+                  ),
+                ],
+                stops: const [0, 0.52, 1],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 220,
+            right: -110,
+            child: _GlassGlow(
+              color: context.colors.brand,
+              diameter: 300,
+              opacity: context.isDark ? 0.08 : 0.065,
+            ),
+          ),
+          Positioned(
+            bottom: 40,
+            left: -120,
+            child: _GlassGlow(
+              color: context.colors.accent,
+              diameter: 290,
+              opacity: context.isDark ? 0.07 : 0.05,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A theme-aware frosted surface used by the dashboard's compact utility
+/// panels. The blur, translucent gradient and hairline edge provide the glass
+/// effect without sacrificing contrast in either brightness mode.
+class _DashboardGlassPanel extends StatelessWidget {
+  const _DashboardGlassPanel({
+    required this.child,
+    this.padding = const EdgeInsets.all(AppSpacing.md),
+    this.tint,
+    this.onTap,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color? tint;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const borderRadius = AppRadius.brLg;
+    final glassTint = tint ?? context.colors.brand;
+    final glassBase = context.isDark
+        ? context.scheme.surface.withValues(alpha: 0.70)
+        : Colors.white.withValues(alpha: 0.88);
+    final glassEnd = Color.alphaBlend(
+      glassTint.withValues(alpha: context.isDark ? 0.13 : 0.10),
+      context.scheme.surface,
+    ).withValues(alpha: context.isDark ? 0.70 : 0.84);
+    final edgeColor = context.isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Color.alphaBlend(
+            glassTint.withValues(alpha: 0.16),
+            context.colors.outline,
+          );
+
+    Widget content = Padding(padding: padding, child: child);
+    if (onTap != null) {
+      content = Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: borderRadius,
+          child: content,
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: context.isDark ? 0.24 : 0.07),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: glassTint.withValues(alpha: context.isDark ? 0.08 : 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [glassBase, glassEnd],
+              ),
+              borderRadius: borderRadius,
+              border: Border.all(color: edgeColor),
+            ),
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Soft circular icon button used in the dashboard top bar, with an optional
 /// unread badge.
 class _CircleIconButton extends StatelessWidget {
@@ -1654,7 +2340,11 @@ class _CircleIconButton extends StatelessWidget {
         child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(icon, size: AppIconSize.md, color: context.scheme.onSurface),
+          child: Icon(
+            icon,
+            size: AppIconSize.md,
+            color: context.scheme.onSurface,
+          ),
         ),
       ),
     );
@@ -1762,46 +2452,72 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      onTap: action.onTap,
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: action.tint.withValues(alpha: 0.12),
-              borderRadius: AppRadius.brSm,
-            ),
-            child: Icon(
-              action.icon,
-              color: action.tint,
-              size: AppIconSize.lg,
+    return Tooltip(
+      message: action.subtitle,
+      child: Semantics(
+        button: true,
+        label: '${action.label}. ${action.subtitle}',
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: AppRadius.brSm,
+          child: InkWell(
+            onTap: action.onTap,
+            borderRadius: AppRadius.brSm,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xxs,
+                vertical: AppSpacing.xxs,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          action.tint.withValues(alpha: 0.24),
+                          action.tint.withValues(alpha: 0.10),
+                        ],
+                      ),
+                      borderRadius: AppRadius.brMd,
+                      border: Border.all(
+                        color: action.tint.withValues(alpha: 0.20),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: action.tint.withValues(alpha: 0.12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      action.icon,
+                      color: action.tint,
+                      size: AppIconSize.md,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    action.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: context.text.labelSmall?.copyWith(
+                      color: context.scheme.onSurface,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                action.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.titleSmall,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                action.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.labelSmall?.copyWith(
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

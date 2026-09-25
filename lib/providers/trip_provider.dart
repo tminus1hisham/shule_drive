@@ -128,7 +128,10 @@ class TripProvider extends ChangeNotifier {
 
   api.Trip _filterTripForGuardian(api.Trip trip, String guardianPhone) {
     final students = trip.students
-        .where((student) => _guardianPhoneMatches(student.parentPhone, guardianPhone))
+        .where(
+          (student) =>
+              _guardianPhoneMatches(student.parentPhone, guardianPhone),
+        )
         .toList();
 
     return trip.copyWith(students: students);
@@ -155,12 +158,8 @@ class TripProvider extends ChangeNotifier {
 
       return student.copyWith(
         status: normalizedStatus,
-        pickupTime: normalizedStatus == 'picked'
-            ? now
-            : student.pickupTime,
-        dropoffTime: normalizedStatus == 'dropped'
-            ? now
-            : student.dropoffTime,
+        pickupTime: normalizedStatus == 'picked' ? now : student.pickupTime,
+        dropoffTime: normalizedStatus == 'dropped' ? now : student.dropoffTime,
         notes: notes ?? student.notes,
         latitude: shouldSavePickupLocation ? latitude : student.latitude,
         longitude: shouldSavePickupLocation ? longitude : student.longitude,
@@ -243,6 +242,72 @@ class TripProvider extends ChangeNotifier {
     }).toList();
 
     return fetched.copyWith(students: students);
+  }
+
+  /// Build the local completed-trip record from an optional server
+  /// representation. A message-only success must not erase route, timing,
+  /// student, stop, or fare metadata already held by the app.
+  @visibleForTesting
+  static api.Trip completeTripFromResponse({
+    required String tripId,
+    required api.Trip? originalTrip,
+    required api.Trip? responseTrip,
+    DateTime? completedAt,
+  }) {
+    final endedAt = completedAt ?? DateTime.now();
+    if (responseTrip == null) {
+      final base =
+          originalTrip ??
+          api.Trip(
+            id: tripId,
+            routeName: 'Trip',
+            routeId: '',
+            startTime: endedAt,
+            status: 'active',
+            vehicleId: '',
+            students: const [],
+            stops: const [],
+          );
+      return base.copyWith(status: 'completed', endTime: endedAt);
+    }
+
+    if (originalTrip == null) {
+      return responseTrip.copyWith(
+        status: 'completed',
+        endTime: responseTrip.endTime ?? endedAt,
+      );
+    }
+
+    if (responseTrip.students.isEmpty) {
+      return originalTrip.copyWith(
+        status: 'completed',
+        endTime: responseTrip.endTime ?? endedAt,
+        vehicleNumber: responseTrip.vehicleNumber ?? originalTrip.vehicleNumber,
+      );
+    }
+
+    return responseTrip.copyWith(
+      routeName: responseTrip.routeName.isEmpty
+          ? originalTrip.routeName
+          : responseTrip.routeName,
+      routeId: responseTrip.routeId.isEmpty
+          ? originalTrip.routeId
+          : responseTrip.routeId,
+      masterTripId: responseTrip.masterTripId ?? originalTrip.masterTripId,
+      tripDirection: responseTrip.tripDirection ?? originalTrip.tripDirection,
+      vehicleId: responseTrip.vehicleId.isEmpty
+          ? originalTrip.vehicleId
+          : responseTrip.vehicleId,
+      vehicleNumber: responseTrip.vehicleNumber ?? originalTrip.vehicleNumber,
+      stops: responseTrip.stops.isEmpty
+          ? originalTrip.stops
+          : responseTrip.stops,
+      distance: responseTrip.distance ?? originalTrip.distance,
+      fare: responseTrip.fare ?? originalTrip.fare,
+      notes: responseTrip.notes ?? originalTrip.notes,
+      status: 'completed',
+      endTime: responseTrip.endTime ?? endedAt,
+    );
   }
 
   /// Write an updated trip back to the active-trip buffer and local trip
@@ -328,7 +393,10 @@ class TripProvider extends ChangeNotifier {
   /// For drivers, pass [driverId] so a running trip can be restored from
   /// local trip history when the API/buffer have no record of it
   /// (e.g. after the app was killed and reopened).
-  Future<void> fetchActiveTrip({String? guardianPhone, String? driverId}) async {
+  Future<void> fetchActiveTrip({
+    String? guardianPhone,
+    String? driverId,
+  }) async {
     // Use microtask to avoid calling notifyListeners during build
     await Future.microtask(() => _setLoading(true));
     try {
@@ -419,8 +487,7 @@ class TripProvider extends ChangeNotifier {
       for (final entry in history) {
         final trip = entry.trip;
         if (!trip.isActive) continue;
-        if (DateTime.now().difference(trip.startTime) >
-            _maxRestorableTripAge) {
+        if (DateTime.now().difference(trip.startTime) > _maxRestorableTripAge) {
           continue;
         }
         debugPrint('🔄 Restored active trip from local history: ${trip.id}');
@@ -629,6 +696,8 @@ class TripProvider extends ChangeNotifier {
     String tripId, {
     String? driverId,
     String? driverName,
+    double latitude = 0,
+    double longitude = 0,
   }) async {
     _setLoading(true);
     _clearError();
@@ -636,65 +705,20 @@ class TripProvider extends ChangeNotifier {
     api.Trip? endedTrip;
     bool apiSuccess = false;
 
-    // Save original student data before API call - the API might return empty students
-    final originalStudents = _activeTrip?.students ?? [];
-    final originalRouteName = _activeTrip?.routeName ?? 'Trip';
-    final originalVehicleId = _activeTrip?.vehicleId ?? '';
-    final originalVehicleNumber = _activeTrip?.vehicleNumber;
-    final originalStartTime = _activeTrip?.startTime ?? DateTime.now();
+    final originalTrip = _findTrip(tripId);
 
     try {
-      endedTrip = await _tripService.endTrip(tripId);
+      final responseTrip = await _tripService.endTrip(
+        tripId,
+        latitude: latitude,
+        longitude: longitude,
+      );
       apiSuccess = true;
-
-      // If API returned empty students but we had original data, preserve it
-      // Also ensure status is 'completed' since we just ended the trip
-      if ((endedTrip.students.isEmpty) && originalStudents.isNotEmpty) {
-        if (kDebugMode) {
-          print(
-            '🔄 API returned empty students, preserving original student data (${originalStudents.length} students)',
-          );
-        }
-        endedTrip = api.Trip(
-          id: endedTrip.id,
-          routeName: endedTrip.routeName.isNotEmpty
-              ? endedTrip.routeName
-              : originalRouteName,
-          routeId: endedTrip.routeId,
-          startTime: endedTrip.startTime,
-          endTime: endedTrip.endTime ?? DateTime.now(),
-          status: 'completed',
-          vehicleId: endedTrip.vehicleId.isNotEmpty
-              ? endedTrip.vehicleId
-              : originalVehicleId,
-          vehicleNumber: endedTrip.vehicleNumber ?? originalVehicleNumber,
-          students: originalStudents,
-          stops: endedTrip.stops,
-          distance: endedTrip.distance,
-          fare: endedTrip.fare,
-          notes: endedTrip.notes,
-        );
-      } else {
-        // Even if API returned data, ensure status is completed
-        // The API might return the old status
-        if (endedTrip.status != 'completed') {
-          endedTrip = api.Trip(
-            id: endedTrip.id,
-            routeName: endedTrip.routeName,
-            routeId: endedTrip.routeId,
-            startTime: endedTrip.startTime,
-            endTime: endedTrip.endTime ?? DateTime.now(),
-            status: 'completed',
-            vehicleId: endedTrip.vehicleId,
-            vehicleNumber: endedTrip.vehicleNumber ?? originalVehicleNumber,
-            students: endedTrip.students,
-            stops: endedTrip.stops,
-            distance: endedTrip.distance,
-            fare: endedTrip.fare,
-            notes: endedTrip.notes,
-          );
-        }
-      }
+      endedTrip = completeTripFromResponse(
+        tripId: tripId,
+        originalTrip: originalTrip,
+        responseTrip: responseTrip,
+      );
 
       // Update local state - always clear active trip
       _activeTrip = null;
@@ -711,18 +735,10 @@ class TripProvider extends ChangeNotifier {
         );
         _activeTrip = null;
         apiSuccess = true;
-        // Create a completed trip preserving original student data
-        endedTrip = api.Trip(
-          id: tripId,
-          routeName: originalRouteName,
-          routeId: '',
-          startTime: originalStartTime,
-          endTime: DateTime.now(),
-          status: 'completed',
-          vehicleId: originalVehicleId,
-          vehicleNumber: originalVehicleNumber,
-          students: originalStudents,
-          stops: [],
+        endedTrip = completeTripFromResponse(
+          tripId: tripId,
+          originalTrip: originalTrip,
+          responseTrip: null,
         );
       } else {
         _setError(e.message);

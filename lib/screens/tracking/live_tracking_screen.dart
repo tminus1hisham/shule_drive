@@ -45,7 +45,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   void dispose() {
     _trackingProvider?.removeListener(_onProviderChange);
     _trackingProvider?.stopTracking();
-    _mapboxMap?.dispose();
+    _busAnnotation = null;
+    _stopAnnotations.clear();
+    _pointAnnotationManager = null;
+    _mapboxMap = null;
+    // MapWidget owns the MapboxMap and disposes it with its platform view.
     super.dispose();
   }
 
@@ -66,15 +70,17 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   void _onMapCreated(MapboxMap mapboxMap) async {
     _mapboxMap = mapboxMap;
-    _pointAnnotationManager =
-        await mapboxMap.annotations.createPointAnnotationManager();
+    _pointAnnotationManager = await mapboxMap.annotations
+        .createPointAnnotationManager();
     // Sync any data already loaded before the map was ready
     _onProviderChange();
   }
 
   void _onProviderChange() {
     final provider = _trackingProvider;
-    if (provider == null || _mapboxMap == null || _pointAnnotationManager == null) {
+    if (provider == null ||
+        _mapboxMap == null ||
+        _pointAnnotationManager == null) {
       return;
     }
 
@@ -360,7 +366,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: _getStatusColor(location?.status).withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -452,8 +461,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight:
-                                isNext ? FontWeight.w600 : FontWeight.normal,
+                            fontWeight: isNext
+                                ? FontWeight.w600
+                                : FontWeight.normal,
                             color: isDarkMode ? Colors.white : Colors.black,
                           ),
                         ),

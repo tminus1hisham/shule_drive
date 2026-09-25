@@ -11,7 +11,7 @@ import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 
 /// Driver Map Screen - Shows driver their route with all students as pins on the map
-/// 
+///
 /// Features:
 /// - Full screen Mapbox map using native SDK
 /// - Student markers with different colors based on status
@@ -23,11 +23,7 @@ class DriverMapScreen extends StatefulWidget {
   final String tripId;
   final Map<String, dynamic>? preloadedData;
 
-  const DriverMapScreen({
-    super.key,
-    required this.tripId,
-    this.preloadedData,
-  });
+  const DriverMapScreen({super.key, required this.tripId, this.preloadedData});
 
   @override
   State<DriverMapScreen> createState() => _DriverMapScreenState();
@@ -54,7 +50,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   bool _isLoadingRoute = false;
   String? _errorMessage;
   RouteResult? _currentRoute;
-  
+
   // Track student status updates locally
   final Map<int, String> _studentStatusUpdates = {};
   final Map<int, bool> _studentPickedUpdates = {};
@@ -77,10 +73,15 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
         _numberPlate =
             preloaded.vehicle?.registrationNumber ??
             preloaded.masterTrip.numberPlate;
-        developer.log('Loaded ${_students.length} students from preloaded data', 
-            name: 'DriverMapScreen');
+        developer.log(
+          'Loaded ${_students.length} students from preloaded data',
+          name: 'DriverMapScreen',
+        );
       } catch (e) {
-        developer.log('Error parsing preloaded data: $e', name: 'DriverMapScreen');
+        developer.log(
+          'Error parsing preloaded data: $e',
+          name: 'DriverMapScreen',
+        );
       }
     }
   }
@@ -88,7 +89,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
-    _mapboxMap?.dispose();
+    _pointAnnotationManager = null;
+    _polylineAnnotationManager = null;
+    _mapboxMap = null;
+    // MapWidget owns the MapboxMap and disposes it with its platform view.
     super.dispose();
   }
 
@@ -109,7 +113,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
         return;
       }
 
-      geo.LocationPermission permission = await geo.Geolocator.checkPermission();
+      geo.LocationPermission permission =
+          await geo.Geolocator.checkPermission();
       if (permission == geo.LocationPermission.denied) {
         permission = await geo.Geolocator.requestPermission();
         if (permission == geo.LocationPermission.denied) {
@@ -164,7 +169,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   /// Called when map is created
   void _onMapCreated(MapboxMap mapboxMap) {
     _mapboxMap = mapboxMap;
-    
+
     mapboxMap.annotations.createPointAnnotationManager().then((manager) {
       _pointAnnotationManager = manager;
       _updateMarkers();
@@ -188,22 +193,16 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
     try {
       // Build waypoints: driver location + pending students with valid locations
       final waypoints = <Map<String, double>>[
-        {
-          'lat': _currentPosition!.latitude,
-          'lng': _currentPosition!.longitude,
-        },
+        {'lat': _currentPosition!.latitude, 'lng': _currentPosition!.longitude},
       ];
 
       // Add pending students with valid locations
       for (final student in _students) {
-        if (!student.isStudentPicked && 
-            !student.isStudentDropped && 
+        if (!student.isStudentPicked &&
+            !student.isStudentDropped &&
             student.isStudentActive &&
             (student.latitude != 0 || student.longitude != 0)) {
-          waypoints.add({
-            'lat': student.latitude,
-            'lng': student.longitude,
-          });
+          waypoints.add({'lat': student.latitude, 'lng': student.longitude});
         }
       }
 
@@ -213,7 +212,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       }
 
       final result = await _mapboxService.getRoute(waypoints);
-      
+
       if (result.success) {
         setState(() {
           _currentRoute = result;
@@ -324,9 +323,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   /// Handle student selection from list
   void _onStudentSelected(TripStudent student) {
     // Move map to student location
-    if (_mapboxMap != null && 
-        student.latitude != 0 && 
-        student.longitude != 0) {
+    if (_mapboxMap != null && student.latitude != 0 && student.longitude != 0) {
       _mapboxMap!.setCamera(
         CameraOptions(
           center: Point(
@@ -352,7 +349,9 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       HapticFeedback.mediumImpact();
 
       // If first time (no location), save current location
-      if (student.latitude == 0 && student.longitude == 0 && _currentPosition != null) {
+      if (student.latitude == 0 &&
+          student.longitude == 0 &&
+          _currentPosition != null) {
         developer.log(
           'Saving location for student ${student.studentId}: '
           '${_currentPosition!.latitude}, ${_currentPosition!.longitude}',
@@ -395,10 +394,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -435,10 +431,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -495,12 +488,13 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
                     ),
+                    const SizedBox(height: 16),
+                    Text(_errorMessage!, textAlign: TextAlign.center),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _initializeLocation,
@@ -554,7 +548,10 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                     }
                   },
                   backgroundColor: Colors.white,
-                  child: const Icon(Icons.my_location, color: Color(0xFF6B9B5B)),
+                  child: const Icon(
+                    Icons.my_location,
+                    color: Color(0xFF6B9B5B),
+                  ),
                 ),
               ],
             ),
@@ -578,17 +575,14 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       final status = _getStudentStatus(s);
       return status == 'pending';
     }).length;
-    
+
     return Container(
       height: 220,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(30),
-            blurRadius: 20,
-          ),
+          BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 20),
         ],
       ),
       child: Column(
@@ -598,7 +592,9 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF6B9B5B).withAlpha(20),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             child: Row(
               children: [
@@ -623,7 +619,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
               ],
             ),
           ),
-          
+
           // Students list
           Expanded(
             child: ListView.builder(
@@ -695,7 +691,11 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                 ),
                 const Spacer(),
                 if (!hasLocation)
-                  const Icon(Icons.location_off, size: 16, color: Colors.orange),
+                  const Icon(
+                    Icons.location_off,
+                    size: 16,
+                    color: Colors.orange,
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -703,10 +703,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
               student.fullname,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
             const SizedBox(height: 4),
             Container(
@@ -781,7 +778,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          
+
           if (!hasLocation)
             Container(
               padding: const EdgeInsets.all(12),
@@ -802,9 +799,9 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                 ],
               ),
             ),
-          
+
           const SizedBox(height: 24),
-          
+
           if (isPending) ...[
             SizedBox(
               width: double.infinity,
@@ -848,22 +845,25 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
           ] else ...[
             Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: student.isStudentPicked 
+                  color: student.isStudentPicked
                       ? const Color(0xFF4CAF50).withAlpha(30)
                       : Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  student.isStudentDropped 
+                  student.isStudentDropped
                       ? 'Student dropped off'
-                      : student.isStudentPicked 
-                          ? 'Student picked up'
-                          : 'Student absent',
+                      : student.isStudentPicked
+                      ? 'Student picked up'
+                      : 'Student absent',
                   style: TextStyle(
                     fontSize: 16,
-                    color: student.isStudentPicked 
+                    color: student.isStudentPicked
                         ? const Color(0xFF4CAF50)
                         : Colors.grey.shade700,
                     fontWeight: FontWeight.w600,

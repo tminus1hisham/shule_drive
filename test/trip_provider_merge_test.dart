@@ -92,4 +92,54 @@ void main() {
       expect(merged.students[1].id, 's3');
     });
   });
+
+  group('TripProvider.completeTripFromResponse', () {
+    test('preserves local metadata for an acknowledgement-only response', () {
+      final startedAt = DateTime(2026, 6, 10, 7, 30);
+      final completedAt = DateTime(2026, 6, 10, 9, 15);
+      final stop = TripStop(
+        id: 'stop-1',
+        name: 'School',
+        address: 'Nairobi',
+        order: 1,
+      );
+      final original = Trip(
+        id: 'trip-1',
+        routeName: 'Morning Route',
+        routeId: 'route-7',
+        masterTripId: 117,
+        tripDirection: 'to_school',
+        startTime: startedAt,
+        status: 'active',
+        vehicleId: 'bus-12',
+        vehicleNumber: 'KDA 123A',
+        students: [_student('s1', 'dropped')],
+        stops: [stop],
+        distance: 12.4,
+        fare: 500,
+        notes: 'Use east gate',
+      );
+
+      final completed = TripProvider.completeTripFromResponse(
+        tripId: original.id,
+        originalTrip: original,
+        responseTrip: null,
+        completedAt: completedAt,
+      );
+
+      expect(completed.status, 'completed');
+      expect(completed.endTime, completedAt);
+      expect(completed.startTime, startedAt);
+      expect(completed.routeName, original.routeName);
+      expect(completed.routeId, original.routeId);
+      expect(completed.masterTripId, original.masterTripId);
+      expect(completed.tripDirection, original.tripDirection);
+      expect(completed.vehicleNumber, original.vehicleNumber);
+      expect(completed.students, same(original.students));
+      expect(completed.stops, same(original.stops));
+      expect(completed.distance, original.distance);
+      expect(completed.fare, original.fare);
+      expect(completed.notes, original.notes);
+    });
+  });
 }

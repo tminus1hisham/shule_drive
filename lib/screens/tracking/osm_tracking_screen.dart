@@ -50,8 +50,12 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   // Mapbox
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _pointAnnotationManager;
+  PointAnnotationManager? _studentAnnotationManager;
   PolylineAnnotationManager? _polylineAnnotationManager;
   PointAnnotation? _busAnnotation;
+  bool _isCreatingBusAnnotation = false;
+  bool _isBusUpdateInFlight = false;
+  bool _hasPendingBusUpdate = false;
 
   // Location
   geo.Position? _currentPosition;
@@ -110,9 +114,16 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   @override
   void dispose() {
     _tripProvider?.removeListener(_onTripProviderChanged);
+    _animationController.stop();
     _animationController.dispose();
     _positionStream?.cancel();
-    _mapboxMap?.dispose();
+    _hasPendingBusUpdate = false;
+    _busAnnotation = null;
+    _pointAnnotationManager = null;
+    _studentAnnotationManager = null;
+    _polylineAnnotationManager = null;
+    _mapboxMap = null;
+    // MapWidget owns the MapboxMap and disposes it with its platform view.
     super.dispose();
   }
 
@@ -183,18 +194,58 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   void _onAnimationUpdate() {
-    if (_busAnnotation != null && _pointAnnotationManager != null) {
-      final lat = _latAnimation?.value ?? _currentPosition?.latitude ?? 0.0;
-      final lng = _lngAnimation?.value ?? _currentPosition?.longitude ?? 0.0;
-      final bearing =
-          _bearingAnimation?.value ?? _currentPosition?.heading ?? 0.0;
+    if (!mounted || _busAnnotation == null || _pointAnnotationManager == null) {
+      return;
+    }
 
-      // Update annotation geometry and rotation
-      _busAnnotation!.geometry = Point(coordinates: Position(lng, lat));
-      // Mapbox iconRotate is in degrees, positive is clockwise. heading in Geolocator is also in degrees 0-359
-      _busAnnotation!.iconRotate = bearing;
+    final lat = _latAnimation?.value ?? _currentPosition?.latitude ?? 0.0;
+    final lng = _lngAnimation?.value ?? _currentPosition?.longitude ?? 0.0;
+    final bearing =
+        _bearingAnimation?.value ?? _currentPosition?.heading ?? 0.0;
 
-      _pointAnnotationManager?.update(_busAnnotation!);
+    _busAnnotation!.geometry = Point(coordinates: Position(lng, lat));
+    _busAnnotation!.iconRotate = bearing;
+    _scheduleBusAnnotationUpdate();
+  }
+
+  /// Coalesce animation frames while a platform update is in flight. Sending
+  /// one update per frame can otherwise leave stale native calls queued while
+  /// the map is being torn down.
+  void _scheduleBusAnnotationUpdate() {
+    _hasPendingBusUpdate = true;
+    if (_isBusUpdateInFlight) return;
+
+    _isBusUpdateInFlight = true;
+    unawaited(_flushBusAnnotationUpdates());
+  }
+
+  Future<void> _flushBusAnnotationUpdates() async {
+    try {
+      while (mounted && _hasPendingBusUpdate) {
+        _hasPendingBusUpdate = false;
+        final manager = _pointAnnotationManager;
+        final annotation = _busAnnotation;
+        if (manager == null || annotation == null) return;
+
+        await manager.update(annotation);
+        if (!identical(manager, _pointAnnotationManager) ||
+            !identical(annotation, _busAnnotation)) {
+          return;
+        }
+      }
+    } catch (error, stackTrace) {
+      if (mounted) {
+        developer.log(
+          'Failed to update bus annotation: $error',
+          name: 'TrackingScreen',
+          stackTrace: stackTrace,
+        );
+      }
+    } finally {
+      _isBusUpdateInFlight = false;
+      if (mounted && _hasPendingBusUpdate) {
+        _scheduleBusAnnotationUpdate();
+      }
     }
   }
 
@@ -232,17 +283,40 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       );
     }
 
-    mapboxMap.annotations.createPointAnnotationManager().then((manager) {
-      _pointAnnotationManager = manager;
-      _updateMarkers();
-    });
+    if (!mounted || !identical(_mapboxMap, mapboxMap)) return;
 
-    mapboxMap.annotations.createPolylineAnnotationManager().then((manager) {
-      _polylineAnnotationManager = manager;
+    try {
+      final busManager = await mapboxMap.annotations
+          .createPointAnnotationManager();
+      if (!mounted || !identical(_mapboxMap, mapboxMap)) return;
+      _pointAnnotationManager = busManager;
+
+      // Student markers are rebuilt as their pickup state changes. Keeping
+      // them in a separate manager means deleteAll() never invalidates the
+      // bus annotation that the animation loop updates.
+      final studentManager = await mapboxMap.annotations
+          .createPointAnnotationManager();
+      if (!mounted || !identical(_mapboxMap, mapboxMap)) return;
+      _studentAnnotationManager = studentManager;
+
+      final polylineManager = await mapboxMap.annotations
+          .createPolylineAnnotationManager();
+      if (!mounted || !identical(_mapboxMap, mapboxMap)) return;
+      _polylineAnnotationManager = polylineManager;
+
+      await _updateMarkers();
       if (_routeResult != null) {
-        _updateRouteLine();
+        await _updateRouteLine();
       }
-    });
+    } catch (error, stackTrace) {
+      if (mounted) {
+        developer.log(
+          'Failed to initialize map annotations: $error',
+          name: 'TrackingScreen',
+          stackTrace: stackTrace,
+        );
+      }
+    }
   }
 
   Future<void> _initializeLocation() async {
@@ -272,6 +346,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         _currentPosition = position;
         _previousPosition = position;
       });
+      await _updateDriverMarker();
       _maybeShowNextStudentProximityPrompt();
 
       _positionStream = geo.Geolocator.getPositionStream(
@@ -588,37 +663,75 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   /// Update all markers on map
   Future<void> _updateMarkers() async {
-    if (_pointAnnotationManager == null) return;
-    await _pointAnnotationManager!.deleteAll();
-    await _updateDriverMarker();
-    for (final student in _students) {
-      await _addStudentMarker(student);
+    if (!mounted) return;
+
+    try {
+      await _updateDriverMarker();
+
+      final manager = _studentAnnotationManager;
+      if (manager == null) return;
+      await manager.deleteAll();
+      if (!mounted || !identical(manager, _studentAnnotationManager)) return;
+
+      for (final student in _students) {
+        await _addStudentMarker(student);
+        if (!mounted || !identical(manager, _studentAnnotationManager)) return;
+      }
+    } catch (error, stackTrace) {
+      if (mounted) {
+        developer.log(
+          'Failed to rebuild map markers: $error',
+          name: 'TrackingScreen',
+          stackTrace: stackTrace,
+        );
+      }
     }
   }
 
   /// Update driver marker on map
   Future<void> _updateDriverMarker() async {
-    if (_pointAnnotationManager == null || _currentPosition == null) return;
+    final manager = _pointAnnotationManager;
+    final position = _currentPosition;
+    if (!mounted ||
+        manager == null ||
+        position == null ||
+        _busAnnotation != null ||
+        _isCreatingBusAnnotation) {
+      return;
+    }
 
-    if (_busAnnotation == null) {
-      _busAnnotation = await _pointAnnotationManager!.create(
+    _isCreatingBusAnnotation = true;
+    try {
+      final annotation = await manager.create(
         PointAnnotationOptions(
           geometry: Point(
-            coordinates: Position(
-              _currentPosition!.longitude,
-              _currentPosition!.latitude,
-            ),
+            coordinates: Position(position.longitude, position.latitude),
           ),
           iconSize: 1.0,
           image: _busIconBytes,
         ),
       );
+
+      if (mounted && identical(manager, _pointAnnotationManager)) {
+        _busAnnotation = annotation;
+      }
+    } catch (error, stackTrace) {
+      if (mounted) {
+        developer.log(
+          'Failed to create bus annotation: $error',
+          name: 'TrackingScreen',
+          stackTrace: stackTrace,
+        );
+      }
+    } finally {
+      _isCreatingBusAnnotation = false;
     }
   }
 
   /// Add student marker to map
   Future<void> _addStudentMarker(TripStudent student) async {
-    if (_pointAnnotationManager == null) return;
+    final manager = _studentAnnotationManager;
+    if (!mounted || manager == null) return;
     if (student.latitude == 0 && student.longitude == 0) return;
 
     String emoji;
@@ -632,7 +745,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       emoji = '👤';
     }
 
-    await _pointAnnotationManager!.create(
+    await manager.create(
       PointAnnotationOptions(
         geometry: Point(
           coordinates: Position(student.longitude, student.latitude),
@@ -1050,11 +1163,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     setState(() => _isEndingTrip = true);
     final authProvider = context.read<AuthProvider>();
     final tripProvider = context.read<TripProvider>();
+    final position = _currentPosition;
     try {
       final success = await tripProvider.endTrip(
         tripId,
         driverId: authProvider.userId,
         driverName: authProvider.userName,
+        latitude: position?.latitude ?? 0,
+        longitude: position?.longitude ?? 0,
       );
       if (!mounted) return;
 
@@ -1340,18 +1456,21 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   padding: EdgeInsets.zero,
                   onPickedUpStudent: (target) {
                     final selected = _studentForCardTarget(target);
-                    if (selected != null)
+                    if (selected != null) {
                       _updateStudentStatus(selected, 'picked');
+                    }
                   },
                   onDroppedOffStudent: (target) {
                     final selected = _studentForCardTarget(target);
-                    if (selected != null)
+                    if (selected != null) {
                       _updateStudentStatus(selected, 'dropped');
+                    }
                   },
                   onAbsentStudent: (target) {
                     final selected = _studentForCardTarget(target);
-                    if (selected != null)
+                    if (selected != null) {
                       _updateStudentStatus(selected, 'absent');
+                    }
                   },
                   onChat: _openTripChat,
                   onStudents: _openStudentsList,

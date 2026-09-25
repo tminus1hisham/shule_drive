@@ -37,7 +37,6 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   final StudentService _studentService = StudentService();
 
   // Mapbox
-  MapboxMap? _mapboxMap;
   PointAnnotationManager? _pointAnnotationManager;
   PolylineAnnotationManager? _polylineAnnotationManager;
   PointAnnotation? _driverAnnotation;
@@ -67,7 +66,12 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   @override
   void dispose() {
     _locationPollTimer?.cancel();
-    _mapboxMap?.dispose();
+    _driverAnnotation = null;
+    _studentAnnotation = null;
+    _routeAnnotation = null;
+    _pointAnnotationManager = null;
+    _polylineAnnotationManager = null;
+    // MapWidget owns the MapboxMap and disposes it with its platform view.
     super.dispose();
   }
 
@@ -155,11 +159,10 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   }
 
   void _onMapCreated(MapboxMap mapboxMap) async {
-    _mapboxMap = mapboxMap;
-    _pointAnnotationManager =
-        await mapboxMap.annotations.createPointAnnotationManager();
-    _polylineAnnotationManager =
-        await mapboxMap.annotations.createPolylineAnnotationManager();
+    _pointAnnotationManager = await mapboxMap.annotations
+        .createPointAnnotationManager();
+    _polylineAnnotationManager = await mapboxMap.annotations
+        .createPolylineAnnotationManager();
     _updateMapAnnotations();
   }
 
@@ -191,7 +194,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             textField: '🚌',
             textSize: 28,
             iconRotate: _driverLocation!.heading,
-            ),
+          ),
         );
       }
     }
@@ -213,7 +216,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             geometry: studentPoint,
             textField: emoji,
             textSize: 24,
-            ),
+          ),
         );
       }
     }
@@ -343,7 +346,11 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
                     const SizedBox(height: 16),
@@ -366,7 +373,8 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             ),
 
           // Legend
-          if (!_isLoading) Positioned(top: 80, right: 16, child: _buildLegend()),
+          if (!_isLoading)
+            Positioned(top: 80, right: 16, child: _buildLegend()),
         ],
       ),
     );
@@ -420,7 +428,10 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -490,7 +501,10 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: _getStatusColor().withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
@@ -554,8 +568,14 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
       children: [
         Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
       ],
     );
   }

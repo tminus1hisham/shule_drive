@@ -291,7 +291,11 @@ class TripService {
   ///
   /// Request body format: {'tripId': tripId, 'uniqueTripIdentity': tripId}
   /// The API requires both tripId and uniqueTripIdentity
-  Future<Trip> endTrip(String tripId) async {
+  Future<Trip?> endTrip(
+    String tripId, {
+    double latitude = 0,
+    double longitude = 0,
+  }) async {
     try {
       // Use end trip endpoint with both tripId and uniqueTripIdentity in body
       // The API expects both fields - uniqueTripIdentity is the tripUniqueId from start trip response
@@ -301,7 +305,12 @@ class TripService {
 
       final response = await _apiClient.post(
         Endpoints.dropAllStudents,
-        body: _pickDropAllBody(uniqueTripIdentity: tripId, isDroppingAll: true),
+        body: _pickDropAllBody(
+          uniqueTripIdentity: tripId,
+          latitude: latitude,
+          longitude: longitude,
+          isDroppingAll: true,
+        ),
       );
 
       debugPrint(
@@ -312,85 +321,13 @@ class TripService {
       await _buffer.clearBuffer(BufferKeys.activeTrip);
       await _buffer.clearCategory('trips');
 
-      // Handle null or empty response (server returned 200 with empty body)
-      if (response == null || (response is Map && response.isEmpty)) {
+      final trip = parseEndTripResponse(response, tripId: tripId);
+      if (trip == null) {
         debugPrint(
-          '⚠️ Server returned empty/null response, creating minimal trip object',
-        );
-        return Trip(
-          id: tripId,
-          routeName: 'Trip',
-          routeId: '',
-          startTime: DateTime.now(),
-          endTime: DateTime.now(),
-          status: 'completed',
-          vehicleId: '',
-          // Note: Students will be empty - caller should preserve original student data
-          students: [],
-          stops: [],
-        );
-      } else if (response is! Map) {
-        return Trip(
-          id: tripId,
-          routeName: 'Trip',
-          routeId: '',
-          startTime: DateTime.now(),
-          endTime: DateTime.now(),
-          status: 'completed',
-          vehicleId: '',
-          students: [],
-          stops: [],
+          '✅ Trip end acknowledged without a trip representation; '
+          'preserving the local trip data',
         );
       }
-
-      // Handle different response formats
-      Trip trip;
-      if (response['data'] != null) {
-        trip = Trip.fromJson(response['data']);
-      } else if (response['tripUniqueId'] != null || response['id'] != null) {
-        // Try to parse students from response if available
-        List<StudentPickup> students = [];
-        if (response['students'] != null && response['students'] is List) {
-          students = (response['students'] as List)
-              .map((s) => StudentPickup.fromJson(s))
-              .toList();
-        }
-
-        // Construct trip from response
-        trip = Trip(
-          id:
-              response['tripUniqueId']?.toString() ??
-              response['id']?.toString() ??
-              tripId,
-          routeName: response['routeName'] ?? response['route'] ?? 'Trip',
-          routeId: response['routeId']?.toString() ?? '',
-          startTime:
-              Trip._parseDateTime(response['startTime']) ?? DateTime.now(),
-          endTime: Trip._parseDateTime(response['endTime']) ?? DateTime.now(),
-          status: 'completed',
-          vehicleId: response['vehicleId']?.toString() ?? '',
-          vehicleNumber: response['vehicleNumber']?.toString(),
-          students: students, // Use parsed students if available
-          stops: [],
-        );
-      } else {
-        // Return a minimal trip object for any other response format
-        debugPrint(
-          '⚠️ Unexpected response format, creating minimal trip object',
-        );
-        trip = Trip(
-          id: tripId,
-          routeName: 'Trip',
-          routeId: '',
-          startTime: DateTime.now(),
-          endTime: DateTime.now(),
-          status: 'completed',
-          vehicleId: '',
-          students: [],
-          stops: [],
-        );
-      }
-
       return trip;
     } on ApiException catch (e) {
       debugPrint(
@@ -407,6 +344,58 @@ class TripService {
       await _buffer.clearCategory('trips');
       throw ApiException(message: e.toString());
     }
+  }
+
+  /// Parse an optional trip representation from a successful end-trip
+  /// response. The backend may validly return only an acknowledgement message.
+  @visibleForTesting
+  static Trip? parseEndTripResponse(
+    Object? response, {
+    required String tripId,
+    DateTime? completedAt,
+  }) {
+    if (response is! Map || response.isEmpty) return null;
+
+    final data = response['data'];
+    if (data is Map) {
+      return Trip.fromJson(Map<String, dynamic>.from(data));
+    }
+
+    if (response['tripUniqueId'] == null && response['id'] == null) {
+      return null;
+    }
+
+    final students = <StudentPickup>[];
+    final rawStudents = response['students'];
+    if (rawStudents is List) {
+      for (final rawStudent in rawStudents) {
+        if (rawStudent is Map) {
+          students.add(
+            StudentPickup.fromJson(Map<String, dynamic>.from(rawStudent)),
+          );
+        }
+      }
+    }
+
+    final now = completedAt ?? DateTime.now();
+    return Trip(
+      id:
+          response['tripUniqueId']?.toString() ??
+          response['id']?.toString() ??
+          tripId,
+      routeName:
+          response['routeName']?.toString() ??
+          response['route']?.toString() ??
+          '',
+      routeId: response['routeId']?.toString() ?? '',
+      startTime: Trip._parseDateTime(response['startTime']) ?? now,
+      endTime: Trip._parseDateTime(response['endTime']) ?? now,
+      status: 'completed',
+      vehicleId: response['vehicleId']?.toString() ?? '',
+      vehicleNumber: response['vehicleNumber']?.toString(),
+      students: students,
+      stops: const [],
+    );
   }
 
   /// Update student pickup status.
@@ -439,7 +428,8 @@ class TripService {
             reason: notes ?? 'Student not picked',
           ),
         );
-      } else if (normalizedStatus == 'picked' || normalizedStatus == 'dropped') {
+      } else if (normalizedStatus == 'picked' ||
+          normalizedStatus == 'dropped') {
         final reg = studentReg?.trim() ?? '';
         final phone = guardianPhoneNumber?.trim() ?? '';
         final plate = numberPlate?.trim() ?? '';
