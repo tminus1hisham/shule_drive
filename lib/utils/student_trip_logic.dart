@@ -1,6 +1,7 @@
 import 'dart:math' show atan2, cos, pi, sin, sqrt;
 
-const double studentProximityThresholdMeters = 100;
+/// How close the bus gets before the driver is prompted to pick/drop.
+const double studentProximityThresholdMeters = 200;
 
 enum StudentTripActionMode { pickup, dropoff }
 
@@ -29,6 +30,25 @@ bool isWithinStudentProximity(double distanceMeters) {
   return distanceMeters <= studentProximityThresholdMeters;
 }
 
+/// "150 m" / "1.2 km".
+String formatStudentDistance(double meters) => meters < 1000
+    ? '${meters.round()} m'
+    : '${(meters / 1000).toStringAsFixed(1)} km';
+
+/// The item with the smallest known distance, or null if none is known.
+T? nearestBy<T>(Iterable<T> items, double? Function(T item) distanceOf) {
+  T? best;
+  double? bestDistance;
+  for (final item in items) {
+    final d = distanceOf(item);
+    if (d != null && (bestDistance == null || d < bestDistance)) {
+      best = item;
+      bestDistance = d;
+    }
+  }
+  return best;
+}
+
 bool hasValidStudentCoordinate(double? latitude, double? longitude) {
   if (latitude == null || longitude == null) return false;
   return latitude != 0 && longitude != 0;
@@ -49,4 +69,3 @@ bool isReturnTripDirection(String? tripDirection) {
 String normalizeGuardianPhone(String? phone) {
   return phone?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
 }
-

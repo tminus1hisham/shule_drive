@@ -459,8 +459,7 @@ class NextStudentTripActionCard extends StatelessWidget {
 
   String _formatDistance(double? meters) {
     if (meters == null) return 'Distance unavailable';
-    if (meters < 1000) return '${meters.round()} m away';
-    return '${(meters / 1000).toStringAsFixed(1)} km away';
+    return '${formatStudentDistance(meters)} away';
   }
 
   String _statusLabel(String status) {

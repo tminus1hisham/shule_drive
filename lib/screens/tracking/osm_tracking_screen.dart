@@ -15,6 +15,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../utils/student_trip_logic.dart';
 import '../../widgets/add_trip_student_sheet.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
 
@@ -88,6 +90,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   String? _statusErrorMessage;
   final Map<int, String> _studentStatusUpdates = {};
   final Set<String> _shownStudentProximityAlerts = {};
+  TripStudent? _proximityStudent;
   Future<List<student_api.Student>>? _schoolStudents;
 
   // Provider reference kept for listener add/remove. The provider is the single
@@ -784,24 +787,19 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return 'pending';
   }
 
+  /// Nearest student still needing an action (list order when GPS or their
+  /// coordinates are unknown). Return trips: picked students to drop.
+  /// Otherwise: waiting students to pick, then picked ones.
   TripStudent? _nextActionableStudent() {
-    final sorted = List<TripStudent>.from(_students);
-    sorted.sort((a, b) => a.id.compareTo(b.id));
-
-    if (isReturnTripDirection(_tripDirection)) {
-      return _firstStudentWithStatus(sorted, 'picked');
-    }
-
-    return _firstStudentWithStatus(sorted, 'pending') ??
-        _firstStudentWithStatus(sorted, 'picked');
-  }
-
-  TripStudent? _firstStudentWithStatus(
-    List<TripStudent> students,
-    String status,
-  ) {
-    for (final student in students) {
-      if (_getStudentStatus(student) == status) return student;
+    final statuses = isReturnTripDirection(_tripDirection)
+        ? const ['picked']
+        : const ['pending', 'picked'];
+    for (final status in statuses) {
+      final candidates = _students
+          .where((s) => _getStudentStatus(s) == status)
+          .toList();
+      if (candidates.isEmpty) continue;
+      return nearestBy(candidates, _distanceToStudent) ?? candidates.first;
     }
     return null;
   }
@@ -820,14 +818,15 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     TripStudent student,
     StudentTripActionMode mode,
   ) {
-    final latitude =
-        mode == StudentTripActionMode.dropoff && student.pickedLatitude != 0
-        ? student.pickedLatitude
-        : student.latitude;
-    final longitude =
-        mode == StudentTripActionMode.dropoff && student.pickedLongitude != 0
-        ? student.pickedLongitude
-        : student.longitude;
+    // The saved spot is where the student gets on (to school) or off (return
+    // trip). Today's pickup spot is only a fallback: on a return trip it's
+    // the school.
+    final useSaved = hasValidStudentCoordinate(
+      student.latitude,
+      student.longitude,
+    );
+    final latitude = useSaved ? student.latitude : student.pickedLatitude;
+    final longitude = useSaved ? student.longitude : student.pickedLongitude;
 
     if (!hasValidStudentCoordinate(latitude, longitude)) return null;
     return (latitude: latitude, longitude: longitude);
@@ -893,6 +892,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return student == null ? null : _distanceToStudent(student);
   }
 
+  /// Prompt on the map when the bus is within
+  /// [studentProximityThresholdMeters] of the nearest student to act on. Only
+  /// the leg that happens at the student's spot is prompted: pickups on the
+  /// way to school, drop-offs on the way back (school stops use Pick/Drop all).
   void _maybeShowNextStudentProximityPrompt() {
     if (!mounted || _isUpdatingStudentStatus || _currentPosition == null) {
       return;
@@ -902,67 +905,113 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     if (student == null) return;
 
     final mode = _actionModeForStudent(student);
+    final promptedMode = isReturnTripDirection(_tripDirection)
+        ? StudentTripActionMode.dropoff
+        : StudentTripActionMode.pickup;
+    if (mode != promptedMode) return;
+
     final distance = _distanceToStudent(student);
     if (distance == null || !isWithinStudentProximity(distance)) return;
 
     final promptKey =
         '${student.studentId}_${mode.name}_${_getStudentStatus(student)}';
-    if (_shownStudentProximityAlerts.contains(promptKey)) return;
-    _shownStudentProximityAlerts.add(promptKey);
+    if (!_shownStudentProximityAlerts.add(promptKey)) return;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (sheetContext) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: NextStudentTripActionCard(
-              student: _cardTargetForStudent(student),
-              students: _cardTargetsForStudents(),
-              mode: mode,
-              distanceMeters: distance,
-              modeForStudent: _modeForCardTarget,
-              distanceForStudent: _distanceForCardTarget,
-              isSubmitting: _isUpdatingStudentStatus,
-              errorMessage: _statusErrorMessage,
-              onPickedUpStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected == null) return;
-                Navigator.pop(sheetContext);
-                _updateStudentStatus(selected, 'picked');
-              },
-              onDroppedOffStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected == null) return;
-                Navigator.pop(sheetContext);
-                _updateStudentStatus(selected, 'dropped');
-              },
-              onAbsentStudent: (target) {
-                final selected = _studentForCardTarget(target);
-                if (selected == null) return;
-                Navigator.pop(sheetContext);
-                _updateStudentStatus(selected, 'absent');
-              },
-              onChat: () {
-                Navigator.pop(sheetContext);
-                _openTripChat();
-              },
-              onStudents: () {
-                Navigator.pop(sheetContext);
-                _openStudentsList();
-              },
-              onNotify: () {
-                Navigator.pop(sheetContext);
-                _showNotifyOptions();
-              },
-            ),
-          ),
+    setState(() => _proximityStudent = student);
+  }
+
+  /// The prompted student, while they still need that action.
+  TripStudent? get _activeProximityStudent {
+    final student = _proximityStudent;
+    if (student == null) return null;
+    final status = _getStudentStatus(student);
+    final pickup =
+        _actionModeForStudent(student) == StudentTripActionMode.pickup;
+    return (pickup ? status == 'pending' : status == 'picked') ? student : null;
+  }
+
+  Widget _buildProximityBanner(TripStudent student) {
+    final pickup =
+        _actionModeForStudent(student) == StudentTripActionMode.pickup;
+    final distance = _distanceToStudent(student);
+    final verb = pickup ? 'Pick' : 'Drop';
+    final title = distance == null
+        ? '$verb ${student.fullname}'
+        : '$verb ${student.fullname} in ${formatStudentDistance(distance)}';
+
+    return Material(
+      color: context.colors.brand,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.xs,
+          AppSpacing.xs,
+          AppSpacing.md,
         ),
-      );
-    });
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  pickup ? Icons.directions_bus_rounded : Icons.home_rounded,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: context.text.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Dismiss',
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  onPressed: () => setState(() => _proximityStudent = null),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: pickup ? 'Picked up' : 'Dropped off',
+                      variant: AppButtonVariant.onBrand,
+                      onPressed: _isUpdatingStudentStatus
+                          ? null
+                          : () => _updateStudentStatus(
+                              student,
+                              pickup ? 'picked' : 'dropped',
+                            ),
+                    ),
+                  ),
+                  if (pickup) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    TextButton(
+                      onPressed: _isUpdatingStudentStatus
+                          ? null
+                          : () => _updateStudentStatus(student, 'absent'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Absent'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _updateStudentStatus(TripStudent student, String status) async {
@@ -1446,6 +1495,15 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   ),
                 ),
               ),
+            ),
+
+          // Proximity prompt ("Pick Amani in 150 m"), leaves room for the FABs.
+          if (_activeProximityStudent case final student?)
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 72,
+              child: _buildProximityBanner(student),
             ),
 
           // Map controls
