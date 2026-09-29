@@ -234,6 +234,7 @@ class _StartTripScreenState extends State<StartTripScreen> {
 
     final tripProvider = context.read<TripProvider>();
     final authProvider = context.read<AuthProvider>();
+    final appProvider = context.read<AppProvider>();
     final navigator = Navigator.of(context);
     try {
       // Refuse a second trip while one is still running, possibly left
@@ -257,7 +258,13 @@ class _StartTripScreenState extends State<StartTripScreen> {
       final masterTrip = _preSelectedMasterTrip;
       final roster = _preloadedData?.students ?? const <TripStudent>[];
       final plate = _selectedNumberPlate;
-      final routeName = _preSelectedRouteName ?? masterTrip?.route ?? '';
+      final routeName =
+          appProvider.routes
+              .where((route) => route.id == _selectedRoute)
+              .map((route) => route.name)
+              .firstOrNull ??
+          _preSelectedRouteName ??
+          masterTrip?.route;
       final trip = await tripProvider.startTrip(
         routeId: _selectedRoute!,
         vehicleId: _selectedVehicle!,

@@ -1,4 +1,4 @@
-﻿/// ShuleDrive shared UI component library.
+/// ShuleDrive shared UI component library.
 ///
 /// Import this barrel to get every reusable, theme-driven widget:
 /// `import 'package:shule_drive/widgets/ui/ui.dart';`
@@ -23,7 +23,6 @@ export 'press_scale.dart';
 export 'section_header.dart';
 export 'segmented_filter.dart';
 export 'selectable_card.dart';
-export 'staggered_entrance.dart';
 export 'stat_tile.dart';
 export 'status_pill.dart';
 export 'student_status.dart';

@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 /// Semantic colors, gradients and shadows that don't fit into Material's
 /// [ColorScheme]. Lives on the theme as a [ThemeExtension] so it adapts to
-/// light/dark automatically â€” read it via `context.colors`.
+/// light/dark automatically — read it via `context.colors`.
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
   const AppColors({

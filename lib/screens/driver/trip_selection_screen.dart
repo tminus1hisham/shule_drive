@@ -181,9 +181,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen> {
     );
   }
 
-  void _skipToStartTrip() {
-    // Skip master trip selection and go directly to start trip
-    Navigator.pushReplacementNamed(context, '/start-trip');
+  Future<void> _manageTrips() async {
+    await Navigator.pushNamed(context, '/manage-master-trips');
+    if (mounted) await _loadMasterTrips();
   }
 
   @override
@@ -225,19 +225,14 @@ class _TripSelectionScreenState extends State<TripSelectionScreen> {
                       title: 'No Scheduled Trips',
                       message:
                           'You don\'t have any master trips assigned. '
-                          'Start a new trip instead.',
-                      actionLabel: 'Start New Trip',
-                      onAction: _skipToStartTrip,
+                          'Create a trip before starting your journey.',
+                      actionLabel: 'Manage Trips',
+                      onAction: _manageTrips,
                     ),
                     onRefresh: _loadMasterTrips,
                     child: _buildTripsList(),
                   ),
                 ),
-                if (_error != null)
-                  TextButton(
-                    onPressed: _skipToStartTrip,
-                    child: const Text('Skip to Start Trip'),
-                  ),
               ],
             ),
           ),
@@ -412,10 +407,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen> {
         onPressed: _selectedTrip != null ? _onContinue : null,
       ),
       secondary: AppButton(
-        label: 'Start a Different Trip',
+        label: 'Manage Trips',
         variant: AppButtonVariant.tertiary,
         size: AppButtonSize.medium,
-        onPressed: _skipToStartTrip,
+        onPressed: _manageTrips,
       ),
     ).enter(offsetY: 40);
   }

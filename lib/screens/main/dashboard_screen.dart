@@ -89,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (args is Map && args['fromTripEnd'] == true) {
         _fromTripEnd = true;
         debugPrint(
-          'ðŸ“ Dashboard: Arrived from trip end, skipping auto-redirect',
+          '📍 Dashboard: Arrived from trip end, skipping auto-redirect',
         );
       }
       _initDashboard();
@@ -125,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final activeTrip = tripProvider.activeTrip;
 
     if (authProvider.isDriver && activeTrip != null && !_fromTripEnd) {
-      debugPrint('ðŸšŒ Active trip found on open, resuming: ${activeTrip.id}');
+      debugPrint('🚌 Active trip found on open, resuming: ${activeTrip.id}');
       navigator.pushNamed(
         '/osm-tracking',
         arguments: {'tripId': activeTrip.id, 'preloadedData': null},
@@ -143,7 +143,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
       debugPrint(
-        'ðŸ” Master trip check already performed or in progress, skipping',
+        '🔍 Master trip check already performed or in progress, skipping',
       );
       return;
     }
@@ -152,19 +152,19 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final authProvider = context.read<AuthProvider>();
 
-    debugPrint('ðŸ” =========================================');
-    debugPrint('ðŸ” CHECKING MASTER TRIPS FOR DRIVER');
-    debugPrint('ðŸ” =========================================');
-    debugPrint('ðŸ” isDriver: ${authProvider.isDriver}');
-    debugPrint('ðŸ” User role: ${authProvider.userRole}');
-    debugPrint('ðŸ” User role from data: ${authProvider.userData['role']}');
-    debugPrint('ðŸ” Current user ID: ${authProvider.currentUser?.id}');
-    debugPrint('ðŸ” Current user name: ${authProvider.currentUser?.name}');
+    debugPrint('🔍 =========================================');
+    debugPrint('🔍 CHECKING MASTER TRIPS FOR DRIVER');
+    debugPrint('🔍 =========================================');
+    debugPrint('🔍 isDriver: ${authProvider.isDriver}');
+    debugPrint('🔍 User role: ${authProvider.userRole}');
+    debugPrint('🔍 User role from data: ${authProvider.userData['role']}');
+    debugPrint('🔍 Current user ID: ${authProvider.currentUser?.id}');
+    debugPrint('🔍 Current user name: ${authProvider.currentUser?.name}');
 
     // Only check for drivers
     if (!authProvider.isDriver) {
       debugPrint(
-        'ðŸ” User is NOT a driver (role: ${authProvider.userRole}), skipping check',
+        '🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check',
       );
       setState(() {
         _hasCheckedMasterTrips = true;
@@ -175,7 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Driver opted out of autoload - they open scheduled trips themselves
     if (!context.read<AppProvider>().autoloadTrips) {
-      debugPrint('ðŸ” Autoload is off, skipping master trip check');
+      debugPrint('🔍 Autoload is off, skipping master trip check');
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -187,7 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final tripProvider = context.read<TripProvider>();
     final navigator = Navigator.of(context);
     if (tripProvider.activeTrip != null) {
-      debugPrint('ðŸ” Active trip exists, skipping master trip check');
+      debugPrint('🔍 Active trip exists, skipping master trip check');
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -199,10 +199,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       final tripService = TripService();
       final driverId = authProvider.currentUser?.id;
 
-      debugPrint('ðŸ” Driver ID: $driverId');
+      debugPrint('🔍 Driver ID: $driverId');
 
       if (driverId == null || driverId.isEmpty) {
-        debugPrint('âŒ Driver ID is null or empty');
+        debugPrint('❌ Driver ID is null or empty');
         setState(() {
           _hasCheckedMasterTrips = true;
           _isCheckingMasterTrips = false;
@@ -210,14 +210,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
 
-      debugPrint('ðŸ” Calling API: getMasterTripsByDriverCached($driverId)');
+      debugPrint('🔍 Calling API: getMasterTripsByDriverCached($driverId)');
 
       // Use cache-first pattern - shows cached trips immediately while fetching fresh data
       MasterTrip? firstTrip;
       final masterTrips = await tripService.getMasterTripsByDriverCached(
         driverId,
         onRefresh: (freshTrips) {
-          debugPrint('ðŸ”„ Background refresh: ${freshTrips.length} trips');
+          debugPrint('🔄 Background refresh: ${freshTrips.length} trips');
           // Only redirect on background refresh if NOT coming from trip end
           if (freshTrips.isNotEmpty &&
               _canRunScheduledWork &&
@@ -225,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               !_fromTripEnd) {
             if (firstTrip == null) {
               debugPrint(
-                'âœ… Fresh data available, redirecting to trip selection',
+                '✅ Fresh data available, redirecting to trip selection',
               );
               navigator.pushReplacementNamed('/trip-selection');
             }
@@ -239,7 +239,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
 
       debugPrint(
-        'ðŸ” Loaded ${masterTrips.length} master trips (from cache or API)',
+        '🔍 Loaded ${masterTrips.length} master trips (from cache or API)',
       );
       for (final trip in masterTrips) {
         debugPrint(
@@ -249,20 +249,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       if (!mounted || !_canRunScheduledWork || !navigator.mounted) {
         _isCheckingMasterTrips = false;
-        debugPrint('ðŸ” Dashboard is no longer active');
+        debugPrint('🔍 Dashboard is no longer active');
         return;
       }
 
       if (masterTrips.isNotEmpty && !_fromTripEnd) {
-        debugPrint('âœ… Redirecting to trip selection screen');
+        debugPrint('✅ Redirecting to trip selection screen');
 
         // Redirect to trip selection screen
         navigator.pushReplacementNamed('/trip-selection');
       } else {
         if (_fromTripEnd) {
-          debugPrint('ðŸ“ Skipping auto-redirect (came from trip end)');
+          debugPrint('📍 Skipping auto-redirect (came from trip end)');
         } else {
-          debugPrint('â„¹ï¸ No master trips found');
+          debugPrint('ℹ️ No master trips found');
         }
         setState(() {
           _hasCheckedMasterTrips = true;
@@ -270,8 +270,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e, stackTrace) {
-      debugPrint('âŒ Error: $e');
-      debugPrint('âŒ Stack: $stackTrace');
+      debugPrint('❌ Error: $e');
+      debugPrint('❌ Stack: $stackTrace');
       void finishCheck() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -359,7 +359,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
     } catch (e) {
-      debugPrint('âš ï¸ Upcoming trip check error: $e');
+      debugPrint('⚠️ Upcoming trip check error: $e');
     }
   }
 
@@ -514,7 +514,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final authProvider = context.read<AuthProvider>();
 
     if (kDebugMode) {
-      print('ðŸ“± Dashboard _loadData:');
+      print('📱 Dashboard _loadData:');
       print('  isGuardian: ${authProvider.isGuardian}');
       print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
@@ -598,7 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (tripProvider == null || authProvider == null) return;
 
     if (kDebugMode) {
-      print('ðŸ“± Dashboard _refresh:');
+      print('📱 Dashboard _refresh:');
       print('  isGuardian: ${authProvider.isGuardian}');
       print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
@@ -668,7 +668,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ).enterList(1),
                   ),
 
-                  // Primary content â€” adapts to role and live trip status.
+                  // Primary content — adapts to role and live trip status.
                   // Starting or ending a trip cross-fades the whole block.
                   SliverToBoxAdapter(
                     child: AnimatedSwitcher(
@@ -885,7 +885,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final String subtitle;
     if (isDriver) {
       subtitle = hasActiveTrip
-          ? 'Trip in progress â€” drive safe.'
+          ? 'Trip in progress — drive safe.'
           : 'Ready to start your next trip?';
     } else {
       subtitle = hasActiveTrip
@@ -1433,7 +1433,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Live tracking hero â€” tappable to open the unified trip view
+        // Live tracking hero — tappable to open the unified trip view
         GradientHeroCard(
           onTap: () => Navigator.pushNamed(context, '/start-trip'),
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -2099,7 +2099,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${trip.route} â€¢ ${trip.tripTime}',
+                                      '${trip.route} • ${trip.tripTime}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: context.text.bodySmall?.copyWith(

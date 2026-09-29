@@ -9,6 +9,7 @@ import '../../../models/master_trip.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/trip_provider.dart';
 import '../../../theme/app_theme_extension.dart';
+import '../../../utils/next_trip_selector.dart';
 import '../../../widgets/main_scaffold.dart';
 import '../../../widgets/ui/ui.dart';
 
@@ -58,7 +59,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadInitialData();
+    });
   }
 
   @override
@@ -334,6 +337,19 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
         setState(() => _isLoadingStudents = false);
       }
     });
+  }
+
+  Future<void> _pickTripTime() async {
+    final current = parseTripTimeOfDay(_tripTimeController.text);
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: current == null
+          ? TimeOfDay.now()
+          : TimeOfDay.fromDateTime(current),
+    );
+    if (!mounted || selected == null) return;
+    _tripTimeController.text = const DefaultMaterialLocalizations()
+        .formatTimeOfDay(selected);
   }
 
   Future<void> _saveTrip() async {
@@ -708,6 +724,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
                 label: 'Trip Time',
                 hint: 'e.g., 07:30 AM',
                 prefixIcon: Icons.access_time_rounded,
+                suffixIcon: IconButton(
+                  tooltip: 'Choose trip time',
+                  icon: const Icon(Icons.schedule_rounded),
+                  onPressed: _pickTripTime,
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter trip time';

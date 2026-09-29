@@ -295,7 +295,9 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                   Icon(
                     isDarkMode ? Icons.nights_stay : Icons.wb_sunny,
                     size: 16,
-                    color: isSystemDefault ? context.colors.textSecondary : brand,
+                    color: isSystemDefault
+                        ? context.colors.textSecondary
+                        : brand,
                   ),
                   const SizedBox(width: 6),
                   Text(

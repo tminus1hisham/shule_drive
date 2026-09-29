@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/student.dart';
 
 /// Offline Storage - Persists student states and trip data locally
-/// 
+///
 /// Features:
 /// - Save student pick/absent status
 /// - Load student status on app restart
@@ -58,7 +58,7 @@ class OfflineStorage {
     final key = '$_studentStatusPrefix${tripId}_$studentId';
     final value = _prefs!.getString(key);
     if (value == null) return null;
-    
+
     return StudentStatus.values.firstWhere(
       (s) => s.name == value,
       orElse: () => StudentStatus.pending,
@@ -66,11 +66,13 @@ class OfflineStorage {
   }
 
   /// Get all student statuses for a trip
-  Future<Map<String, StudentStatus>> getAllStudentStatuses(String tripId) async {
+  Future<Map<String, StudentStatus>> getAllStudentStatuses(
+    String tripId,
+  ) async {
     await _ensureInitialized();
     final prefix = '$_studentStatusPrefix${tripId}_';
     final result = <String, StudentStatus>{};
-    
+
     for (final key in _prefs!.getKeys()) {
       if (key.startsWith(prefix)) {
         final studentId = key.substring(prefix.length);
@@ -83,7 +85,7 @@ class OfflineStorage {
         }
       }
     }
-    
+
     return result;
   }
 
@@ -99,14 +101,14 @@ class OfflineStorage {
     await _ensureInitialized();
     final key = '$_actionQueuePrefix$tripId';
     final existing = _prefs!.getStringList(key) ?? [];
-    
+
     final actionJson = jsonEncode({
       'type': action.type.name,
       'studentId': action.studentId,
       'timestamp': action.timestamp.toIso8601String(),
       'data': action.data,
     });
-    
+
     existing.add(actionJson);
     return await _prefs!.setStringList(key, existing);
   }
@@ -116,7 +118,7 @@ class OfflineStorage {
     await _ensureInitialized();
     final key = '$_actionQueuePrefix$tripId';
     final actionsJson = _prefs!.getStringList(key) ?? [];
-    
+
     return actionsJson.map((json) {
       final data = jsonDecode(json) as Map<String, dynamic>;
       return QueuedAction(
@@ -132,16 +134,19 @@ class OfflineStorage {
   }
 
   /// Remove processed actions from queue
-  Future<bool> removeQueuedActions(String tripId, List<String> studentIds) async {
+  Future<bool> removeQueuedActions(
+    String tripId,
+    List<String> studentIds,
+  ) async {
     await _ensureInitialized();
     final key = '$_actionQueuePrefix$tripId';
     final existing = _prefs!.getStringList(key) ?? [];
-    
+
     existing.removeWhere((json) {
       final data = jsonDecode(json) as Map<String, dynamic>;
       return studentIds.contains(data['studentId'] as String);
     });
-    
+
     return await _prefs!.setStringList(key, existing);
   }
 
@@ -178,7 +183,7 @@ class OfflineStorage {
   /// Clear all trip data
   Future<bool> clearTripData(String tripId) async {
     await _ensureInitialized();
-    
+
     // Clear student statuses
     final prefix = '$_studentStatusPrefix${tripId}_';
     for (final key in _prefs!.getKeys().toList()) {
@@ -186,14 +191,14 @@ class OfflineStorage {
         await _prefs!.remove(key);
       }
     }
-    
+
     // Clear action queue
     await clearQueuedActions(tripId);
-    
+
     // Clear trip data
     final tripKey = '$_tripDataPrefix$tripId';
     await _prefs!.remove(tripKey);
-    
+
     return true;
   }
 
@@ -204,7 +209,7 @@ class OfflineStorage {
   /// Clear all stored data (use with caution)
   Future<bool> clearAll() async {
     await _ensureInitialized();
-    
+
     for (final key in _prefs!.getKeys().toList()) {
       if (key.startsWith(_studentStatusPrefix) ||
           key.startsWith(_actionQueuePrefix) ||
@@ -212,7 +217,7 @@ class OfflineStorage {
         await _prefs!.remove(key);
       }
     }
-    
+
     return true;
   }
 }
@@ -221,13 +226,7 @@ class OfflineStorage {
 // DATA MODELS
 // ============================================================================
 
-enum ActionType {
-  pick,
-  absent,
-  drop,
-  pickAll,
-  dropAll,
-}
+enum ActionType { pick, absent, drop, pickAll, dropAll }
 
 class QueuedAction {
   final ActionType type;

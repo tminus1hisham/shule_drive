@@ -1,7 +1,7 @@
 import '../services/notification_service.dart';
 
 /// Notification Helper
-/// 
+///
 /// Convenience methods for showing common app notifications
 class NotificationHelper {
   static final NotificationService _notifications = NotificationService();

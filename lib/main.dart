@@ -366,7 +366,10 @@ Route _buildPageRoute(RouteSettings settings) {
       protected = true;
       break;
     case '/start-trip':
-      page = const StartTripScreen();
+      final args = settings.arguments as Map<String, dynamic>?;
+      page = args?['masterTrip'] is MasterTrip
+          ? const StartTripScreen()
+          : const TripSelectionScreen();
       protected = true;
       allowedRoles = [UserRole.driver];
       break;

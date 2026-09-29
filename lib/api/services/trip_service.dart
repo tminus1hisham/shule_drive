@@ -191,11 +191,16 @@ class TripService {
     String? attendantProfileImage,
   }) async {
     try {
-      final resolvedMasterTripId =
-          masterTripId ?? int.tryParse(routeId) ?? int.tryParse(vehicleId);
+      // Route and vehicle IDs are unrelated to master trip IDs.
+      final resolvedMasterTripId = masterTripId;
+      if (resolvedMasterTripId == null || resolvedMasterTripId <= 0) {
+        throw ApiException(message: 'Select a scheduled trip before starting');
+      }
 
-      if (resolvedMasterTripId == null) {
-        throw ApiException(message: 'Master trip ID is required');
+      final routeName = route?.trim() ?? '';
+      final resolvedRoute = routeName.isNotEmpty ? routeName : routeId.trim();
+      if (resolvedRoute.isEmpty) {
+        throw ApiException(message: 'Select a route before starting the trip');
       }
 
       final response = await _apiClient.post(
@@ -203,7 +208,7 @@ class TripService {
         body: {
           'masterTripId': resolvedMasterTripId,
           'tripName': tripName ?? 'Trip',
-          'route': route ?? routeId,
+          'route': resolvedRoute,
           'driverName': driverName ?? '',
           'driverPhoneNumber': driverPhoneNumber ?? '',
           'numberPlate': numberPlate ?? vehicleId,
