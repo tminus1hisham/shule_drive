@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../providers/app_provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/mandatory_password_dialog.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -16,49 +17,19 @@ class ChangePasswordScreen extends StatefulWidget {
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen>
-    with SingleTickerProviderStateMixin {
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final TextEditingController _currentController = TextEditingController();
   final TextEditingController _newController = TextEditingController();
   final TextEditingController _confirmController = TextEditingController();
 
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
   bool _isLoading = false;
-
-  // Animation controller
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
 
   // Store navigator state before async operation
   NavigatorState? _navigator;
 
   @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.medium,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: AppCurves.easeOut,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.03),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: AppCurves.easeOut,
-    ));
-    _animationController.forward();
-  }
-
-  @override
   void dispose() {
-    _animationController.dispose();
+    _shakeKey.dispose();
     _currentController.dispose();
     _newController.dispose();
     _confirmController.dispose();
@@ -175,10 +146,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       );
     } else {
       final error = errorMsg ?? '';
-      final isWrongPassword = classifyPasswordChangeError(errorMsg) ==
+      final isWrongPassword =
+          classifyPasswordChangeError(errorMsg) ==
           PasswordChangeFailure.wrongPassword;
       // Check for server error (password likely saved despite error)
-      final isServerError = classifyPasswordChangeError(errorMsg) ==
+      final isServerError =
+          classifyPasswordChangeError(errorMsg) ==
           PasswordChangeFailure.savedDespiteServerError;
 
       if (kDebugMode) {
@@ -195,7 +168,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         );
       } else if (isServerError) {
         // Password saved but email failed - show success
-        if (kDebugMode) print('🔄 Server error detected - showing SUCCESS dialog');
+        if (kDebugMode) {
+          print('🔄 Server error detected - showing SUCCESS dialog');
+        }
         _navigator!.push(
           MaterialPageRoute(
             fullscreenDialog: true,
@@ -204,15 +179,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         );
       } else {
         // Unknown error - can't show snackbar without context, log for debugging
-        if (kDebugMode) print('🔄 Unknown error - cannot show dialog (no context): $error');
+        if (kDebugMode) {
+          print('🔄 Unknown error - cannot show dialog (no context): $error');
+        }
       }
     }
   }
 
   /// Handle the password change result (success or failure)
-  Future<void> _handlePasswordChangeResult(bool success, String? errorMsg) async {
+  Future<void> _handlePasswordChangeResult(
+    bool success,
+    String? errorMsg,
+  ) async {
     if (!mounted) {
-      if (kDebugMode) print('❌ _handlePasswordChangeResult: widget not mounted');
+      if (kDebugMode) {
+        print('❌ _handlePasswordChangeResult: widget not mounted');
+      }
       return;
     }
 
@@ -239,12 +221,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       }
 
       // Check for wrong password error
-      final isWrongPassword = classifyPasswordChangeError(errorMsg) ==
+      final isWrongPassword =
+          classifyPasswordChangeError(errorMsg) ==
           PasswordChangeFailure.wrongPassword;
 
       // Check for server error (password likely saved)
       // When password change succeeds but server returns 500 (e.g., email notification failed)
-      final isServerError = classifyPasswordChangeError(errorMsg) ==
+      final isServerError =
+          classifyPasswordChangeError(errorMsg) ==
           PasswordChangeFailure.savedDespiteServerError;
 
       if (kDebugMode) {
@@ -279,767 +263,321 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
+    AppSnackbar.error(context, message);
+    _shakeKey.value++;
+  }
+
+  /// Bumped on every validation error so the form card shakes.
+  final _shakeKey = ValueNotifier<int>(0);
+
+  /// Shared body of the success / invalid-credentials result, used both as
+  /// a dialog and as a full page (when the screen unmounted mid-request).
+  Widget _resultCard({required bool success, required VoidCallback onPressed}) {
+    return Builder(
+      builder: (context) {
+        final c = context.colors;
+        final tone = success ? c.brand : c.error;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    tone,
+                    Color.alphaBlend(Colors.black.withValues(alpha: 0.2), tone),
+                  ],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: tone.withValues(alpha: 0.35),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Icon(
+                success ? Icons.check_rounded : Icons.lock_outline_rounded,
+                color: Colors.white,
+                size: 50,
+              ),
+            ).pop(),
+            AppSpacing.vXl,
+            Text(
+              success ? 'Success!' : 'Invalid Credentials',
+              style: context.text.headlineSmall?.copyWith(
+                color: tone,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            AppSpacing.vSm,
+            Text(
+              success
+                  ? 'Your password has been changed successfully.'
+                  : 'The current password you entered is incorrect. Please try again.',
+              textAlign: TextAlign.center,
+              style: context.text.bodyLarge?.copyWith(
+                color: c.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            AppSpacing.vXl,
+            AppButton(
+              label: success ? 'OK' : 'Try Again',
+              onPressed: onPressed,
+            ),
           ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
+        );
+      },
     );
   }
+
+  Widget _asDialog(Widget child) => AlertDialog(
+    shape: const RoundedRectangleBorder(borderRadius: AppRadius.brXl),
+    contentPadding: const EdgeInsets.all(28),
+    content: child,
+  );
+
+  Widget _asPage(Widget child) => Scaffold(
+    backgroundColor: Colors.black87,
+    body: Center(
+      child: Container(
+        margin: const EdgeInsets.all(AppSpacing.xxl),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: AppRadius.brXl,
+        ),
+        child: child,
+      ),
+    ),
+  );
 
   /// Build success dialog widget
-  Widget _buildSuccessDialog() {
-    return Builder(
-      builder: (BuildContext ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding: const EdgeInsets.all(28),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Animated success icon
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppPalette.emerald, AppPalette.emeraldBright],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppPalette.emerald.withAlpha(60),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 48,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Success!',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.emerald,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Your password has been changed successfully.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: AppPalette.textMutedLight,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Close the dialog first
-                    Navigator.of(ctx).pop();
-                    // Then navigate back to profile page using stored navigator
-                    // Use a small delay to ensure dialog is fully closed
-                    Future.delayed(const Duration(milliseconds: 50), () {
-                      if (_navigator != null && _navigator!.canPop()) {
-                        _navigator!.pop();
-                      }
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildSuccessDialog() => Builder(
+    builder: (ctx) => _asDialog(
+      _resultCard(
+        success: true,
+        onPressed: () {
+          // Close the dialog first
+          Navigator.of(ctx).pop();
+          // Then navigate back to profile using the stored navigator, once the
+          // dialog is fully closed.
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (_navigator != null && _navigator!.canPop()) {
+              _navigator!.pop();
+            }
+          });
+        },
+      ).celebrate(),
+    ),
+  );
 
   /// Build invalid credentials dialog widget
-  Widget _buildInvalidCredentialsDialog() {
-    return Builder(
-      builder: (BuildContext ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding: const EdgeInsets.all(28),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Error icon with gradient
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.red.shade400, Colors.red.shade600],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppPalette.error.withAlpha(60),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.lock_outline,
-                  color: Colors.white,
-                  size: 44,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Invalid Credentials',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.error,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The current password you entered is incorrect. Please try again.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: AppPalette.textMutedLight,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 28),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Close the dialog
-                    Navigator.of(ctx).pop();
-                    // Clear the current password field so user can re-enter
-                    _currentController.clear();
-                    // Request focus on current password field if mounted
-                    if (mounted) {
-                      FocusScope.of(context).requestFocus(FocusNode());
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Try Again',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildInvalidCredentialsDialog() => Builder(
+    builder: (ctx) => _asDialog(
+      _resultCard(
+        success: false,
+        onPressed: () {
+          Navigator.of(ctx).pop();
+          // Clear the current password field so user can re-enter
+          _currentController.clear();
+          if (mounted) FocusScope.of(context).requestFocus(FocusNode());
+        },
+      ),
+    ),
+  );
 
   /// Build success dialog as a full page (for use with Navigator)
-  Widget _buildSuccessDialogPage() {
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: Center(
-        child: Container(
-          margin: const EdgeInsets.all(32),
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(100),
-                blurRadius: 40,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Animated success icon with confetti effect simulation
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppPalette.emerald, AppPalette.emeraldBright],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppPalette.emerald.withAlpha(80),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 56,
-                ),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'Success!',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.emerald,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Your password has been changed successfully.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppPalette.textMutedLight,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Use stored navigator to pop back to change password screen
-                    // The dialog page is pushed on top, so we need to pop twice
-                    if (_navigator != null) {
-                      // Pop the dialog page
-                      _navigator!.pop();
-                      // Then pop the change password screen to return to profile
-                      Future.delayed(const Duration(milliseconds: 50), () {
-                        if (_navigator!.canPop()) {
-                          _navigator!.pop();
-                        }
-                      });
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildSuccessDialogPage() => _asPage(
+    _resultCard(
+      success: true,
+      onPressed: () {
+        // The dialog page is pushed on top, so pop it and then the change
+        // password screen to return to profile.
+        if (_navigator != null) {
+          _navigator!.pop();
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (_navigator!.canPop()) _navigator!.pop();
+          });
+        }
+      },
+    ),
+  );
 
   /// Build invalid credentials dialog as a full page (for use with Navigator)
-  Widget _buildInvalidCredentialsDialogPage() {
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: Center(
-        child: Container(
-          margin: const EdgeInsets.all(32),
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(100),
-                blurRadius: 40,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.red.shade400, Colors.red.shade600],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppPalette.error.withAlpha(80),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.lock_outline,
-                  color: Colors.white,
-                  size: 50,
-                ),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'Invalid Credentials',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.error,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The current password you entered is incorrect. Please try again.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppPalette.textMutedLight,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Use stored navigator to pop back to change password screen
-                    if (_navigator != null) {
-                      _navigator!.pop();
-                    }
-                    // Clear the current password field
-                    _currentController.clear();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Try Again',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildInvalidCredentialsDialogPage() => _asPage(
+    _resultCard(
+      success: false,
+      onPressed: () {
+        _navigator?.pop();
+        _currentController.clear();
+      },
+    ),
+  );
 
   /// Show alert for invalid credentials (wrong current password)
   void _showInvalidCredentialsAlert() {
-    if (kDebugMode) {
-      print('🚨 _showInvalidCredentialsAlert() called');
-    }
-
-    if (!mounted) {
-      if (kDebugMode) print('❌ Cannot show dialog: widget not mounted');
-      return;
-    }
-
+    if (!mounted) return;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        if (kDebugMode) {
-          print('🚨 Building invalid credentials dialog...');
-        }
-        return _buildInvalidCredentialsDialog();
-      },
+      builder: (_) => _buildInvalidCredentialsDialog(),
     );
   }
 
   /// Show success alert dialog
   Future<void> _showSuccessAlert() async {
-    if (kDebugMode) {
-      print('✅ _showSuccessAlert() called');
-    }
-
-    if (!mounted) {
-      if (kDebugMode) print('❌ Cannot show dialog: widget not mounted');
-      return;
-    }
-
+    if (!mounted) return;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        if (kDebugMode) {
-          print('✅ Building success dialog widget...');
-        }
-        return _buildSuccessDialog();
-      },
+      builder: (_) => _buildSuccessDialog(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
+    final c = context.colors;
     final authProvider = context.watch<AuthProvider>();
+    final busy = _isLoading || authProvider.isLoading;
 
     return MainScaffold(
       title: 'Change Password',
-      showBackButton: !_isLoading && !authProvider.isLoading,
+      showBackButton: !busy,
       body: Stack(
         children: [
-          // Background gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: provider.isDarkMode
-                    ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-                    : [const Color(0xFFF8FAF8), const Color(0xFFEEF4EE)],
+          const Positioned.fill(child: AppBackdrop()),
+          ListView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            children: [
+              AppSpacing.vLg,
+              Center(
+                child: Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    gradient: c.brandGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: c.brand.withValues(alpha: 0.35),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.shield_outlined,
+                    color: Colors.white,
+                    size: 56,
+                  ),
+                ).pop(),
               ),
-            ),
-          ),
-          // Main content
-          FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
+              AppSpacing.vXl,
+              Text(
+                'Secure Your Account',
+                textAlign: TextAlign.center,
+                style: context.text.headlineMedium,
+              ).enter(delay: const Duration(milliseconds: 60)),
+              AppSpacing.vXs,
+              Text(
+                'Create a strong password to protect your account',
+                textAlign: TextAlign.center,
+                style: context.text.bodyMedium?.copyWith(
+                  color: c.textSecondary,
+                ),
+              ).enter(delay: const Duration(milliseconds: 100)),
+              AppSpacing.vXxl,
+              // Shakes on a validation error.
+              ValueListenableBuilder<int>(
+                valueListenable: _shakeKey,
+                builder: (context, shake, child) =>
+                    shake == 0 ? child! : child!.shake(shake),
+                child: AppCard(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppTextField(
+                        label: 'Current Password',
+                        controller: _currentController,
+                        prefixIcon: Icons.lock_outline_rounded,
+                        obscure: true,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      AppSpacing.vLg,
+                      AppTextField(
+                        label: 'New Password',
+                        controller: _newController,
+                        prefixIcon: Icons.key_outlined,
+                        obscure: true,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      AppSpacing.vLg,
+                      AppTextField(
+                        label: 'Confirm New Password',
+                        controller: _confirmController,
+                        prefixIcon: Icons.check_circle_outline_rounded,
+                        obscure: true,
+                        textInputAction: TextInputAction.done,
+                      ),
+                    ],
+                  ),
+                ),
+              ).enterList(3),
+              AppSpacing.vXl,
+              AppButton(
+                label: 'Change Password',
+                icon: Icons.lock_reset_rounded,
+                loading: busy,
+                onPressed: _changePassword,
+              ).enterList(4),
+              AppSpacing.vXl,
+              AppCard(
+                color: c.brandSoft,
+                shadow: const [],
+                child: Row(
                   children: [
-                    const SizedBox(height: 20),
-                    // Security icon header
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppPalette.emerald, AppPalette.emeraldBright],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                    Icon(Icons.info_outline_rounded, color: c.brand, size: 20),
+                    AppSpacing.hSm,
+                    Expanded(
+                      child: Text(
+                        'Password must be at least 4 characters and different from your current password.',
+                        style: context.text.bodySmall?.copyWith(
+                          color: c.onBrandSoft,
+                          height: 1.4,
                         ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppPalette.emerald.withAlpha(50),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.shield_outlined,
-                        color: Colors.white,
-                        size: 56,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Secure Your Account',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: provider.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Create a strong password to protect your account',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: provider.textMutedColor,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    // Form Fields Card
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: provider.cardColor,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(10),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildPasswordField(
-                            'Current Password',
-                            _currentController,
-                            _obscureCurrent,
-                            () => setState(() => _obscureCurrent = !_obscureCurrent),
-                            provider,
-                            Icons.lock_outline,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildPasswordField(
-                            'New Password',
-                            _newController,
-                            _obscureNew,
-                            () => setState(() => _obscureNew = !_obscureNew),
-                            provider,
-                            Icons.key_outlined,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildPasswordField(
-                            'Confirm New Password',
-                            _confirmController,
-                            _obscureConfirm,
-                            () => setState(() => _obscureConfirm = !_obscureConfirm),
-                            provider,
-                            Icons.check_circle_outline,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    // Change Password Button
-                    Container(
-                      width: double.infinity,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: const LinearGradient(
-                          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppPalette.emerald.withAlpha(60),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: authProvider.isLoading || _isLoading ? null : _changePassword,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: authProvider.isLoading || _isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.lock_reset, size: 22),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Change Password',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Password tips
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppPalette.emerald.withAlpha(15),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppPalette.emerald.withAlpha(30),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppPalette.emerald,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Password must be at least 4 characters and different from your current password.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: provider.textMutedColor,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
+              ).enterList(5),
+            ],
           ),
-          // Loading overlay - show when either local or provider loading is active
-          if (_isLoading || authProvider.isLoading)
-            Container(
-              color: Colors.black.withAlpha(128),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: AppPalette.emerald,
-                  strokeWidth: 3,
+          // Blocking overlay while the request is in flight.
+          IgnorePointer(
+            ignoring: !busy,
+            child: AnimatedOpacity(
+              opacity: busy ? 1 : 0,
+              duration: AppDuration.medium,
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.4),
+                child: Center(
+                  child: GlassPanel(
+                    child: CircularProgressIndicator(color: c.brand),
+                  ),
                 ),
               ),
             ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPasswordField(
-    String label,
-    TextEditingController controller,
-    bool obscureText,
-    VoidCallback onToggle,
-    AppProvider provider,
-    IconData icon,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: AppPalette.emerald,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: provider.textColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: provider.isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppPalette.emerald.withAlpha(30),
-              width: 1.5,
-            ),
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: obscureText,
-            style: TextStyle(
-              color: provider.textColor,
-              fontSize: 16,
-            ),
-            decoration: InputDecoration(
-              filled: false,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 18,
-              ),
-              suffixIcon: IconButton(
-                onPressed: onToggle,
-                icon: Icon(
-                  obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: AppPalette.emerald,
-                  size: 22,
-                ),
-                splashRadius: 20,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

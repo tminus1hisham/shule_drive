@@ -56,6 +56,15 @@ extension AppMotion on Widget {
         ),
   );
 
+  /// A short horizontal shake for a rejected form. Pass a new [trigger] value
+  /// (e.g. an error counter) each time it should play.
+  Widget shake(Object trigger) => _MotionGate(
+    plain: this,
+    animated: animate(
+      key: ValueKey(trigger),
+    ).shakeX(hz: 5, amount: 6, duration: AppDuration.slow),
+  );
+
   /// A single light sweep across the widget, for "done!" moments.
   Widget celebrate({Duration delay = const Duration(milliseconds: 300)}) =>
       _MotionGate(

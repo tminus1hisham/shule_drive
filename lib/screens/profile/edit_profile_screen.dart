@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
-import '../../providers/app_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
+import '../../providers/auth_provider.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
+
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -64,7 +66,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         final file = File(pickedFile.path);
         final exists = await file.exists();
         final size = exists ? await file.length() : 0;
-        
+
         if (kDebugMode) {
           print('📷 File exists: $exists, Size: $size bytes');
         }
@@ -79,10 +81,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             _selectedImage = file;
           });
         }
-        
+
         // Small delay to ensure setState completes before upload
         await Future.delayed(const Duration(milliseconds: 100));
-        
+
         // Automatically upload after selection
         // Use a separate method to avoid mounted issues
         if (mounted) {
@@ -110,7 +112,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     // Store file path locally in case widget gets unmounted
     final imagePath = _selectedImage!.path;
-    
+
     // Verify file still exists before uploading
     final exists = await _selectedImage!.exists();
     if (!exists) {
@@ -128,24 +130,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       print('  File size: ${await _selectedImage!.length()} bytes');
     }
 
-    // Store context reference before async operations
-    final currentContext = context;
-    final authProvider = currentContext.read<AuthProvider>();
+    if (!mounted) return;
+    final authProvider = context.read<AuthProvider>();
 
     // Show loading
     if (mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: AppPalette.emerald),
+        builder: (context) => Center(
+          child: GlassPanel(
+            child: CircularProgressIndicator(color: context.colors.brand),
+          ),
         ),
       );
     }
 
     String? imageUrl;
     String? errorMsg;
-    
+
     try {
       imageUrl = await authProvider.updateProfilePicture(imagePath);
 
@@ -162,12 +165,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     // Wait a moment for widget to remount if it was unmounted
     await Future.delayed(const Duration(milliseconds: 100));
-    
+
     if (!mounted) {
       if (kDebugMode) print('⚠️ Widget not mounted after upload attempt');
       return;
     }
-    
+
     // Close loading dialog
     Navigator.pop(context);
 
@@ -177,85 +180,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _selectedImage = null; // Clear selected image
       });
     } else {
-      errorMsg ??= authProvider.errorMessage ?? 'Failed to upload profile picture';
+      errorMsg ??=
+          authProvider.errorMessage ?? 'Failed to upload profile picture';
       if (kDebugMode) print('❌ Upload failed: $errorMsg');
       _showError(errorMsg);
     }
   }
 
   void _showImagePickerOptions() {
-    final provider = context.read<AppProvider>();
-    final isDarkMode = provider.isDarkMode;
-
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Update Profile Photo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.emerald.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
-                ),
-                title: Text(
-                  'Take Photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.info.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_library,
-                    color: AppPalette.info,
-                  ),
-                ),
-                title: Text(
-                  'Choose from Gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Update Profile Photo',
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
           ),
-        ),
+          AppSpacing.vSm,
+          AppListTile(
+            icon: Icons.camera_alt_rounded,
+            title: 'Take Photo',
+            onTap: () {
+              Navigator.pop(sheet);
+              _pickImage(ImageSource.camera);
+            },
+          ).enterList(0),
+          AppListTile(
+            icon: Icons.photo_library_rounded,
+            title: 'Choose from Gallery',
+            iconColor: sheet.colors.info,
+            onTap: () {
+              Navigator.pop(sheet);
+              _pickImage(ImageSource.gallery);
+            },
+          ).enterList(1),
+        ],
       ),
     );
   }
@@ -286,311 +247,166 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
+  void _showError(String message) => AppSnackbar.error(context, message);
 
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppPalette.emerald,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
+  void _showSuccess(String message) => AppSnackbar.success(context, message);
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
+    final c = context.colors;
     final authProvider = context.watch<AuthProvider>();
     final userData = authProvider.userData;
 
     return MainScaffold(
       title: 'Edit Profile',
       showBackButton: true,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Profile Card with Avatar
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: provider.cardColor,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  // Avatar with tap to change
-                  GestureDetector(
-                    onTap: _showImagePickerOptions,
-                    child: Stack(
-                      children: [
-                        _buildAvatar(userData['avatar']),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppPalette.emerald,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: provider.cardColor,
-                                width: 2,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: [
+              GradientHeroCard(
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: _showImagePickerOptions,
+                      child: Stack(
+                        children: [
+                          // The freshly picked photo cross-fades in.
+                          AnimatedSwitcher(
+                            duration: AppDuration.slow,
+                            child: KeyedSubtree(
+                              key: ValueKey(_selectedImage?.path),
+                              child: _buildAvatar(userData['avatar']),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: c.accent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt_rounded,
+                                color: Colors.white,
+                                size: 16,
                               ),
                             ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                              size: 16,
-                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    userData['name'] ?? 'User',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: provider.textColor,
-                    ),
-                  ),
-                  Text(
-                    userData['role']?.toString().toUpperCase() ?? '',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: provider.textMutedColor,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _showImagePickerOptions,
-                    icon: const Icon(Icons.camera_alt, size: 16),
-                    label: const Text('Change Photo'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppPalette.emerald,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Form Fields
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: provider.cardColor,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTextField(
-                    'Full Name',
-                    _nameController,
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildPhoneField(),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    'Email',
-                    _emailController,
-                    Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Save Changes Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: authProvider.isLoading ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.emerald,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                  disabledBackgroundColor: const Color(
-                    0xFF6B9B5B,
-                  ).withValues(alpha: 0.5),
-                ),
-                child: authProvider.isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-                    : const Text(
-                        'Save Changes',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        ],
                       ),
-              ),
-            ),
-          ],
-        ),
+                    ).pop(),
+                    AppSpacing.vMd,
+                    Text(
+                      userData['name'] ?? 'User',
+                      style: context.text.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    AppSpacing.vXxs,
+                    StatusPill(
+                      label: userData['role']?.toString().toUpperCase() ?? '',
+                      color: Colors.white,
+                      showDot: false,
+                      dense: true,
+                    ),
+                    AppSpacing.vSm,
+                    AppButton(
+                      label: 'Change Photo',
+                      icon: Icons.camera_alt_rounded,
+                      variant: AppButtonVariant.onBrand,
+                      size: AppButtonSize.small,
+                      expand: false,
+                      onPressed: _showImagePickerOptions,
+                    ),
+                  ],
+                ),
+              ).enter(),
+              AppSpacing.vMd,
+              AppCard(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppTextField(
+                      label: 'Full Name',
+                      controller: _nameController,
+                      prefixIcon: Icons.person_outline_rounded,
+                      textInputAction: TextInputAction.next,
+                    ),
+                    AppSpacing.vMd,
+                    Text('Phone Number', style: context.text.titleSmall),
+                    AppSpacing.vXs,
+                    IntlPhoneField(
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        hintText: '712 345 678',
+                      ),
+                      style: context.text.bodyLarge,
+                      dropdownTextStyle: context.text.bodyLarge,
+                      initialCountryCode: 'KE',
+                      disableLengthCheck: true,
+                      onChanged: (phone) {
+                        _completePhoneNumber = phone.completeNumber;
+                      },
+                    ),
+                    AppSpacing.vXs,
+                    AppTextField(
+                      label: 'Email',
+                      controller: _emailController,
+                      prefixIcon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                  ],
+                ),
+              ).enterList(1),
+              AppSpacing.vXl,
+              AppButton(
+                label: 'Save Changes',
+                icon: Icons.check_rounded,
+                loading: authProvider.isLoading,
+                onPressed: _saveProfile,
+              ).enterList(2),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  /// Build avatar widget with proper image handling
+  /// Picked file first, then a valid network URL, else initials.
   Widget _buildAvatar(String? avatarUrl) {
-    // If we have a selected image file, show it
     if (_selectedImage != null) {
-      return CircleAvatar(
-        radius: 50,
-        backgroundImage: FileImage(_selectedImage!),
-        backgroundColor: AppPalette.outlineLight,
+      return Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          image: DecorationImage(
+            image: FileImage(_selectedImage!),
+            fit: BoxFit.cover,
+          ),
+        ),
       );
     }
-
-    // If we have a valid network URL, show it
-    if (avatarUrl != null &&
-        avatarUrl.isNotEmpty &&
-        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
-      return CircleAvatar(
-        radius: 50,
-        backgroundImage: NetworkImage(avatarUrl),
-        backgroundColor: AppPalette.outlineLight,
-        onBackgroundImageError: (e, s) {
-          // Fallback to placeholder on error
-          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
-        },
-      );
-    }
-
-    // Default placeholder
-    return CircleAvatar(
-      radius: 50,
-      backgroundColor: AppPalette.emerald.withAlpha(50),
-      child: const Icon(Icons.person, size: 50, color: AppPalette.emerald),
-    );
-  }
-
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller,
-    IconData icon, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    final provider = context.watch<AppProvider>();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: provider.textMutedColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          style: TextStyle(color: provider.textColor),
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: provider.textMutedColor),
-            filled: true,
-            fillColor: provider.isDarkMode
-                ? AppPalette.textSecondaryLight
-                : AppPalette.surfaceSubtleLight,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPhoneField() {
-    final provider = context.watch<AppProvider>();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Phone Number',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: provider.textMutedColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        IntlPhoneField(
-          controller: _phoneController,
-          decoration: InputDecoration(
-            hintText: '712 345 678',
-            hintStyle: TextStyle(color: AppPalette.textMutedLight),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            filled: true,
-            fillColor: provider.isDarkMode
-                ? AppPalette.textSecondaryLight
-                : AppPalette.surfaceSubtleLight,
-          ),
-          style: TextStyle(color: provider.textColor),
-          dropdownTextStyle: TextStyle(color: provider.textColor),
-          initialCountryCode: 'KE',
-          disableLengthCheck: true,
-          onChanged: (phone) {
-            _completePhoneNumber = phone.completeNumber;
-          },
-        ),
-      ],
+    final valid =
+        avatarUrl != null &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'));
+    return AppAvatar(
+      imageUrl: valid ? avatarUrl : null,
+      name: context.read<AuthProvider>().userData['name']?.toString(),
+      size: 100,
+      borderColor: Colors.white,
     );
   }
 }
