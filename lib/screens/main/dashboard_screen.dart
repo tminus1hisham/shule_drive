@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -655,19 +655,45 @@ class _DashboardScreenState extends State<DashboardScreen>
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
-                    child: _buildTopBar(userData, appProvider),
+                    child: _buildTopBar(
+                      userData,
+                      appProvider,
+                    ).enter(offsetY: -16),
                   ),
                   SliverToBoxAdapter(
-                    child: _buildGreeting(userData, isDriver, hasActiveTrip),
+                    child: _buildGreeting(
+                      userData,
+                      isDriver,
+                      hasActiveTrip,
+                    ).enterList(1),
                   ),
 
                   // Primary content â€” adapts to role and live trip status.
-                  if (isDriver)
-                    ..._driverSlivers(tripProvider, hasActiveTrip)
-                  else if (isGuardian)
-                    ..._guardianSlivers(tripProvider, hasActiveTrip),
+                  // Starting or ending a trip cross-fades the whole block.
+                  SliverToBoxAdapter(
+                    child: AnimatedSwitcher(
+                      duration: AppDuration.slow,
+                      switchInCurve: AppCurves.easeOut,
+                      layoutBuilder: (current, previous) => Stack(
+                        alignment: Alignment.topCenter,
+                        children: [...previous, ?current],
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey('$isDriver-$hasActiveTrip'),
+                        child: Column(
+                          children: isDriver
+                              ? _driverBlocks(tripProvider, hasActiveTrip)
+                              : isGuardian
+                              ? _guardianBlocks(tripProvider, hasActiveTrip)
+                              : const [],
+                        ),
+                      ),
+                    ).enterList(2),
+                  ),
 
-                  SliverToBoxAdapter(child: _buildQuickActions(isDriver)),
+                  SliverToBoxAdapter(
+                    child: _buildQuickActions(isDriver).enterList(3),
+                  ),
 
                   const SliverPadding(
                     padding: EdgeInsets.only(bottom: AppSpacing.xxl),
@@ -676,7 +702,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
           ),
-          if (_isCheckingMasterTrips) _buildCheckingOverlay(),
+          IgnorePointer(
+            ignoring: !_isCheckingMasterTrips,
+            child: AnimatedOpacity(
+              opacity: _isCheckingMasterTrips ? 1 : 0,
+              duration: AppDuration.medium,
+              child: _buildCheckingOverlay(),
+            ),
+          ),
         ],
       ),
     );
@@ -689,36 +722,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     child: child,
   );
 
-  List<Widget> _driverSlivers(TripProvider tripProvider, bool hasActiveTrip) {
+  List<Widget> _driverBlocks(TripProvider tripProvider, bool hasActiveTrip) {
     if (hasActiveTrip) {
-      return [
-        SliverToBoxAdapter(
-          child: _block(child: _buildDriverActiveTrip(tripProvider)),
-        ),
-      ];
+      return [_block(child: _buildDriverActiveTrip(tripProvider))];
     }
     return [
-      SliverToBoxAdapter(child: _block(child: _buildDriverStartTrip())),
+      _block(child: _buildDriverStartTrip()),
       if (_nextScheduledTrip != null)
-        SliverToBoxAdapter(
-          child: _block(top: AppSpacing.sm, child: _buildNextTripCard()),
-        ),
+        _block(top: AppSpacing.sm, child: _buildNextTripCard().enter()),
     ];
   }
 
-  List<Widget> _guardianSlivers(TripProvider tripProvider, bool hasActiveTrip) {
-    if (!hasActiveTrip) {
-      return [SliverToBoxAdapter(child: _block(child: _buildGuardianIdle()))];
-    }
-    return [
-      SliverToBoxAdapter(
-        child: _block(child: _buildGuardianActiveTrip(tripProvider)),
-      ),
-    ];
+  List<Widget> _guardianBlocks(TripProvider tripProvider, bool hasActiveTrip) {
+    if (!hasActiveTrip) return [_block(child: _buildGuardianIdle())];
+    return [_block(child: _buildGuardianActiveTrip(tripProvider))];
   }
 
   Widget _buildCheckingOverlay() {
-    return Positioned.fill(
+    return SizedBox.expand(
       child: ColoredBox(
         color: context.scheme.surface.withValues(alpha: 0.82),
         child: Center(
@@ -2152,39 +2173,15 @@ class _CircleIconButton extends StatelessWidget {
       ),
     );
 
+    button = PressScale(scale: 0.9, child: button);
     if (tooltip != null) {
       button = Tooltip(message: tooltip!, child: button);
     }
 
-    if (badgeCount <= 0) return button;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        button,
-        Positioned(
-          top: -1,
-          right: -1,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            constraints: const BoxConstraints(minWidth: 18),
-            decoration: BoxDecoration(
-              color: context.colors.error,
-              borderRadius: AppRadius.brPill,
-              border: Border.all(color: context.scheme.surface, width: 1.5),
-            ),
-            child: Text(
-              badgeCount > 9 ? '9+' : '$badgeCount',
-              textAlign: TextAlign.center,
-              style: context.text.labelSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return CountBadge(
+      count: badgeCount,
+      offset: const Offset(-1, -1),
+      child: button,
     );
   }
 }
@@ -2260,63 +2257,66 @@ class _ActionTile extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '${action.label}. ${action.subtitle}',
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: AppRadius.brSm,
-          child: InkWell(
-            onTap: action.onTap,
+        child: PressScale(
+          scale: 0.94,
+          child: Material(
+            color: Colors.transparent,
             borderRadius: AppRadius.brSm,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xxs,
-                vertical: AppSpacing.xxs,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          action.tint.withValues(alpha: 0.24),
-                          action.tint.withValues(alpha: 0.10),
+            child: InkWell(
+              onTap: action.onTap,
+              borderRadius: AppRadius.brSm,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xxs,
+                  vertical: AppSpacing.xxs,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            action.tint.withValues(alpha: 0.24),
+                            action.tint.withValues(alpha: 0.10),
+                          ],
+                        ),
+                        borderRadius: AppRadius.brMd,
+                        border: Border.all(
+                          color: action.tint.withValues(alpha: 0.20),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: action.tint.withValues(alpha: 0.12),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
                         ],
                       ),
-                      borderRadius: AppRadius.brMd,
-                      border: Border.all(
-                        color: action.tint.withValues(alpha: 0.20),
+                      child: Icon(
+                        action.icon,
+                        color: action.tint,
+                        size: AppIconSize.md,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: action.tint.withValues(alpha: 0.12),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
-                    child: Icon(
-                      action.icon,
-                      color: action.tint,
-                      size: AppIconSize.md,
+                    const SizedBox(height: 6),
+                    Text(
+                      action.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: context.text.labelSmall?.copyWith(
+                        color: context.scheme.onSurface,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    action.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: context.text.labelSmall?.copyWith(
-                      color: context.scheme.onSurface,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

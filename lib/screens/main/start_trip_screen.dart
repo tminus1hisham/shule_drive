@@ -923,10 +923,8 @@ class _StartTripScreenState extends State<StartTripScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: _buildSelectionCard(
-              title: route.schoolName ?? 'School Route',
-              subtitle: route.name.isNotEmpty
-                  ? route.name
-                  : 'Route ${route.id}',
+              title: route.name.isNotEmpty ? route.name : 'Route ${route.id}',
+              subtitle: route.schoolName ?? 'School Route',
               icon: Icons.route_rounded,
               isSelected: _selectedRoute == route.id,
               onTap: () {
