@@ -1,13 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
-import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/trip_history_service.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 /// Trip Details Screen - Shows detailed trip information for DRIVERS ONLY
 /// Includes: trip info, students picked/dropped, timeline, stats
 class TripDetailsScreen extends StatefulWidget {
@@ -97,320 +97,208 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
 
     // GUARDIAN CHECK: Only drivers should see this screen
     if (!authProvider.isDriver) {
-      return _buildGuardianBlockedView(provider);
-    }
-
-    if (_isLoading) {
-      return const MainScaffold(
-        title: 'Trip Details',
-        showBackButton: true,
-        body: Center(
-          child: CircularProgressIndicator(color: AppPalette.emerald),
-        ),
-      );
-    }
-
-    if (_tripHistory == null) {
       return MainScaffold(
         title: 'Trip Details',
         showBackButton: true,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: provider.textMutedColor,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Trip not found',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: provider.textColor,
-                ),
-              ),
-            ],
-          ),
+        body: EmptyState(
+          icon: Icons.lock_outline_rounded,
+          iconColor: context.colors.warning,
+          title: 'Driver Feature Only',
+          message: 'Trip details are only available for drivers.',
         ),
       );
     }
 
-    final trip = _tripHistory!.trip;
-    final history = _tripHistory!;
-
+    final history = _tripHistory;
     return MainScaffold(
       title: 'Trip Details',
       showBackButton: true,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Trip Header Card
-            _buildTripHeaderCard(provider, trip, history),
-
-            const SizedBox(height: 20),
-
-            // Trip Stats
-            _buildTripStats(provider, trip),
-
-            const SizedBox(height: 24),
-
-            // Students Section
-            _buildStudentsSection(provider, trip),
-
-            const SizedBox(height: 24),
-
-            // Trip Timeline (if stops available)
-            if (trip.stops.isNotEmpty) ...[
-              _buildTimelineSection(provider, trip),
-              const SizedBox(height: 24),
-            ],
-
-            // Driver Info
-            _buildDriverInfoCard(provider, history),
-
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGuardianBlockedView(AppProvider provider) {
-    return MainScaffold(
-      title: 'Trip Details',
-      showBackButton: true,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.lock_outline,
-                  size: 64,
-                  color: Colors.orange.shade400,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Driver Feature Only',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: provider.textColor,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Trip details are only available for drivers.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: provider.textMutedColor,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTripHeaderCard(
-    AppProvider provider,
-    Trip trip,
-    TripHistory history,
-  ) {
-    final isCompleted = trip.isCompleted;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppPalette.emerald.withAlpha(100),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  isCompleted ? 'COMPLETED' : 'ACTIVE',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              Text(
-                _formatDate(trip.startTime),
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            trip.routeName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+          const Positioned.fill(child: AppBackdrop()),
+          AsyncBody(
+            loading: _isLoading,
+            isEmpty: history == null,
+            empty: const EmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'Trip not found',
+              message: 'This trip isn\'t in your history on this device.',
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.directions_bus, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                trip.vehicleNumber ?? 'Unknown Vehicle',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Icon(Icons.access_time, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Started: ${_formatTime(trip.startTime)}',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          if (trip.endTime != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white70, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'Ended: ${_formatTime(trip.endTime!)}',
-                  style: TextStyle(
-                    color: Colors.white.withAlpha(230),
-                    fontSize: 14,
-                  ),
-                ),
+            skeleton: ListView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              children: const [
+                AppSkeleton(height: 200, borderRadius: AppRadius.brXl),
+                AppSpacing.vMd,
+                AppSkeleton(height: 130, borderRadius: AppRadius.brLg),
+                AppSpacing.vMd,
+                SkeletonListTile(),
+                SkeletonListTile(),
+                SkeletonListTile(),
               ],
             ),
-          ],
+            child: history == null
+                ? const SizedBox.shrink()
+                : ListView(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    children: [
+                      _buildTripHeaderCard(history.trip).enter(),
+                      AppSpacing.vLg,
+                      _buildTripStats(history.trip).enterList(1),
+                      AppSpacing.vXl,
+                      _buildStudentsSection(history.trip),
+                      AppSpacing.vXl,
+                      if (history.trip.stops.isNotEmpty) ...[
+                        _buildTimelineSection(history.trip),
+                        AppSpacing.vXl,
+                      ],
+                      _buildDriverInfoCard(history).enterList(4),
+                      AppSpacing.vXxl,
+                    ],
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTripStats(AppProvider provider, Trip trip) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(provider.isDarkMode ? 51 : 13),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+  Widget _buildTripHeaderCard(Trip trip) {
+    final c = context.colors;
+    final isCompleted = trip.isCompleted;
+    final meta = context.text.bodyMedium?.copyWith(
+      color: Colors.white.withValues(alpha: 0.9),
+    );
+
+    Widget line(IconData icon, String text) => Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70, size: 18),
+          AppSpacing.hXs,
+          Text(text, style: meta),
         ],
       ),
+    );
+
+    return GradientHeroCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Hero(
+                tag: 'trip-badge-${trip.id}',
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: isCompleted ? null : c.accentGradient,
+                    color: isCompleted
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : null,
+                    borderRadius: AppRadius.brSm,
+                  ),
+                  child: const Icon(
+                    Icons.directions_bus_rounded,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              AppSpacing.hSm,
+              StatusPill(
+                label: isCompleted ? 'COMPLETED' : 'ACTIVE',
+                color: Colors.white,
+                pulse: !isCompleted,
+                icon: isCompleted ? Icons.check_circle_rounded : null,
+                dense: true,
+              ),
+              const Spacer(),
+              Text(_formatDate(trip.startTime), style: meta),
+            ],
+          ),
+          AppSpacing.vMd,
           Text(
-            'Trip Statistics',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: provider.textColor,
+            trip.routeName,
+            style: context.text.headlineSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 16),
+          line(
+            Icons.directions_bus_outlined,
+            trip.vehicleNumber ?? 'Unknown Vehicle',
+          ),
+          line(
+            Icons.access_time_rounded,
+            'Started: ${_formatTime(trip.startTime)}',
+          ),
+          if (trip.endTime != null)
+            line(
+              Icons.check_circle_outline_rounded,
+              'Ended: ${_formatTime(trip.endTime!)}',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTripStats(Trip trip) {
+    final c = context.colors;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: SectionHeader(title: 'Trip Statistics')),
+              TripProgress.ring(
+                done: trip.pickedCount,
+                total: trip.students.length,
+                size: 48,
+                thickness: 5,
+              ),
+            ],
+          ),
+          AppSpacing.vMd,
           Row(
             children: [
               _buildStatBox(
-                provider,
                 trip.students.length.toString(),
                 'Total Students',
-                Icons.people,
-                AppPalette.emerald,
+                Icons.people_rounded,
+                c.brand,
               ),
-              const SizedBox(width: 12),
+              AppSpacing.hSm,
               _buildStatBox(
-                provider,
                 trip.pickedCount.toString(),
                 'Picked Up',
-                Icons.check_circle,
-                AppPalette.success,
+                Icons.check_circle_rounded,
+                c.success,
               ),
-              const SizedBox(width: 12),
+              AppSpacing.hSm,
               _buildStatBox(
-                provider,
                 trip.absentCount.toString(),
                 'Absent',
-                Icons.cancel,
-                AppPalette.warning,
+                Icons.cancel_rounded,
+                c.warning,
               ),
             ],
           ),
           if (trip.distance != null) ...[
-            const SizedBox(height: 12),
+            AppSpacing.vSm,
             Row(
               children: [
                 _buildStatBox(
-                  provider,
                   '${trip.distance!.toStringAsFixed(1)} km',
                   'Distance',
-                  Icons.route,
-                  AppPalette.info,
+                  Icons.route_rounded,
+                  c.info,
                 ),
               ],
             ),
@@ -420,127 +308,56 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
     );
   }
 
-  Widget _buildStatBox(
-    AppProvider provider,
-    String value,
-    String label,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildStatBox(String value, String label, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
-          color: color.withAlpha(provider.isDarkMode ? 30 : 15),
-          borderRadius: BorderRadius.circular(12),
+          color: color.withValues(alpha: 0.1),
+          borderRadius: AppRadius.brSm,
+          border: Border.all(color: color.withValues(alpha: 0.16)),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11, color: provider.textMutedColor),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+        child: StatTile(icon: icon, value: value, label: label, color: color),
       ),
     );
   }
 
-  Widget _buildStudentsSection(AppProvider provider, Trip trip) {
-    // Debug logging
-    if (kDebugMode) {
-      print('🎓 _buildStudentsSection:');
-      print('   Students count: ${trip.students.length}');
-      if (trip.students.isNotEmpty) {
-        print('   First student type: ${trip.students.first.runtimeType}');
-        print('   First student: ${trip.students.first}');
-      }
-    }
-
+  Widget _buildStudentsSection(Trip trip) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Students (${trip.students.length})',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
+            Expanded(
+              child: SectionHeader(title: 'Students (${trip.students.length})'),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppPalette.emerald.withAlpha(20),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.check_circle,
-                    color: AppPalette.emerald,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${trip.pickedCount}/${trip.students.length}',
-                    style: const TextStyle(
-                      color: AppPalette.emerald,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
+            StatusPill(
+              label: '${trip.pickedCount}/${trip.students.length}',
+              color: c.brand,
+              icon: Icons.check_circle_rounded,
+              dense: true,
             ),
           ],
-        ),
-        const SizedBox(height: 12),
+        ).enterList(2),
+        AppSpacing.vSm,
         if (trip.students.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'No students in this trip',
-                style: TextStyle(color: provider.textMutedColor, fontSize: 14),
-              ),
-            ),
+          const EmptyState(
+            icon: Icons.people_outline_rounded,
+            title: 'No students in this trip',
+            compact: true,
           )
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: trip.students.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final student = trip.students[index];
-              return _buildStudentItem(provider, student);
-            },
-          ),
+          for (final (i, student) in trip.students.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: _buildStudentItem(student).enterList(i + 3),
+            ),
       ],
     );
   }
 
-  Widget _buildStudentItem(AppProvider provider, StudentPickup student) {
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-
+  Widget _buildStudentItem(StudentPickup student) {
     // Handle corrupted data
     final studentName = student.name.isNotEmpty && student.name != 'string'
         ? student.name
@@ -549,236 +366,134 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         student.parentPhone != null && student.parentPhone != 'string'
         ? student.parentPhone
         : null;
-
-    switch (student.status) {
-      case 'picked':
-        statusColor = AppPalette.success;
-        statusIcon = Icons.check_circle;
-        statusText = 'Picked';
-        break;
-      case 'absent':
-        statusColor = AppPalette.warning;
-        statusIcon = Icons.cancel;
-        statusText = 'Absent';
-        break;
-      case 'dropped':
-        statusColor = AppPalette.info;
-        statusIcon = Icons.logout;
-        statusText = 'Dropped';
-        break;
-      default:
-        statusColor = AppPalette.textMutedLight;
-        statusIcon = Icons.schedule;
-        statusText = 'Pending';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withAlpha(50), width: 1),
-      ),
-      child: Row(
-        children: [
-          // Student Avatar
-          _buildStudentAvatar(student),
-          const SizedBox(width: 12),
-
-          // Student Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  studentName,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: provider.textColor,
-                  ),
-                ),
-                if (parentPhone != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Parent: $parentPhone',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: provider.textMutedColor,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // Status Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withAlpha(20),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(statusIcon, color: statusColor, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStudentAvatar(StudentPickup student) {
-    final photoUrl =
-        student.photo != null &&
-            student.photo!.isNotEmpty &&
-            student.photo != 'string'
+    final photo = student.photo != null && student.photo != 'string'
         ? student.photo
         : null;
 
-    if (photoUrl != null) {
-      return CircleAvatar(
-        radius: 24,
-        backgroundImage: NetworkImage(photoUrl),
-        onBackgroundImageError: (_, __) {},
-      );
-    }
-
-    return CircleAvatar(
-      radius: 24,
-      backgroundColor: AppPalette.emerald.withAlpha(30),
-      child: const Icon(Icons.person, color: AppPalette.emerald),
+    return StudentStatusRow(
+      name: studentName,
+      status: student.status,
+      photoUrl: photo,
+      subtitle: parentPhone == null ? null : 'Parent: $parentPhone',
     );
   }
 
-  Widget _buildTimelineSection(AppProvider provider, Trip trip) {
+  Widget _buildTimelineSection(Trip trip) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Trip Timeline',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: provider.textColor,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: provider.cardColor,
-            borderRadius: BorderRadius.circular(16),
-          ),
+        const SectionHeader(title: 'Trip Timeline'),
+        AppSpacing.vSm,
+        AppCard(
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
-            children: trip.stops.map((stop) {
-              final index = trip.stops.indexOf(stop);
-              final isLast = index == trip.stops.length - 1;
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
+            children: [
+              for (final (index, stop) in trip.stops.indexed)
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: AppPalette.emerald,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: provider.cardColor,
-                            width: 2,
-                          ),
+                      SizedBox(
+                        width: 16,
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                gradient: c.brandGradient,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: context.scheme.surface,
+                                  width: 2,
+                                ),
+                              ),
+                            ).pop(delay: AppMotion.staggerStep * index * 2),
+                            if (index < trip.stops.length - 1)
+                              // The connector grows downward after its stop
+                              // appears, drawing the route stop by stop.
+                              Expanded(
+                                child: TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0, end: 1),
+                                  duration: Duration(
+                                    milliseconds: 300 + 100 * index,
+                                  ),
+                                  curve: AppCurves.easeOut,
+                                  builder: (context, v, child) => Align(
+                                    alignment: Alignment.topCenter,
+                                    heightFactor: 1,
+                                    child: FractionallySizedBox(
+                                      heightFactor: v,
+                                      child: child,
+                                    ),
+                                  ),
+                                  child: Container(
+                                    width: 2,
+                                    color: c.brand.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (!isLast)
-                        Container(
-                          width: 2,
-                          height: 40,
-                          color: AppPalette.emerald.withAlpha(50),
-                        ),
+                      AppSpacing.hSm,
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index < trip.stops.length - 1
+                                ? AppSpacing.lg
+                                : 0,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                stop.name,
+                                style: context.text.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (stop.address.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  stop.address,
+                                  style: context.text.bodySmall?.copyWith(
+                                    color: c.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ).enterList(index),
+                      ),
                     ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          stop.name,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: provider.textColor,
-                          ),
-                        ),
-                        if (stop.address.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            stop.address,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: provider.textMutedColor,
-                            ),
-                          ),
-                        ],
-                        if (!isLast) const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
+                ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDriverInfoCard(AppProvider provider, TripHistory history) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(provider.isDarkMode ? 51 : 13),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+  Widget _buildDriverInfoCard(TripHistory history) {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Trip Information',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: provider.textColor,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(Icons.person, 'Driver', history.driverName),
+          const SectionHeader(title: 'Trip Information'),
+          AppSpacing.vSm,
+          _buildInfoRow(Icons.person_rounded, 'Driver', history.driverName),
           if (history.attendantName != null)
-            _buildInfoRow(Icons.assistant, 'Attendant', history.attendantName!),
+            _buildInfoRow(
+              Icons.assistant_rounded,
+              'Attendant',
+              history.attendantName!,
+            ),
           _buildInfoRow(
-            Icons.access_time,
+            Icons.access_time_rounded,
             'Logged At',
             '${_formatDate(history.loggedAt)} ${_formatTime(history.loggedAt)}',
           ),
@@ -788,25 +503,22 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
-    final provider = context.read<AppProvider>();
-
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: provider.textMutedColor),
-          const SizedBox(width: 12),
+          Icon(icon, size: 18, color: c.textMuted),
+          AppSpacing.hSm,
           Text(
             '$label: ',
-            style: TextStyle(fontSize: 14, color: provider.textMutedColor),
+            style: context.text.bodyMedium?.copyWith(color: c.textSecondary),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 14,
+              style: context.text.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: provider.textColor,
               ),
             ),
           ),
