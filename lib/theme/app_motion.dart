@@ -56,12 +56,14 @@ extension AppMotion on Widget {
         ),
   );
 
-  /// A short horizontal shake for a rejected form. Pass a new [trigger] value
-  /// (e.g. an error counter) each time it should play.
-  Widget shake(Object trigger) => _MotionGate(
+  /// A short horizontal shake for a rejected form. Pass an error counter and
+  /// bump it each time it should play; nothing plays while it's 0. (Flipping
+  /// the target plays forward or back, both a shake, and keeps the subtree
+  /// mounted so field state survives.)
+  Widget shake(int count) => _MotionGate(
     plain: this,
     animated: animate(
-      key: ValueKey(trigger),
+      target: count.isOdd ? 1 : 0,
     ).shakeX(hz: 5, amount: 6, duration: AppDuration.slow),
   );
 

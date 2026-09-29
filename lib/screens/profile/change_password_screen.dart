@@ -497,8 +497,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               // Shakes on a validation error.
               ValueListenableBuilder<int>(
                 valueListenable: _shakeKey,
-                builder: (context, shake, child) =>
-                    shake == 0 ? child! : child!.shake(shake),
+                builder: (context, shake, child) => child!.shake(shake),
                 child: AppCard(
                   padding: const EdgeInsets.all(AppSpacing.xl),
                   child: Column(

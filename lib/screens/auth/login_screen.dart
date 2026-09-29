@@ -16,16 +16,15 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   String _completePhoneNumber = '';
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+
+  /// Bumped on each failed sign-in so the form card shakes.
+  int _failureShake = 0;
 
   // Rate limiting
   int _failedAttempts = 0;
@@ -34,30 +33,9 @@ class _LoginScreenState extends State<LoginScreen>
   static const Duration _lockoutDuration = Duration(minutes: 5);
 
   @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.medium,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: AppCurves.easeOut,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.03),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: AppCurves.easeOut),
-    );
-    _animationController.forward();
-  }
-
-  @override
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
-    _animationController.dispose();
     super.dispose();
   }
 
@@ -118,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen>
     } else {
       _failedAttempts++;
       _lastAttemptTime = DateTime.now();
+      setState(() => _failureShake++);
       AppSnackbar.error(
         context,
         authProvider.errorMessage ?? 'Login failed. Please try again.',
@@ -135,16 +114,15 @@ class _LoginScreenState extends State<LoginScreen>
           padding: const EdgeInsets.only(bottom: AppSpacing.xl),
           child: Column(
             children: [
-              _buildHeader(context),
-              _buildWelcomeText(context),
-              const BusIllustration(height: 180),
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: _buildLoginForm(context, authProvider),
-                ),
-              ),
+              _buildHeader(context).enter(offsetY: -12),
+              _buildWelcomeText(context).enterList(1),
+              const BusIllustration(
+                height: 180,
+              ).pop(delay: const Duration(milliseconds: 120)),
+              _buildLoginForm(
+                context,
+                authProvider,
+              ).shake(_failureShake).enterList(3),
             ],
           ),
         ),
@@ -277,13 +255,13 @@ class _LoginScreenState extends State<LoginScreen>
         if (phone == null || phone.number.isEmpty) {
           return 'Please enter your phone number';
         }
-        if (phone.number.startsWith('0')){
+        if (phone.number.startsWith('0')) {
           return 'Phone number should not start with 0';
         }
         if (phone.number.length < 9) {
           return 'Please enter a valid phone number';
         }
-        if  (phone.number.length > 9){
+        if (phone.number.length > 9) {
           return 'Phone number should not be more than 9 digits';
         }
         return null;
@@ -300,7 +278,11 @@ class _LoginScreenState extends State<LoginScreen>
       ),
       child: Row(
         children: [
-          Icon(Icons.shield_outlined, size: 16, color: context.colors.onBrandSoft),
+          Icon(
+            Icons.shield_outlined,
+            size: 16,
+            color: context.colors.onBrandSoft,
+          ),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(

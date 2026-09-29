@@ -1,12 +1,14 @@
 import 'dart:async';
-import 'dart:math' show pi, sin;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
+import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 class VerifyResetOtpScreen extends StatefulWidget {
   const VerifyResetOtpScreen({super.key});
 
@@ -14,15 +16,15 @@ class VerifyResetOtpScreen extends StatefulWidget {
   State<VerifyResetOtpScreen> createState() => _VerifyResetOtpScreenState();
 }
 
-class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
-    with SingleTickerProviderStateMixin {
+class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen> {
   final List<TextEditingController> _otpControllers = List.generate(
     4,
     (index) => TextEditingController(),
   );
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
 
-  late AnimationController _shakeController;
+  /// Bumped on each rejected code so the digit row shakes.
+  int _shakeCount = 0;
 
   // Resend cooldown
   Timer? _resendTimer;
@@ -34,10 +36,6 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
   @override
   void initState() {
     super.initState();
-    _shakeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
 
     // Start resend cooldown
     _startResendCooldown();
@@ -65,7 +63,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     for (var node in _focusNodes) {
       node.dispose();
     }
-    _shakeController.dispose();
+
     _resendTimer?.cancel();
     super.dispose();
   }
@@ -78,6 +76,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
 
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
       setState(() {
         if (_resendCooldownSeconds > 0) {
           _resendCooldownSeconds--;
@@ -177,47 +176,11 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     }
   }
 
-  void _triggerShake() {
-    _shakeController.forward(from: 0);
-  }
+  void _triggerShake() => setState(() => _shakeCount++);
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
+  void _showError(String message) => AppSnackbar.error(context, message);
 
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppPalette.emerald,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
+  void _showSuccess(String message) => AppSnackbar.success(context, message);
 
   String get _otpText => _otpControllers.map((c) => c.text).join();
 
@@ -226,12 +189,10 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: AppPalette.bgLight,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppPalette.textPrimaryLight),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          tooltip: 'Back',
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -239,18 +200,13 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Header Section
-              _buildHeader(),
-
-              const SizedBox(height: 20),
-
-              // Bus Illustration
-              const BusIllustration(height: 140),
-
-              const SizedBox(height: 32),
-
-              // OTP Form
-              _buildOTPForm(authProvider),
+              _buildHeader().enter(),
+              AppSpacing.vLg,
+              const BusIllustration(
+                height: 140,
+              ).pop(delay: const Duration(milliseconds: 100)),
+              AppSpacing.vXxl,
+              _buildOTPForm(authProvider).enterList(2),
             ],
           ),
         ),
@@ -260,23 +216,17 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Verify OTP 🔐',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppPalette.textPrimaryLight,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
+          Text('Verify OTP 🔐', style: context.text.displaySmall),
+          AppSpacing.vXs,
           Text(
             'Enter the 4-digit code sent to ${_phoneNumber ?? 'your phone'}',
-            style: const TextStyle(fontSize: 16, color: AppPalette.textSecondaryLight),
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -284,169 +234,126 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
   }
 
   Widget _buildOTPForm(AuthProvider authProvider) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // OTP Input Fields with shake animation
-          AnimatedBuilder(
-            animation: _shakeController,
-            builder: (context, child) {
-              final shakeOffset = sin(_shakeController.value * pi * 8) * 10;
-              return Transform.translate(
-                offset: Offset(shakeOffset, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(4, (index) => _buildOTPField(index)),
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 32),
-
-          // Verify Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: authProvider.isLoading ? null : _verifyOTP,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
-                disabledBackgroundColor: const Color(
-                  0xFF6B9B5B,
-                ).withValues(alpha: 0.5),
-              ),
-              child: authProvider.isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text(
-                      'Verify',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        shadow: c.shadowMd,
+        child: Column(
+          children: [
+            // Shakes on a wrong or incomplete code.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(4, _buildOTPField),
+            ).shake(_shakeCount),
+            AppSpacing.vXxl,
+            AppButton(
+              label: 'Verify',
+              loading: authProvider.isLoading,
+              onPressed: _verifyOTP,
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Resend OTP
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Didn\'t receive the code? ',
-                style: TextStyle(fontSize: 14, color: AppPalette.textSecondaryLight),
-              ),
-              TextButton(
-                onPressed: _canResend ? _resendOTP : null,
-                child: Text(
-                  _canResend
-                      ? 'Resend'
-                      : 'Resend in ${_resendCooldownSeconds}s',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _canResend
-                        ? AppPalette.emerald
-                        : AppPalette.textMutedLight,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Security notice
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppPalette.emerald.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+            AppSpacing.vLg,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.security, size: 16, color: AppPalette.emerald),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'For your security, the code will expire in 5 minutes.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppPalette.emerald,
-                    ),
+                Text(
+                  'Didn\'t receive the code? ',
+                  style: context.text.bodyMedium?.copyWith(
+                    color: c.textSecondary,
                   ),
+                ),
+                TextButton(
+                  onPressed: _canResend ? _resendOTP : null,
+                  child: _canResend
+                      ? const Text('Resend')
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Resend in '),
+                            AnimatedCount(_resendCooldownSeconds, suffix: 's'),
+                          ],
+                        ),
                 ),
               ],
             ),
-          ),
-        ],
+            AppSpacing.vMd,
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: c.brandSoft,
+                borderRadius: AppRadius.brSm,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.security_rounded, size: 16, color: c.onBrandSoft),
+                  AppSpacing.hXs,
+                  Expanded(
+                    child: Text(
+                      'For your security, the code will expire in 5 minutes.',
+                      style: context.text.labelMedium?.copyWith(
+                        color: c.onBrandSoft,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildOTPField(int index) {
-    return Container(
-      width: 64,
-      height: 72,
-      decoration: BoxDecoration(
-        color: AppPalette.surfaceSubtleLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _focusNodes[index].hasFocus
-              ? AppPalette.emerald
-              : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: Center(
-        child: TextField(
-          controller: _otpControllers[index],
-          focusNode: _focusNodes[index],
-          textAlign: TextAlign.center,
-          keyboardType: TextInputType.number,
-          maxLength: 1,
-          obscureText: false,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: AppPalette.textPrimaryLight,
+    final c = context.colors;
+    // Rebuilds on focus change so the active box lights up immediately.
+    return ListenableBuilder(
+      listenable: _focusNodes[index],
+      builder: (context, _) {
+        final focused = _focusNodes[index].hasFocus;
+        return AnimatedScale(
+          scale: focused ? 1.06 : 1,
+          duration: AppDuration.medium,
+          curve: Curves.easeOutBack,
+          child: AnimatedContainer(
+            duration: AppDuration.medium,
+            curve: AppCurves.easeOut,
+            width: 64,
+            height: 72,
+            decoration: BoxDecoration(
+              color: focused ? c.brandSoft : c.surfaceSubtle,
+              borderRadius: AppRadius.brMd,
+              border: Border.all(
+                color: focused ? c.brand : c.outline,
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: TextField(
+                controller: _otpControllers[index],
+                focusNode: _focusNodes[index],
+                textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                maxLength: 1,
+                style: context.text.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (value) => _onOTPChanged(index, value),
+              ),
+            ),
           ),
-          decoration: const InputDecoration(
-            counterText: '',
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-          ),
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          onChanged: (value) => _onOTPChanged(index, value),
-        ),
-      ),
+        );
+      },
     );
   }
 }

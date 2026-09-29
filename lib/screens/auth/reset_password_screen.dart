@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../widgets/bus_illustration.dart';
@@ -32,7 +31,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
   // Password strength
   double _passwordStrength = 0;
   String _strengthLabel = '';
-  Color _strengthColor = AppPalette.textMutedLight;
+  Color? _strengthColor;
 
   @override
   void initState() {
@@ -78,7 +77,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     final password = _passwordController.text;
     double strength = 0;
     String label = '';
-    Color color = AppPalette.textMutedLight;
+    final c = context.colors;
+    Color color = c.textMuted;
 
     if (password.isEmpty) {
       strength = 0;
@@ -86,11 +86,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     } else if (password.length < 4) {
       strength = 0.15;
       label = 'Too short';
-      color = AppPalette.error;
+      color = c.error;
     } else if (password.length < 6) {
       strength = 0.3;
       label = 'Weak';
-      color = AppPalette.error;
+      color = c.error;
     } else {
       int score = 0;
       if (password.length >= 8) score++;
@@ -102,15 +102,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
       if (score <= 2) {
         strength = 0.5;
         label = 'Fair';
-        color = AppPalette.warning;
+        color = c.warning;
       } else if (score <= 3) {
         strength = 0.75;
         label = 'Good';
-        color = AppPalette.emerald;
+        color = c.brand;
       } else {
         strength = 1.0;
         label = 'Strong';
-        color = AppPalette.success;
+        color = c.success;
       }
     }
 
@@ -127,7 +127,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     HapticFeedback.lightImpact();
 
     if (_phoneNumber == null) {
-      AppSnackbar.error(context, 'Invalid session. Please go back and try again.');
+      AppSnackbar.error(
+        context,
+        'Invalid session. Please go back and try again.',
+      );
       return;
     }
 
@@ -381,19 +384,31 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: _passwordStrength,
-            backgroundColor: context.colors.surfaceSubtle,
-            valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
-            minHeight: 4,
+        // Fill and colour ease to the new strength as the user types.
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: _passwordStrength),
+          duration: AppDuration.slow,
+          curve: AppCurves.easeOut,
+          builder: (context, v, _) => TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: _strengthColor ?? context.colors.textMuted),
+            duration: AppDuration.slow,
+            builder: (context, color, _) => ClipRRect(
+              borderRadius: AppRadius.brPill,
+              child: LinearProgressIndicator(
+                value: v,
+                backgroundColor: context.colors.surfaceSubtle,
+                color: color,
+                minHeight: 5,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           _strengthLabel,
-          style: context.text.labelMedium?.copyWith(color: _strengthColor),
+          style: context.text.labelMedium?.copyWith(
+            color: _strengthColor ?? context.colors.textMuted,
+          ),
         ),
       ],
     );

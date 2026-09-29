@@ -153,7 +153,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 ),
                 dropdownTextStyle: context.text.bodyLarge,
                 style: context.text.bodyLarge,
-                onChanged: (phone) => _completePhoneNumber = phone.completeNumber,
+                onChanged: (phone) =>
+                    _completePhoneNumber = phone.completeNumber,
                 validator: (phone) {
                   if (phone == null || phone.number.isEmpty) {
                     return 'Please enter your phone number';
