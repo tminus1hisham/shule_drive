@@ -22,28 +22,33 @@ extension AppMotion on Widget {
   /// 80 for a bottom sheet-like panel, -40 for a bar dropping in from the top).
   Widget enter({Duration delay = Duration.zero, double offsetY = 8}) =>
       _MotionGate(
-    plain: this,
-    animated: animate(delay: delay)
-        .fadeIn(duration: AppDuration.medium, curve: AppCurves.easeOut)
-        .moveY(
-          begin: offsetY,
-          end: 0,
-          duration: AppDuration.slow,
-          curve: AppCurves.easeOut,
-        ),
-  );
+        plain: this,
+        animated: animate(delay: delay)
+            .fadeIn(duration: AppDuration.medium, curve: AppCurves.easeOut)
+            .moveY(
+              begin: offsetY,
+              end: 0,
+              duration: AppDuration.slow,
+              curve: AppCurves.easeOut,
+            ),
+      );
 
   /// [enter] staggered by list position. The delay stops growing after
   /// [AppMotion.maxStaggered] rows so long lists never leave late rows waiting.
   Widget enterList(int index, {Duration baseDelay = Duration.zero}) =>
       enter(delay: baseDelay + staggerStep * index.clamp(0, maxStaggered));
 
-  /// Springy scale-in for icons, badges and success moments.
-  Widget pop({Duration delay = Duration.zero}) => _MotionGate(
+  /// Springy scale-in for icons, badges and success moments. [origin] is the
+  /// point it grows from (e.g. a chat bubble's tail corner).
+  Widget pop({
+    Duration delay = Duration.zero,
+    Alignment origin = Alignment.center,
+  }) => _MotionGate(
     plain: this,
     animated: animate(delay: delay)
         .fadeIn(duration: AppDuration.fast)
         .scaleXY(
+          alignment: origin,
           begin: 0.8,
           end: 1,
           duration: AppDuration.slow,

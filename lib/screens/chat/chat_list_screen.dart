@@ -1,18 +1,18 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/ui/staggered_entrance.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_conversation.dart';
 import '../../mqtt_client.dart';
-import '../../providers/app_provider.dart';
+
 import '../../providers/chat_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -20,10 +20,7 @@ class ChatListScreen extends StatefulWidget {
   State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+class _ChatListScreenState extends State<ChatListScreen> {
   bool _isLoading = true;
   String? _error;
   List<ChatConversation> _conversations = [];
@@ -32,18 +29,10 @@ class _ChatListScreenState extends State<ChatListScreen>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.slow,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    );
-    
+
     _loadConversations();
     _connectMqtt();
-    
+
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _loadConversations(silent: true);
     });
@@ -62,7 +51,6 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -71,18 +59,17 @@ class _ChatListScreenState extends State<ChatListScreen>
     if (!silent) {
       setState(() => _isLoading = true);
     }
-    
+
     try {
       final chatProvider = context.read<ChatProvider>();
       final conversations = await chatProvider.getConversations();
-      
+
       if (mounted) {
         setState(() {
           _conversations = conversations;
           _isLoading = false;
           _error = null;
         });
-        _animationController.forward();
       }
     } catch (e) {
       if (mounted) {
@@ -110,437 +97,246 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   void _navigateToNewChat() {
     HapticFeedback.lightImpact();
-    Navigator.pushNamed(context, '/chat-users')
-        .then((_) => _loadConversations(silent: true));
+    Navigator.pushNamed(
+      context,
+      '/chat-users',
+    ).then((_) => _loadConversations(silent: true));
   }
 
   @override
   Widget build(BuildContext context) {
-    final appProvider = context.watch<AppProvider>();
-    final isDarkMode = appProvider.isDarkMode;
-
+    final c = context.colors;
     return MainScaffold(
       title: 'Messages',
       showBackButton: false,
       showBottomNav: true,
       bottomNavIndex: 1,
-      onBottomNavTap: (index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/dashboard');
-            break;
-          case 1:
-            break;
-          case 2:
-            Navigator.pushNamed(context, '/notifications');
-            break;
-          case 3:
-            Navigator.pushNamed(context, '/profile');
-            break;
-          case 4:
-            Navigator.pushNamed(context, '/start-trip');
-            break;
-        }
-      },
       actions: [
         if (!_isLoading && _conversations.isNotEmpty)
           IconButton(
-            icon: Icon(
-              Icons.edit_square,
-              color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-            ),
+            icon: Icon(Icons.edit_square, color: c.brand),
+            tooltip: 'New message',
             onPressed: _navigateToNewChat,
-          ),
+          ).pop(),
       ],
-      body: _buildBody(isDarkMode),
-    );
-  }
-
-  Widget _buildBody(bool isDarkMode) {
-    if (_isLoading) {
-      return _buildLoadingState(isDarkMode);
-    }
-
-    if (_error != null) {
-      return _buildErrorState(isDarkMode);
-    }
-
-    if (_conversations.isEmpty) {
-      return _buildEmptyState(isDarkMode);
-    }
-
-    return _buildConversationsList(isDarkMode);
-  }
-
-  Widget _buildLoadingState(bool isDarkMode) {
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: 10,
-      separatorBuilder: (_, __) => Divider(
-        height: 1,
-        indent: 80,
-        color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          AsyncBody(
+            loading: _isLoading,
+            error: _error,
+            onRetry: _loadConversations,
+            isEmpty: _conversations.isEmpty,
+            empty: EmptyState(
+              icon: Icons.chat_bubble_outline_rounded,
+              title: 'No Messages Yet',
+              message: 'Start a conversation with drivers or guardians',
+              actionLabel: 'New Message',
+              onAction: _navigateToNewChat,
+            ),
+            onRefresh: _loadConversations,
+            child: _buildConversationsList(),
+          ),
+        ],
       ),
-      itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
     );
   }
 
-  Widget _buildSkeletonItem(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+  Widget _buildConversationsList() {
+    final c = context.colors;
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        // Search bar (opens the new-chat picker)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.md,
+              AppSpacing.xs,
+            ),
+            child: AppCard(
+              onTap: _navigateToNewChat,
+              color: c.surfaceSubtle,
+              shadow: const [],
+              border: Border.all(color: c.outline),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search_rounded, size: 20, color: c.textMuted),
+                  AppSpacing.hXs,
+                  Text(
+                    'Search Messages',
+                    style: context.text.bodyLarge?.copyWith(color: c.textMuted),
+                  ),
+                ],
+              ),
+            ).enter(),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.md,
+            AppSpacing.xl,
+          ),
+          sliver: SliverList.separated(
+            itemCount: _conversations.length,
+            separatorBuilder: (_, _) => AppSpacing.vXs,
+            itemBuilder: (context, index) {
+              final conversation = _conversations[index];
+              // Keyed by conversation, so a chat arriving via the 30s poll
+              // animates in while existing rows stay put.
+              return KeyedSubtree(
+                key: ValueKey(conversation.id),
+                child: _buildConversationTile(conversation).enterList(index),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConversationTile(ChatConversation conversation) {
+    final c = context.colors;
+    final hasUnread = conversation.unreadCount > 0;
+    final avatarUrl = conversation.otherUserAvatar;
+    final hasValidUrl =
+        avatarUrl != null &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'));
+
+    return AppCard(
+      onTap: () => _navigateToChat(conversation),
+      shadow: hasUnread ? c.shadowSm : const [],
+      color: hasUnread
+          ? Color.alphaBlend(
+              c.brand.withValues(alpha: 0.05),
+              context.scheme.surface,
+            )
+          : context.scheme.surface,
+      border: Border.all(
+        color: hasUnread ? c.brand.withValues(alpha: 0.25) : c.outline,
+      ),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-              shape: BoxShape.circle,
-            ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AppAvatar(
+                imageUrl: hasValidUrl ? avatarUrl : null,
+                name: conversation.otherUserName,
+                size: 52,
+              ),
+              if (conversation.isOnline)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: c.success,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: context.scheme.surface,
+                        width: 2,
+                      ),
+                    ),
+                  ).pop(),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
+          AppSpacing.hSm,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 120,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: 180,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(bool isDarkMode) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 48,
-            color: isDarkMode ? AppPalette.textMutedDark : const Color(0xFFC7C7CC),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Couldn\'t load messages',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: _loadConversations,
-            child: Text(
-              'Try Again',
-              style: TextStyle(
-                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDarkMode) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.chat_bubble_outline,
-                size: 28,
-                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No Messages Yet',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Start a conversation with drivers or guardians',
-              style: TextStyle(
-                fontSize: 15,
-                color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextButton.icon(
-              onPressed: _navigateToNewChat,
-              icon: const Icon(Icons.edit, size: 18),
-              label: const Text('New Message'),
-              style: TextButton.styleFrom(
-                foregroundColor: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConversationsList(bool isDarkMode) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: RefreshIndicator(
-        onRefresh: _loadConversations,
-        color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-        backgroundColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // Search bar
-            SliverToBoxAdapter(
-              child: GestureDetector(
-                onTap: _navigateToNewChat,
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.search,
-                        size: 18,
-                        color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Search Messages',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        conversation.otherUserName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.titleSmall?.copyWith(
+                          fontWeight: hasUnread
+                              ? FontWeight.w800
+                              : FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    AppSpacing.hXs,
+                    Text(
+                      _formatTime(conversation.lastActivity),
+                      style: context.text.labelSmall?.copyWith(
+                        color: hasUnread ? c.brand : c.textMuted,
+                        fontWeight: hasUnread ? FontWeight.w700 : null,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-            // Conversations list
-            SliverList.separated(
-              itemCount: _conversations.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                indent: 80,
-                color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-              ),
-              itemBuilder: (context, index) {
-                final conversation = _conversations[index];
-                return _buildConversationTile(conversation, isDarkMode, index);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConversationTile(
-    ChatConversation conversation,
-    bool isDarkMode,
-    int index,
-  ) {
-    final hasUnread = conversation.unreadCount > 0;
-    
-    return StaggeredEntrance(
-      animation: _animationController,
-      index: index,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _navigateToChat(conversation),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Avatar
-                _buildAvatar(conversation, isDarkMode),
-                const SizedBox(width: 12),
-                
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Name and time row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              conversation.otherUserName,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
-                                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _formatTime(conversation.lastActivity),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: hasUnread
-                                  ? isDarkMode ? AppPalette.infoBright : AppPalette.info
-                                  : isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-                            ),
-                          ),
-                        ],
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        conversation.lastMessagePreview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodyMedium?.copyWith(
+                          color: hasUnread
+                              ? context.scheme.onSurface
+                              : c.textSecondary,
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      // Message preview row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              conversation.lastMessagePreview,
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: hasUnread
-                                    ? isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight
-                                    : isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    ),
+                    // Unread count springs in and re-pops when it changes.
+                    AnimatedScale(
+                      scale: hasUnread ? 1 : 0,
+                      duration: AppDuration.medium,
+                      curve: Curves.easeOutBack,
+                      child: AnimatedSwitcher(
+                        duration: AppDuration.medium,
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Container(
+                          key: ValueKey(conversation.unreadCount),
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 20),
+                          decoration: BoxDecoration(
+                            gradient: c.brandGradient,
+                            borderRadius: AppRadius.brPill,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            conversation.unreadCount > 99
+                                ? '99+'
+                                : conversation.unreadCount.toString(),
+                            style: context.text.labelSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          // Unread badge
-                          if (hasUnread) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              constraints: const BoxConstraints(minWidth: 18),
-                              alignment: Alignment.center,
-                              child: Text(
-                                conversation.unreadCount > 99
-                                    ? '99+'
-                                    : conversation.unreadCount.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatar(ChatConversation conversation, bool isDarkMode) {
-    final avatarUrl = conversation.otherUserAvatar;
-    final hasValidUrl = avatarUrl != null &&
-        avatarUrl.isNotEmpty &&
-        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'));
-    
-    final initials = conversation.otherUserName
-        .split(' ')
-        .map((e) => e.isNotEmpty ? e[0] : '')
-        .take(2)
-        .join()
-        .toUpperCase();
-
-    return SizedBox(
-      width: 52,
-      height: 52,
-      child: Stack(
-        children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundImage: hasValidUrl ? NetworkImage(avatarUrl) : null,
-            backgroundColor: _getAvatarColor(conversation.otherUserName),
-            onBackgroundImageError: hasValidUrl ? (e, s) {
-              if (kDebugMode) debugPrint('Failed to load avatar: $e');
-            } : null,
-            child: !hasValidUrl
-                ? Text(
-                    initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  )
-                : null,
-          ),
-          // Online indicator
-          if (conversation.isOnline)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF34C759),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -548,11 +344,11 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   String _formatTime(DateTime? dateTime) {
     if (dateTime == null) return '';
-    
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final messageDay = DateTime(dateTime.year, dateTime.month, dateTime.day);
-    
+
     if (messageDay == today) {
       return DateFormat('h:mm a').format(dateTime).toLowerCase();
     } else if (today.difference(messageDay).inDays == 1) {
@@ -562,19 +358,5 @@ class _ChatListScreenState extends State<ChatListScreen>
     } else {
       return DateFormat('M/d/yy').format(dateTime);
     }
-  }
-
-  Color _getAvatarColor(String name) {
-    final colors = [
-      AppPalette.info,
-      const Color(0xFF34C759),
-      const Color(0xFFFF9500),
-      const Color(0xFFFF2D55),
-      const Color(0xFF5856D6),
-      const Color(0xFF5AC8FA),
-      AppPalette.error,
-      const Color(0xFFAF52DE),
-    ];
-    return colors[name.hashCode.abs() % colors.length];
   }
 }
