@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Trip Details Screen - Shows detailed trip information for DRIVERS ONLY
 /// Includes: trip info, students picked/dropped, timeline, stats
 class TripDetailsScreen extends StatefulWidget {
@@ -109,7 +110,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
         title: 'Trip Details',
         showBackButton: true,
         body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+          child: CircularProgressIndicator(color: AppPalette.emerald),
         ),
       );
     }
@@ -243,14 +244,14 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withAlpha(100),
+            color: AppPalette.emerald.withAlpha(100),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -380,7 +381,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                 trip.students.length.toString(),
                 'Total Students',
                 Icons.people,
-                const Color(0xFF6B9B5B),
+                AppPalette.emerald,
               ),
               const SizedBox(width: 12),
               _buildStatBox(
@@ -388,7 +389,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                 trip.pickedCount.toString(),
                 'Picked Up',
                 Icons.check_circle,
-                const Color(0xFF4CAF50),
+                AppPalette.success,
               ),
               const SizedBox(width: 12),
               _buildStatBox(
@@ -396,7 +397,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                 trip.absentCount.toString(),
                 'Absent',
                 Icons.cancel,
-                const Color(0xFFFF9800),
+                AppPalette.warning,
               ),
             ],
           ),
@@ -409,7 +410,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                   '${trip.distance!.toStringAsFixed(1)} km',
                   'Distance',
                   Icons.route,
-                  const Color(0xFF2196F3),
+                  AppPalette.info,
                 ),
               ],
             ),
@@ -485,7 +486,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withAlpha(20),
+                color: AppPalette.emerald.withAlpha(20),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -493,14 +494,14 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                 children: [
                   const Icon(
                     Icons.check_circle,
-                    color: Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                     size: 16,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${trip.pickedCount}/${trip.students.length}',
                     style: const TextStyle(
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -551,22 +552,22 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
 
     switch (student.status) {
       case 'picked':
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = AppPalette.success;
         statusIcon = Icons.check_circle;
         statusText = 'Picked';
         break;
       case 'absent':
-        statusColor = const Color(0xFFFF9800);
+        statusColor = AppPalette.warning;
         statusIcon = Icons.cancel;
         statusText = 'Absent';
         break;
       case 'dropped':
-        statusColor = const Color(0xFF2196F3);
+        statusColor = AppPalette.info;
         statusIcon = Icons.logout;
         statusText = 'Dropped';
         break;
       default:
-        statusColor = Colors.grey;
+        statusColor = AppPalette.textMutedLight;
         statusIcon = Icons.schedule;
         statusText = 'Pending';
     }
@@ -657,8 +658,8 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
 
     return CircleAvatar(
       radius: 24,
-      backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
-      child: const Icon(Icons.person, color: Color(0xFF6B9B5B)),
+      backgroundColor: AppPalette.emerald.withAlpha(30),
+      child: const Icon(Icons.person, color: AppPalette.emerald),
     );
   }
 
@@ -695,7 +696,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                         width: 14,
                         height: 14,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: provider.cardColor,
@@ -707,7 +708,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
                         Container(
                           width: 2,
                           height: 40,
-                          color: const Color(0xFF6B9B5B).withAlpha(50),
+                          color: AppPalette.emerald.withAlpha(50),
                         ),
                     ],
                   ),

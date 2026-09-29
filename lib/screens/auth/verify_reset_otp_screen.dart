@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/bus_illustration.dart';
 
+import '../../theme/app_colors.dart';
 class VerifyResetOtpScreen extends StatefulWidget {
   const VerifyResetOtpScreen({super.key});
 
@@ -209,7 +210,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -225,12 +226,12 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
     final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+      backgroundColor: AppPalette.bgLight,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          icon: const Icon(Icons.arrow_back, color: AppPalette.textPrimaryLight),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -268,14 +269,14 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+              color: AppPalette.textPrimaryLight,
               letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Enter the 4-digit code sent to ${_phoneNumber ?? 'your phone'}',
-            style: const TextStyle(fontSize: 16, color: Color(0xFF666666)),
+            style: const TextStyle(fontSize: 16, color: AppPalette.textSecondaryLight),
           ),
         ],
       ),
@@ -323,7 +324,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             child: ElevatedButton(
               onPressed: authProvider.isLoading ? null : _verifyOTP,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -360,7 +361,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
             children: [
               Text(
                 'Didn\'t receive the code? ',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 14, color: AppPalette.textSecondaryLight),
               ),
               TextButton(
                 onPressed: _canResend ? _resendOTP : null,
@@ -372,8 +373,8 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: _canResend
-                        ? const Color(0xFF6B9B5B)
-                        : Colors.grey.shade400,
+                        ? AppPalette.emerald
+                        : AppPalette.textMutedLight,
                   ),
                 ),
               ),
@@ -386,19 +387,19 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+              color: AppPalette.emerald.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                Icon(Icons.security, size: 16, color: const Color(0xFF6B9B5B)),
+                Icon(Icons.security, size: 16, color: AppPalette.emerald),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'For your security, the code will expire in 5 minutes.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: const Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
                 ),
@@ -415,11 +416,11 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
       width: 64,
       height: 72,
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _focusNodes[index].hasFocus
-              ? const Color(0xFF6B9B5B)
+              ? AppPalette.emerald
               : Colors.transparent,
           width: 2,
         ),
@@ -435,7 +436,7 @@ class _VerifyResetOtpScreenState extends State<VerifyResetOtpScreen>
           style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
+            color: AppPalette.textPrimaryLight,
           ),
           decoration: const InputDecoration(
             counterText: '',

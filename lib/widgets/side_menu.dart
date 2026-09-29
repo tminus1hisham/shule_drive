@@ -27,17 +27,17 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: AppDuration.medium,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: AppCurves.easeOut,
     );
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(-0.3, 0), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(-0.05, 0), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _animationController,
-            curve: Curves.easeOutCubic,
+            curve: AppCurves.easeOut,
           ),
         );
     _animationController.forward();

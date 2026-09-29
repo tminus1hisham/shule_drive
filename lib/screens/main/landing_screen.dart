@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/bus_illustration.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
 
@@ -97,12 +98,12 @@ class _LandingScreenState extends State<LandingScreen> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                      color: AppPalette.emerald.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -132,7 +133,7 @@ class _LandingScreenState extends State<LandingScreen> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                  color: AppPalette.emerald.withValues(alpha: 0.3),
                   width: 2,
                 ),
               ),
@@ -167,7 +168,7 @@ class _LandingScreenState extends State<LandingScreen> {
             decoration: BoxDecoration(
               color: isDarkMode 
                   ? Colors.white.withValues(alpha: 0.1)
-                  : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                  : AppPalette.emerald.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -176,7 +177,7 @@ class _LandingScreenState extends State<LandingScreen> {
                 Icon(
                   isDriver ? Icons.local_shipping_outlined : Icons.family_restroom,
                   size: 14,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
+                  color: isDarkMode ? Colors.white70 : AppPalette.emerald,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -184,7 +185,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
+                    color: isDarkMode ? Colors.white70 : AppPalette.emerald,
                   ),
                 ),
               ],
@@ -234,7 +235,7 @@ class _LandingScreenState extends State<LandingScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+              color: AppPalette.emerald.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const BusIllustration(height: 120),
@@ -273,7 +274,7 @@ class _LandingScreenState extends State<LandingScreen> {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -308,13 +309,13 @@ class _LandingScreenState extends State<LandingScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+              color: AppPalette.info.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.family_restroom,
               size: 60,
-              color: const Color(0xFF2196F3),
+              color: AppPalette.info,
             ),
           ),
           const SizedBox(height: 24),
@@ -353,7 +354,7 @@ class _LandingScreenState extends State<LandingScreen> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2196F3),
+                      backgroundColor: AppPalette.info,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -377,21 +378,21 @@ class _LandingScreenState extends State<LandingScreen> {
         'icon': Icons.route_outlined,
         'title': 'Routes',
         'subtitle': 'View assigned routes',
-        'color': const Color(0xFF6B9B5B),
+        'color': AppPalette.emerald,
         'route': '/routes',
       },
       {
         'icon': Icons.people_outline,
         'title': 'Students',
         'subtitle': 'View student list',
-        'color': const Color(0xFF2196F3),
+        'color': AppPalette.info,
         'route': '/students-list',
       },
       {
         'icon': Icons.history,
         'title': 'History',
         'subtitle': 'Trip history',
-        'color': const Color(0xFFFF9800),
+        'color': AppPalette.warning,
         'route': '/trips',
       },
       {
@@ -408,21 +409,21 @@ class _LandingScreenState extends State<LandingScreen> {
         'icon': Icons.child_care,
         'title': 'My Children',
         'subtitle': 'Manage children',
-        'color': const Color(0xFF2196F3),
+        'color': AppPalette.info,
         'route': '/manage-children',
       },
       {
         'icon': Icons.route_outlined,
         'title': 'Routes',
         'subtitle': 'View bus routes',
-        'color': const Color(0xFF6B9B5B),
+        'color': AppPalette.emerald,
         'route': '/routes',
       },
       {
         'icon': Icons.local_shipping,
         'title': 'My Trips',
         'subtitle': 'Track active trips',
-        'color': const Color(0xFFFF9800),
+        'color': AppPalette.warning,
         'route': '/trips',
       },
       {

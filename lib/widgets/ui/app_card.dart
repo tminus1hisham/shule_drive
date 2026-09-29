@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
+import 'press_scale.dart';
 
 /// Standard surface card: themed background, soft shadow, large radius and
 /// consistent padding. Optionally tappable. Replaces the dozens of inline
@@ -48,20 +49,21 @@ class AppCard extends StatelessWidget {
       );
     }
 
-    return Material(
-      color: color ?? context.scheme.surface,
-      borderRadius: borderRadius,
-      clipBehavior: Clip.antiAlias,
-      child: Ink(
-        decoration: BoxDecoration(
+    // The shadow lives on an outer box: painted via Ink it would land on top
+    // of the card fill and grey it out.
+    return PressScale(
+      scale: 0.985,
+      child: DecoratedBox(
+        decoration: decoration,
+        child: Material(
+          color: Colors.transparent,
           borderRadius: borderRadius,
-          border: border,
-          boxShadow: shadow ?? context.colors.shadowSm,
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: borderRadius,
-          child: content,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: borderRadius,
+            child: content,
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/map_config.dart';
 
+import '../theme/app_colors.dart';
 /// Map Provider - Now Mapbox Only
 enum MapProvider {
   mapbox,
@@ -56,7 +57,7 @@ class MapSelector extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: MapConfig.hasAccessToken 
-                  ? const Color(0xFFE8F5E9)
+                  ? AppPalette.emeraldSoftLight
                   : const Color(0xFFFFEBEE),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -65,7 +66,7 @@ class MapSelector extends StatelessWidget {
                 Icon(
                   MapConfig.hasAccessToken ? Icons.check_circle : Icons.warning,
                   color: MapConfig.hasAccessToken 
-                      ? const Color(0xFF4CAF50)
+                      ? AppPalette.success
                       : const Color(0xFFE53935),
                   size: 20,
                 ),
@@ -108,10 +109,10 @@ class MapSelector extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withAlpha(20) : Colors.grey.shade50,
+          color: isSelected ? color.withAlpha(20) : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? color : Colors.grey.shade300,
+            color: isSelected ? color : AppPalette.outlineLight,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -147,8 +148,8 @@ class MapSelector extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isConfigured 
-                              ? const Color(0xFF4CAF50)
-                              : Colors.grey,
+                              ? AppPalette.success
+                              : AppPalette.textMutedLight,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -167,7 +168,7 @@ class MapSelector extends StatelessWidget {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: AppPalette.textSecondaryLight,
                     ),
                   ),
                 ],
@@ -176,7 +177,7 @@ class MapSelector extends StatelessWidget {
             if (isSelected)
               const Icon(
                 Icons.check_circle,
-                color: Color(0xFF4CAF50),
+                color: AppPalette.success,
               ),
           ],
         ),

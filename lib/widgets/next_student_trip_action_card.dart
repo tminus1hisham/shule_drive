@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/student_trip_logic.dart';
 
+import '../theme/app_colors.dart';
 typedef NextStudentTripTargetCallback = void Function(
   NextStudentTripTarget student,
 );
@@ -865,10 +866,10 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      'picked' => Colors.green,
-      'dropped' => Colors.blue,
-      'absent' => Colors.orange,
-      _ => Colors.grey,
+      'picked' => AppPalette.success,
+      'dropped' => AppPalette.info,
+      'absent' => AppPalette.warning,
+      _ => AppPalette.textMutedLight,
     };
 
     return Container(

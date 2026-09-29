@@ -64,27 +64,24 @@ class AppColors extends ThemeExtension<AppColors> {
     brandGradient: LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [AppPalette.emerald, AppPalette.emeraldPressed],
+      colors: [AppPalette.emerald, AppPalette.emeraldDeep],
     ),
+    // Two layers each: a tight contact shadow plus a soft ambient one, both
+    // tinted with brand ink rather than pure black.
     shadowSm: [
-      BoxShadow(
-        color: Color(0x14000000),
-        blurRadius: 8,
-        offset: Offset(0, 2),
-      ),
+      BoxShadow(color: Color(0x0F06140E), blurRadius: 2, offset: Offset(0, 1)),
+      BoxShadow(color: Color(0x0A06140E), blurRadius: 8, offset: Offset(0, 2)),
     ],
     shadowMd: [
-      BoxShadow(
-        color: Color(0x1A0F172A),
-        blurRadius: 16,
-        offset: Offset(0, 6),
-      ),
+      BoxShadow(color: Color(0x1206140E), blurRadius: 3, offset: Offset(0, 1)),
+      BoxShadow(color: Color(0x1406140E), blurRadius: 20, offset: Offset(0, 8)),
     ],
     shadowLg: [
+      BoxShadow(color: Color(0x1406140E), blurRadius: 4, offset: Offset(0, 2)),
       BoxShadow(
-        color: Color(0x240F172A),
-        blurRadius: 28,
-        offset: Offset(0, 12),
+        color: Color(0x2006140E),
+        blurRadius: 36,
+        offset: Offset(0, 16),
       ),
     ],
   );
@@ -99,7 +96,7 @@ class AppColors extends ThemeExtension<AppColors> {
     success: AppPalette.successBright,
     warning: AppPalette.warning,
     error: AppPalette.errorBright,
-    info: AppPalette.info,
+    info: AppPalette.infoBright,
     surfaceSubtle: AppPalette.surfaceSubtleDark,
     outline: AppPalette.outlineDark,
     textSecondary: AppPalette.textSecondaryDark,
@@ -107,27 +104,22 @@ class AppColors extends ThemeExtension<AppColors> {
     brandGradient: LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [AppPalette.emerald, AppPalette.emeraldPressed],
+      colors: [AppPalette.emerald, AppPalette.emeraldDeep],
     ),
     shadowSm: [
-      BoxShadow(
-        color: Color(0x33000000),
-        blurRadius: 8,
-        offset: Offset(0, 2),
-      ),
+      BoxShadow(color: Color(0x40000000), blurRadius: 2, offset: Offset(0, 1)),
+      BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
     ],
     shadowMd: [
-      BoxShadow(
-        color: Color(0x40000000),
-        blurRadius: 16,
-        offset: Offset(0, 6),
-      ),
+      BoxShadow(color: Color(0x4D000000), blurRadius: 3, offset: Offset(0, 1)),
+      BoxShadow(color: Color(0x40000000), blurRadius: 20, offset: Offset(0, 8)),
     ],
     shadowLg: [
+      BoxShadow(color: Color(0x59000000), blurRadius: 4, offset: Offset(0, 2)),
       BoxShadow(
         color: Color(0x52000000),
-        blurRadius: 28,
-        offset: Offset(0, 12),
+        blurRadius: 36,
+        offset: Offset(0, 16),
       ),
     ],
   );

@@ -11,6 +11,7 @@ import '../../providers/chat_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class ChatScreen extends StatefulWidget {
   final String? receiverPhone; // Phone number of the receiver (used as chat ID)
   final String? receiverName;
@@ -227,7 +228,7 @@ class _ChatScreenState extends State<ChatScreen> {
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
                 color: isDarkMode
-                    ? const Color(0xFF121212)
+                    ? AppPalette.bgDark
                     : const Color(0xFFE8E8E8),
               ),
             ),
@@ -260,7 +261,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isLoadingTripStatus) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
+        color: isDarkMode ? AppPalette.surfaceDark : AppPalette.surfaceSubtleLight,
         child: const Center(
           child: SizedBox(
             width: 20,
@@ -334,12 +335,12 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
+        color: isDarkMode ? AppPalette.surfaceDark : AppPalette.white,
         border: Border(
           top: BorderSide(
             color: isDarkMode
-                ? const Color(0xFF2C2C2E)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
           ),
         ),
       ),
@@ -351,16 +352,16 @@ class _ChatScreenState extends State<ChatScreen> {
               Icons.lock_outline,
               size: 16,
               color: isDarkMode
-                  ? const Color(0xFF8E8E93)
-                  : const Color(0xFF8E8E93),
+                  ? AppPalette.textMutedDark
+                  : AppPalette.textMutedLight,
             ),
             const SizedBox(width: 8),
             Text(
               'This chat is archived',
               style: TextStyle(
                 color: isDarkMode
-                    ? const Color(0xFF8E8E93)
-                    : const Color(0xFF8E8E93),
+                    ? AppPalette.textMutedDark
+                    : AppPalette.textMutedLight,
                 fontSize: 13,
               ),
             ),
@@ -418,10 +419,10 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isMe
-              ? const Color(0xFF007AFF) // iOS blue - professional
+              ? AppPalette.info // iOS blue - professional
               : isDarkMode
-              ? const Color(0xFF2C2C2E)
-              : const Color(0xFFF2F2F7), // iOS light gray
+              ? AppPalette.surfaceSubtleDark
+              : AppPalette.surfaceSubtleLight, // iOS light gray
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -438,8 +439,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: isMe
                     ? Colors.white
                     : isDarkMode
-                    ? Colors.white
-                    : const Color(0xFF1C1C1E),
+                    ? AppPalette.textPrimaryDark
+                    : AppPalette.textPrimaryLight,
                 fontSize: 16,
                 height: 1.3,
               ),
@@ -455,7 +456,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ? Colors.white.withValues(alpha: 0.7)
                         : isDarkMode
                         ? Colors.white.withValues(alpha: 0.5)
-                        : const Color(0xFF8E8E93),
+                        : AppPalette.textMutedLight,
                     fontSize: 11,
                   ),
                 ),
@@ -503,12 +504,12 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF),
+        color: isDarkMode ? AppPalette.surfaceDark : AppPalette.white,
         border: Border(
           top: BorderSide(
             color: isDarkMode
-                ? const Color(0xFF2C2C2E)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
             width: 0.5,
           ),
         ),
@@ -522,22 +523,22 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Container(
                 decoration: BoxDecoration(
                   color: isDarkMode
-                      ? const Color(0xFF2C2C2E)
-                      : const Color(0xFFF2F2F7),
+                      ? AppPalette.surfaceSubtleDark
+                      : AppPalette.surfaceSubtleLight,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: TextField(
                   controller: _messageController,
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                     fontSize: 16,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Message about the trip...',
                     hintStyle: TextStyle(
                       color: isDarkMode
-                          ? const Color(0xFF8E8E93)
-                          : const Color(0xFF8E8E93),
+                          ? AppPalette.textMutedDark
+                          : AppPalette.textMutedLight,
                       fontSize: 16,
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -567,9 +568,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Icon(
                         Icons.arrow_upward,
                         color: canSend
-                            ? const Color(0xFF007AFF)
+                            ? AppPalette.info
                             : isDarkMode
-                            ? const Color(0xFF3A3A3C)
+                            ? AppPalette.surfaceSubtleDark
                             : const Color(0xFFBDBDBD),
                         size: 24,
                       ),
@@ -592,16 +593,16 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: BoxDecoration(
           color: isDarkMode
-              ? const Color(0xFF2C2C2E)
-              : const Color(0xFFE5E5EA).withValues(alpha: 0.7),
+              ? AppPalette.surfaceSubtleDark
+              : AppPalette.outlineLight.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           _formatDate(date),
           style: TextStyle(
             color: isDarkMode
-                ? const Color(0xFF8E8E93)
-                : const Color(0xFF8E8E93),
+                ? AppPalette.textMutedDark
+                : AppPalette.textMutedLight,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
@@ -619,7 +620,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Icons.chat_bubble_outline,
             size: 48,
             color: isDarkMode
-                ? const Color(0xFF3A3A3C)
+                ? AppPalette.surfaceSubtleDark
                 : const Color(0xFFC7C7CC),
           ),
           const SizedBox(height: 16),
@@ -627,8 +628,8 @@ class _ChatScreenState extends State<ChatScreen> {
             'No messages yet',
             style: TextStyle(
               color: isDarkMode
-                  ? const Color(0xFF8E8E93)
-                  : const Color(0xFF8E8E93),
+                  ? AppPalette.textMutedDark
+                  : AppPalette.textMutedLight,
               fontSize: 16,
               fontWeight: FontWeight.w400,
             ),
@@ -642,14 +643,14 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: isDarkMode
           ? const Color(0xFF000000)
-          : const Color(0xFFFFFFFF),
+          : AppPalette.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(
-                isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+                isDarkMode ? AppPalette.infoBright : AppPalette.info,
               ),
               strokeWidth: 2.5,
             ),
@@ -658,8 +659,8 @@ class _ChatScreenState extends State<ChatScreen> {
               'Connecting...',
               style: TextStyle(
                 color: isDarkMode
-                    ? const Color(0xFF8E8E93)
-                    : const Color(0xFF8E8E93),
+                    ? AppPalette.textMutedDark
+                    : AppPalette.textMutedLight,
                 fontSize: 15,
               ),
             ),
@@ -673,25 +674,25 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: isDarkMode
           ? const Color(0xFF000000)
-          : const Color(0xFFFFFFFF),
+          : AppPalette.white,
       appBar: AppBar(
         backgroundColor: isDarkMode
-            ? const Color(0xFF1C1C1E)
-            : const Color(0xFFFFFFFF),
+            ? AppPalette.surfaceDark
+            : AppPalette.white,
         elevation: 0,
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios,
             color: isDarkMode
-                ? const Color(0xFF0A84FF)
-                : const Color(0xFF007AFF),
+                ? AppPalette.infoBright
+                : AppPalette.info,
           ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           receiverName,
           style: TextStyle(
-            color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
           ),
         ),
       ),
@@ -704,13 +705,13 @@ class _ChatScreenState extends State<ChatScreen> {
               Icon(
                 Icons.error_outline,
                 size: 48,
-                color: const Color(0xFFFF3B30),
+                color: AppPalette.error,
               ),
               const SizedBox(height: 16),
               Text(
                 'Connection Failed',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
@@ -720,8 +721,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 _initError!,
                 style: TextStyle(
                   color: isDarkMode
-                      ? const Color(0xFF8E8E93)
-                      : const Color(0xFF8E8E93),
+                      ? AppPalette.textMutedDark
+                      : AppPalette.textMutedLight,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -738,8 +739,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   'Try Again',
                   style: TextStyle(
                     color: isDarkMode
-                        ? const Color(0xFF0A84FF)
-                        : const Color(0xFF007AFF),
+                        ? AppPalette.infoBright
+                        : AppPalette.info,
                   ),
                 ),
               ),
@@ -759,17 +760,17 @@ class _ChatScreenState extends State<ChatScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
+            color: AppPalette.error.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: const Color(0xFFFF3B30).withValues(alpha: 0.2),
+              color: AppPalette.error.withValues(alpha: 0.2),
             ),
           ),
           child: Row(
             children: [
               const Icon(
                 Icons.error_outline,
-                color: Color(0xFFFF3B30),
+                color: AppPalette.error,
                 size: 18,
               ),
               const SizedBox(width: 10),
@@ -777,7 +778,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Text(
                   chatProvider.error!,
                   style: const TextStyle(
-                    color: Color(0xFFFF3B30),
+                    color: AppPalette.error,
                     fontSize: 13,
                   ),
                 ),
@@ -786,7 +787,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 onTap: () => chatProvider.clearError(),
                 child: const Icon(
                   Icons.close,
-                  color: Color(0xFFFF3B30),
+                  color: AppPalette.error,
                   size: 18,
                 ),
               ),
@@ -800,7 +801,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildScrollToBottomButton(bool isDarkMode) {
     return Container(
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -821,8 +822,8 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Icon(
               Icons.keyboard_arrow_down,
               color: isDarkMode
-                  ? const Color(0xFF0A84FF)
-                  : const Color(0xFF007AFF),
+                  ? AppPalette.infoBright
+                  : AppPalette.info,
               size: 24,
             ),
           ),
@@ -864,8 +865,8 @@ class _ChatScreenState extends State<ChatScreen> {
           height: 36,
           decoration: BoxDecoration(
             color: isDarkMode
-                ? const Color(0xFF3A3A3C)
-                : const Color(0xFF007AFF),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.info,
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -888,7 +889,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               receiverName,
               style: TextStyle(
-                color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -898,8 +899,8 @@ class _ChatScreenState extends State<ChatScreen> {
               roleText,
               style: TextStyle(
                 color: isDarkMode
-                    ? const Color(0xFF8E8E93)
-                    : const Color(0xFF8E8E93),
+                    ? AppPalette.textMutedDark
+                    : AppPalette.textMutedLight,
                 fontSize: 12,
               ),
             ),
@@ -930,8 +931,8 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Icon(
             Icons.phone,
             color: isDarkMode
-                ? const Color(0xFF0A84FF)
-                : const Color(0xFF007AFF),
+                ? AppPalette.infoBright
+                : AppPalette.info,
             size: 22,
           ),
         ),

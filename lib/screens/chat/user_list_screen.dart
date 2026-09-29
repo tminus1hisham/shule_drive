@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
+import '../../widgets/ui/staggered_entrance.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_conversation.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/chat_provider.dart';
 
+import '../../theme/app_colors.dart';
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
 
@@ -34,7 +37,7 @@ class _UserListScreenState extends State<UserListScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: AppDuration.slow,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
@@ -133,8 +136,8 @@ class _UserListScreenState extends State<UserListScreen>
 
     return Scaffold(
       backgroundColor: isDarkMode
-          ? const Color(0xFF121212)
-          : const Color(0xFFF5F5F0),
+          ? AppPalette.bgDark
+          : AppPalette.bgLight,
       appBar: _buildAppBar(isDarkMode),
       body: Column(
         children: [
@@ -153,12 +156,12 @@ class _UserListScreenState extends State<UserListScreen>
 
   PreferredSizeWidget _buildAppBar(bool isDarkMode) {
     return AppBar(
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       elevation: 0,
       leading: IconButton(
         icon: Icon(
           Icons.arrow_back_rounded,
-          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+          color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
         ),
         onPressed: () => Navigator.pop(context),
       ),
@@ -167,7 +170,7 @@ class _UserListScreenState extends State<UserListScreen>
         style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+          color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
         ),
       ),
       actions: [
@@ -180,7 +183,7 @@ class _UserListScreenState extends State<UserListScreen>
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  isDarkMode ? Colors.white70 : const Color(0xFF6B9B5B),
+                  isDarkMode ? Colors.white70 : AppPalette.emerald,
                 ),
               ),
             ),
@@ -189,7 +192,7 @@ class _UserListScreenState extends State<UserListScreen>
           IconButton(
             icon: Icon(
               Icons.refresh,
-              color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
             onPressed: _loadUsers,
           ),
@@ -199,33 +202,33 @@ class _UserListScreenState extends State<UserListScreen>
 
   Widget _buildSearchBar(bool isDarkMode) {
     return Container(
-      color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(12),
         ),
         child: TextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
           style: TextStyle(
-            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
           ),
           decoration: InputDecoration(
             hintText: 'Search by name or phone...',
             hintStyle: TextStyle(
-              color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
+              color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
             ),
             prefixIcon: Icon(
               Icons.search,
-              color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
+              color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
             ),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
                     icon: Icon(
                       Icons.clear,
-                      color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                      color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                       size: 20,
                     ),
                     onPressed: () {
@@ -247,7 +250,7 @@ class _UserListScreenState extends State<UserListScreen>
 
   Widget _buildFilterChips(bool isDarkMode) {
     return Container(
-      color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -269,13 +272,13 @@ class _UserListScreenState extends State<UserListScreen>
                   color: isSelected
                       ? Colors.white
                       : isDarkMode
-                      ? Colors.white70
-                      : const Color(0xFF666666),
+                      ? AppPalette.textSecondaryDark
+                      : AppPalette.textSecondaryLight,
                 ),
                 backgroundColor: isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : Colors.grey.shade100,
-                selectedColor: const Color(0xFF6B9B5B),
+                    ? AppPalette.surfaceSubtleDark
+                    : AppPalette.surfaceSubtleLight,
+                selectedColor: AppPalette.emerald,
                 checkmarkColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
@@ -284,7 +287,7 @@ class _UserListScreenState extends State<UserListScreen>
                         ? Colors.transparent
                         : isDarkMode
                         ? Colors.white12
-                        : Colors.grey.shade300,
+                        : AppPalette.outlineLight,
                   ),
                 ),
                 onSelected: (_) {
@@ -330,7 +333,7 @@ class _UserListScreenState extends State<UserListScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -341,7 +344,7 @@ class _UserListScreenState extends State<UserListScreen>
             decoration: BoxDecoration(
               color: isDarkMode
                   ? Colors.white.withAlpha(10)
-                  : Colors.grey.shade200,
+                  : AppPalette.outlineLight,
               shape: BoxShape.circle,
             ),
           ),
@@ -356,7 +359,7 @@ class _UserListScreenState extends State<UserListScreen>
                   decoration: BoxDecoration(
                     color: isDarkMode
                         ? Colors.white.withAlpha(10)
-                        : Colors.grey.shade200,
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -367,7 +370,7 @@ class _UserListScreenState extends State<UserListScreen>
                   decoration: BoxDecoration(
                     color: isDarkMode
                         ? Colors.white.withAlpha(10)
-                        : Colors.grey.shade200,
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -404,7 +407,7 @@ class _UserListScreenState extends State<UserListScreen>
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 8),
@@ -412,7 +415,7 @@ class _UserListScreenState extends State<UserListScreen>
               'Tap refresh to try again',
               style: TextStyle(
                 fontSize: 14,
-                color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 24),
@@ -443,13 +446,13 @@ class _UserListScreenState extends State<UserListScreen>
                 decoration: BoxDecoration(
                   color: isDarkMode
                       ? Colors.white.withAlpha(10)
-                      : Colors.grey.shade100,
+                      : AppPalette.surfaceSubtleLight,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   isSearching ? Icons.search_off : Icons.people_outline,
                   size: 48,
-                  color: isDarkMode ? Colors.white30 : Colors.grey.shade400,
+                  color: isDarkMode ? Colors.white30 : AppPalette.textMutedLight,
                 ),
               ),
               const SizedBox(height: 24),
@@ -458,7 +461,7 @@ class _UserListScreenState extends State<UserListScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               const SizedBox(height: 8),
@@ -469,7 +472,7 @@ class _UserListScreenState extends State<UserListScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDarkMode ? Colors.white54 : const Color(0xFF666666),
+                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                 ),
               ),
             ],
@@ -511,7 +514,7 @@ class _UserListScreenState extends State<UserListScreen>
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                   ),
                 ),
               ),
@@ -534,22 +537,13 @@ class _UserListScreenState extends State<UserListScreen>
   }
 
   Widget _buildUserTile(ChatUser user, bool isDarkMode, int index) {
-    return AnimatedBuilder(
+    return StaggeredEntrance(
       animation: _animationController,
-      builder: (context, child) {
-        final delay = index * 0.05;
-        final value =
-            (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
-
-        return Transform.translate(
-          offset: Offset(0, 20 * (1 - value)),
-          child: Opacity(opacity: value, child: child),
-        );
-      },
+      index: index,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -581,11 +575,11 @@ class _UserListScreenState extends State<UserListScreen>
                             width: 14,
                             height: 14,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4CAF50),
+                              color: AppPalette.success,
                               shape: BoxShape.circle,
                               border: Border.all(
                                 color: isDarkMode
-                                    ? const Color(0xFF1E1E1E)
+                                    ? AppPalette.surfaceDark
                                     : Colors.white,
                                 width: 2,
                               ),
@@ -607,8 +601,8 @@ class _UserListScreenState extends State<UserListScreen>
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: isDarkMode
-                                ? Colors.white
-                                : const Color(0xFF1A1A1A),
+                                ? AppPalette.textPrimaryDark
+                                : AppPalette.textPrimaryLight,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -645,10 +639,10 @@ class _UserListScreenState extends State<UserListScreen>
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: user.isOnline
-                                      ? const Color(0xFF4CAF50)
+                                      ? AppPalette.success
                                       : isDarkMode
-                                      ? Colors.white38
-                                      : Colors.grey.shade500,
+                                      ? AppPalette.textMutedDark
+                                      : AppPalette.textMutedLight,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -666,7 +660,7 @@ class _UserListScreenState extends State<UserListScreen>
                     height: 44,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                        colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -695,8 +689,8 @@ class _UserListScreenState extends State<UserListScreen>
         radius: 26,
         backgroundImage: NetworkImage(avatarUrl),
         backgroundColor: isDarkMode
-            ? const Color(0xFF2C2C2C)
-            : Colors.grey.shade200,
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.outlineLight,
         onBackgroundImageError: (e, s) {
           if (kDebugMode) print('⚠️ Failed to load avatar: $e');
         },
@@ -719,9 +713,9 @@ class _UserListScreenState extends State<UserListScreen>
 
   Color _getAvatarColor(String name) {
     final colors = [
-      const Color(0xFF6B9B5B),
-      const Color(0xFF2196F3),
-      const Color(0xFFFF9800),
+      AppPalette.emerald,
+      AppPalette.info,
+      AppPalette.warning,
       const Color(0xFF9C27B0),
       const Color(0xFFE91E63),
       const Color(0xFF00BCD4),
@@ -733,15 +727,15 @@ class _UserListScreenState extends State<UserListScreen>
   Color _getRoleColor(String role) {
     switch (role.toLowerCase()) {
       case 'driver':
-        return const Color(0xFF2196F3);
+        return AppPalette.info;
       case 'guardian':
       case 'parent':
         return const Color(0xFF9C27B0);
       case 'admin':
       case 'staff':
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
       default:
-        return const Color(0xFF6B9B5B);
+        return AppPalette.emerald;
     }
   }
 }

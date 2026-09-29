@@ -10,6 +10,11 @@ import '../../providers/auth_provider.dart';
 import '../../utils/permission_helper.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
+
 class ManageChildrenScreen extends StatefulWidget {
   const ManageChildrenScreen({super.key});
 
@@ -109,7 +114,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     // Show loading
     if (isLoading && children.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        child: CircularProgressIndicator(color: AppPalette.emerald),
       );
     }
 
@@ -139,7 +144,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
             ElevatedButton(
               onPressed: () => provider.fetchGuardianStudents(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Retry'),
@@ -158,7 +163,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
             Icon(
               Icons.child_care,
               size: 80,
-              color: provider.textMutedColor.withValues(alpha: 128),
+              color: provider.textMutedColor.withAlpha(128),
             ),
             const SizedBox(height: 16),
             Text(
@@ -190,13 +195,35 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     );
   }
 
+  /// Speed-dial options grow out of the main FAB (bottom-right) instead of
+  /// popping in fully formed.
+  Widget _speedDialOption(Widget child) {
+    return AnimatedSize(
+      duration: AppDuration.fast,
+      curve: AppCurves.easeOut,
+      child: AnimatedSwitcher(
+        duration: AppDuration.fast,
+        switchInCurve: AppCurves.easeOut,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.9, end: 1.0).animate(animation),
+            alignment: Alignment.bottomRight,
+            child: child,
+          ),
+        ),
+        child: child,
+      ),
+    );
+  }
+
   /// Build Speed Dial FAB with expandable options
   Widget _buildSpeedDialFab(AppProvider provider) {
     // Ensure controller is initialized
     if (_fabController == null) {
       return FloatingActionButton(
         onPressed: () {},
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         child: const Icon(Icons.add),
       );
     }
@@ -206,9 +233,8 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         // Secondary option: Add Extended Guardian
-        AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          child: _isFabExpanded
+        _speedDialOption(
+          _isFabExpanded
               ? Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: FloatingActionButton.extended(
@@ -216,7 +242,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                       _toggleFab();
                       _showAddExtendedGuardianDialog(context, provider);
                     },
-                    backgroundColor: const Color(0xFF6B9B5B).withAlpha(230),
+                    backgroundColor: AppPalette.emerald.withAlpha(230),
                     icon: const Icon(Icons.people_outline, size: 20),
                     label: const Text(
                       'Add Guardian',
@@ -228,9 +254,8 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
               : const SizedBox.shrink(),
         ),
         // Primary option: Add Child
-        AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          child: _isFabExpanded
+        _speedDialOption(
+          _isFabExpanded
               ? Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: FloatingActionButton.extended(
@@ -238,7 +263,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                       _toggleFab();
                       _showAddChildDialog(context);
                     },
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     icon: const Icon(Icons.person_add, size: 20),
                     label: const Text(
                       'Add Child',
@@ -252,12 +277,13 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         // Main FAB - toggles the menu
         FloatingActionButton(
           onPressed: _toggleFab,
-          backgroundColor: const Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
           child: AnimatedBuilder(
             animation: _fabController!,
             builder: (context, child) {
               return Transform.rotate(
-                angle: _fabController!.value * 0.785398,
+                angle: AppCurves.easeInOut.transform(_fabController!.value) *
+                    0.785398,
                 child: const Icon(Icons.add, size: 28),
               );
             },
@@ -277,11 +303,11 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       key: Key(child.id),
       direction: DismissDirection.endToStart,
       background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+        padding: const EdgeInsets.only(right: AppSpacing.lg),
         decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(16),
+          color: context.colors.error,
+          borderRadius: AppRadius.brLg,
         ),
         alignment: Alignment.centerRight,
         child: const Icon(Icons.delete, color: Colors.white),
@@ -300,7 +326,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
+                  backgroundColor: AppPalette.error,
                   foregroundColor: Colors.white,
                 ),
                 child: const Text('Delete'),
@@ -317,45 +343,36 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
           ).showSnackBar(SnackBar(content: Text('${child.name} removed')));
         }
       },
-      child: GestureDetector(
-        onTap: () => Navigator.pushNamed(
-          context,
-          '/child-profile',
-          arguments: {'childId': child.id},
-        ),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: provider.cardColor,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 13),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        // Flat + hairline outline: a list of peers doesn't need elevation.
+        child: AppCard(
+          onTap: () => Navigator.pushNamed(
+            context,
+            '/child-profile',
+            arguments: {'childId': child.id},
           ),
+          shadow: const [],
+          border: Border.all(color: context.colors.outline),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           child: Row(
             children: [
-              // Profile Image with placeholder
               GestureDetector(
                 onTap: () => _showImagePickerOptions(context, child),
                 child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     _buildProfileImage(child.photo, provider),
-                    // Edit icon overlay
                     Positioned(
-                      right: 0,
-                      bottom: 0,
+                      right: -2,
+                      bottom: -2,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(AppSpacing.xxs),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6B9B5B),
+                          color: context.colors.brand,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: provider.cardColor,
+                            color: context.scheme.surface,
                             width: 2,
                           ),
                         ),
@@ -369,52 +386,46 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              // Child Info: fullName, schoolName, route
+              AppSpacing.hMd,
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Full Name
                     Text(
                       child.name.isNotEmpty ? child.name : 'Unknown',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: provider.textColor,
-                      ),
+                      style: context.text.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    // School Name
+                    AppSpacing.vXxs,
                     Text(
                       child.schoolName ?? 'No School',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: provider.textMutedColor,
+                      style: context.text.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    // Route
+                    AppSpacing.vXs,
                     Row(
                       children: [
                         Icon(
                           Icons.route,
-                          size: 12,
-                          color: const Color(0xFF6B9B5B),
+                          size: 14,
+                          color: child.route != null
+                              ? context.colors.brand
+                              : context.colors.textMuted,
                         ),
-                        const SizedBox(width: 4),
+                        AppSpacing.hXxs,
                         Expanded(
                           child: Text(
-                            child.route ?? 'No Route Assigned',
-                            style: TextStyle(
-                              fontSize: 12,
+                            child.route ?? 'No route assigned',
+                            style: context.text.labelMedium?.copyWith(
                               color: child.route != null
-                                  ? const Color(0xFF6B9B5B)
-                                  : provider.textMutedColor,
-                              fontWeight: child.route != null
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
+                                  ? context.colors.brand
+                                  : context.colors.textMuted,
                             ),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -423,28 +434,18 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                   ],
                 ),
               ),
-              // Phone icon - shows guardian phone on tap
               if (child.guardianPhone != null &&
                   child.guardianPhone!.isNotEmpty)
-                GestureDetector(
-                  onTap: () => _showGuardianPhone(context, child),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6B9B5B).withAlpha(30),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.phone,
-                      color: Color(0xFF6B9B5B),
-                      size: 20,
-                    ),
+                IconButton(
+                  tooltip: 'Guardian contact',
+                  onPressed: () => _showGuardianPhone(context, child),
+                  icon: const Icon(Icons.phone_outlined, size: 20),
+                  color: context.colors.brand,
+                  style: IconButton.styleFrom(
+                    backgroundColor: context.colors.brandSoft,
                   ),
-                )
-              else
-                const SizedBox(width: 40),
-              const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: provider.textMutedColor),
+                ),
+              Icon(Icons.chevron_right, color: context.colors.textMuted),
             ],
           ),
         ),
@@ -486,7 +487,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: AppPalette.outlineLight,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -524,11 +525,11 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: AppPalette.outlineLight),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                      borderSide: const BorderSide(color: AppPalette.emerald),
                     ),
                   ),
                 ),
@@ -547,11 +548,11 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: AppPalette.outlineLight),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                      borderSide: const BorderSide(color: AppPalette.emerald),
                     ),
                   ),
                 ),
@@ -569,11 +570,11 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide: BorderSide(color: AppPalette.outlineLight),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF6B9B5B)),
+                      borderSide: const BorderSide(color: AppPalette.emerald),
                     ),
                   ),
                 ),
@@ -605,7 +606,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6B9B5B),
+                      backgroundColor: AppPalette.emerald,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -651,7 +652,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Extended guardian "$name" added successfully'),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -668,10 +669,10 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       width: 64,
       height: 64,
       decoration: BoxDecoration(
-        color: const Color(0xFF6B9B5B).withAlpha(50),
+        color: AppPalette.emerald.withAlpha(50),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.person, color: Color(0xFF6B9B5B), size: 32),
+      child: const Icon(Icons.person, color: AppPalette.emerald, size: 32),
     );
 
     if (photoUrl == null || photoUrl.isEmpty) {
@@ -690,13 +691,13 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withAlpha(30),
+              color: AppPalette.emerald.withAlpha(30),
               shape: BoxShape.circle,
             ),
             child: const Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                valueColor: AlwaysStoppedAnimation<Color>(AppPalette.emerald),
               ),
             ),
           );
@@ -726,7 +727,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: AppPalette.outlineLight,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -740,26 +741,26 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
             const SizedBox(height: 8),
             Text(
               'Guardian Contact',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 14, color: AppPalette.textSecondaryLight),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withAlpha(20),
+                color: AppPalette.emerald.withAlpha(20),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.phone, color: Color(0xFF6B9B5B)),
+                  const Icon(Icons.phone, color: AppPalette.emerald),
                   const SizedBox(width: 12),
                   Text(
                     child.guardianPhone!,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
                 ],
@@ -774,7 +775,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                 icon: const Icon(Icons.call),
                 label: const Text('Call Guardian'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -835,7 +836,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Could not open phone dialer. Please check your phone app.'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppPalette.error,
               duration: Duration(seconds: 3),
             ),
           );
@@ -849,7 +850,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error opening dialer: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppPalette.error,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -872,7 +873,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -887,7 +888,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               const SizedBox(height: 20),
@@ -895,21 +896,21 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
                 ),
                 title: Text(
                   'Take Photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 subtitle: Text(
                   'Use camera to take a photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     fontSize: 13,
                   ),
                 ),
@@ -932,24 +933,24 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withAlpha(30),
+                    color: AppPalette.info.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.photo_library,
-                    color: Color(0xFF2196F3),
+                    color: AppPalette.info,
                   ),
                 ),
                 title: Text(
                   'Choose from Gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 subtitle: Text(
                   'Select a photo from your gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                 ),
                 onTap: () async {
@@ -974,19 +975,19 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.red.withAlpha(30),
+                      color: AppPalette.error.withAlpha(30),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.delete_outline, color: Colors.red),
+                    child: const Icon(Icons.delete_outline, color: AppPalette.error),
                   ),
                   title: const Text(
                     'Remove Photo',
-                    style: TextStyle(color: Colors.red),
+                    style: TextStyle(color: AppPalette.error),
                   ),
                   subtitle: Text(
                     'Delete current profile photo',
                     style: TextStyle(
-                      color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     ),
                   ),
                   onTap: () {
@@ -1026,7 +1027,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+          child: CircularProgressIndicator(color: AppPalette.emerald),
         ),
       );
 
@@ -1044,7 +1045,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${child.name}\'s photo updated successfully'),
-            backgroundColor: const Color(0xFF6B9B5B),
+            backgroundColor: AppPalette.emerald,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -1095,7 +1096,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${child.name}\'s photo removed'),
-            backgroundColor: const Color(0xFF6B9B5B),
+            backgroundColor: AppPalette.emerald,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -1206,7 +1207,7 @@ class _AddChildFormState extends State<AddChildForm> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1221,7 +1222,7 @@ class _AddChildFormState extends State<AddChildForm> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               const SizedBox(height: 20),
@@ -1229,15 +1230,15 @@ class _AddChildFormState extends State<AddChildForm> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
                 ),
                 title: Text(
                   'Take Photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 onTap: () async {
@@ -1255,18 +1256,18 @@ class _AddChildFormState extends State<AddChildForm> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withAlpha(30),
+                    color: AppPalette.info.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.photo_library,
-                    color: Color(0xFF2196F3),
+                    color: AppPalette.info,
                   ),
                 ),
                 title: Text(
                   'Choose from Gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 onTap: () async {
@@ -1350,10 +1351,10 @@ class _AddChildFormState extends State<AddChildForm> {
                           width: 100,
                           height: 100,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B).withAlpha(30),
+                            color: AppPalette.emerald.withAlpha(30),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: const Color(0xFF6B9B5B).withAlpha(50),
+                              color: AppPalette.emerald.withAlpha(50),
                               width: 2,
                             ),
                             image: _selectedImage != null
@@ -1368,7 +1369,7 @@ class _AddChildFormState extends State<AddChildForm> {
                           child: _selectedImage == null
                               ? const Icon(
                                   Icons.add_a_photo,
-                                  color: Color(0xFF6B9B5B),
+                                  color: AppPalette.emerald,
                                   size: 40,
                                 )
                               : null,
@@ -1380,7 +1381,7 @@ class _AddChildFormState extends State<AddChildForm> {
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                               shape: BoxShape.circle,
                               border: Border.all(
                                 color: provider.backgroundColor,
@@ -1457,14 +1458,14 @@ class _AddChildFormState extends State<AddChildForm> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6B9B5B),
+                      backgroundColor: AppPalette.emerald,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                       disabledBackgroundColor: const Color(
                         0xFF6B9B5B,
-                      ).withValues(alpha: 128),
+                      ).withAlpha(128),
                     ),
                     child: _isLoading
                         ? const SizedBox(
@@ -1515,8 +1516,8 @@ class _AddChildFormState extends State<AddChildForm> {
         Container(
           decoration: BoxDecoration(
             color: isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFF5F5F5),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.surfaceSubtleLight,
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonFormField<String>(
@@ -1525,7 +1526,7 @@ class _AddChildFormState extends State<AddChildForm> {
             decoration: InputDecoration(
               prefixIcon: const Icon(
                 Icons.account_balance,
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -1541,15 +1542,15 @@ class _AddChildFormState extends State<AddChildForm> {
             hint: Text(
               'Select School',
               style: TextStyle(
-                color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
-            dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+            dropdownColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
             style: TextStyle(
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               fontSize: 15,
             ),
-            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6B9B5B)),
+            icon: const Icon(Icons.arrow_drop_down, color: AppPalette.emerald),
             items: schools.map((school) {
               return DropdownMenuItem<String>(
                 value: school,
@@ -1602,15 +1603,15 @@ class _AddChildFormState extends State<AddChildForm> {
         Container(
           decoration: BoxDecoration(
             color: isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFF5F5F5),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.surfaceSubtleLight,
             borderRadius: BorderRadius.circular(12),
           ),
           child: DropdownButtonFormField<String>(
             value: _selectedRoute,
             isExpanded: true,
             decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.route, color: Color(0xFF6B9B5B)),
+              prefixIcon: const Icon(Icons.route, color: AppPalette.emerald),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -1625,15 +1626,15 @@ class _AddChildFormState extends State<AddChildForm> {
             hint: Text(
               'Select Route',
               style: TextStyle(
-                color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
-            dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+            dropdownColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
             style: TextStyle(
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               fontSize: 15,
             ),
-            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF6B9B5B)),
+            icon: const Icon(Icons.arrow_drop_down, color: AppPalette.emerald),
             items: routes.map((route) {
               return DropdownMenuItem<String>(
                 value: route,
@@ -1679,20 +1680,20 @@ class _AddChildFormState extends State<AddChildForm> {
       keyboardType: keyboardType,
       validator: validator,
       style: TextStyle(
-        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+        color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
       ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon, color: const Color(0xFF6B9B5B)),
+        prefixIcon: Icon(icon, color: AppPalette.emerald),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         filled: true,
         fillColor: isDarkMode
-            ? const Color(0xFF2C2C2C)
-            : const Color(0xFFF5F5F5),
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.surfaceSubtleLight,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -1720,7 +1721,7 @@ class _AddChildFormState extends State<AddChildForm> {
           context: context,
           barrierDismissible: false,
           builder: (context) => const Center(
-            child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+            child: CircularProgressIndicator(color: AppPalette.emerald),
           ),
         );
       }

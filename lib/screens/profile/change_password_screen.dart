@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
@@ -7,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/mandatory_password_dialog.dart';
 
+import '../../theme/app_colors.dart';
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -38,18 +40,18 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: AppDuration.medium,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: AppCurves.easeOut,
     );
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.1),
+      begin: const Offset(0, 0.03),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOutCubic,
+      curve: AppCurves.easeOut,
     ));
     _animationController.forward();
   }
@@ -312,14 +314,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 height: 90,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF8BC48A)],
+                    colors: [AppPalette.emerald, AppPalette.emeraldBright],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6B9B5B).withAlpha(60),
+                      color: AppPalette.emerald.withAlpha(60),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -337,7 +339,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
               ),
               const SizedBox(height: 12),
@@ -346,7 +348,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.grey,
+                  color: AppPalette.textMutedLight,
                   height: 1.4,
                 ),
               ),
@@ -367,7 +369,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     });
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -415,7 +417,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withAlpha(60),
+                      color: AppPalette.error.withAlpha(60),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -433,7 +435,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: Colors.red,
+                  color: AppPalette.error,
                 ),
               ),
               const SizedBox(height: 12),
@@ -442,7 +444,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.grey,
+                  color: AppPalette.textMutedLight,
                   height: 1.4,
                 ),
               ),
@@ -462,7 +464,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -513,14 +515,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 height: 100,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF8BC48A)],
+                    colors: [AppPalette.emerald, AppPalette.emeraldBright],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF6B9B5B).withAlpha(80),
+                      color: AppPalette.emerald.withAlpha(80),
                       blurRadius: 30,
                       offset: const Offset(0, 10),
                     ),
@@ -538,7 +540,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
               ),
               const SizedBox(height: 12),
@@ -547,7 +549,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: AppPalette.textMutedLight,
                   height: 1.5,
                 ),
               ),
@@ -571,7 +573,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -628,7 +630,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withAlpha(80),
+                      color: AppPalette.error.withAlpha(80),
                       blurRadius: 30,
                       offset: const Offset(0, 10),
                     ),
@@ -646,7 +648,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
-                  color: Colors.red,
+                  color: AppPalette.error,
                 ),
               ),
               const SizedBox(height: 12),
@@ -655,7 +657,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: AppPalette.textMutedLight,
                   height: 1.5,
                 ),
               ),
@@ -673,7 +675,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     _currentController.clear();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -780,14 +782,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                       height: 120,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF6B9B5B), Color(0xFF8BC48A)],
+                          colors: [AppPalette.emerald, AppPalette.emeraldBright],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6B9B5B).withAlpha(50),
+                            color: AppPalette.emerald.withAlpha(50),
                             blurRadius: 30,
                             offset: const Offset(0, 10),
                           ),
@@ -872,11 +874,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6B9B5B).withAlpha(60),
+                            color: AppPalette.emerald.withAlpha(60),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
@@ -923,10 +925,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6B9B5B).withAlpha(15),
+                        color: AppPalette.emerald.withAlpha(15),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: const Color(0xFF6B9B5B).withAlpha(30),
+                          color: AppPalette.emerald.withAlpha(30),
                           width: 1,
                         ),
                       ),
@@ -934,7 +936,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                         children: [
                           Icon(
                             Icons.info_outline,
-                            color: const Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -962,7 +964,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
               color: Colors.black.withAlpha(128),
               child: const Center(
                 child: CircularProgressIndicator(
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   strokeWidth: 3,
                 ),
               ),
@@ -988,7 +990,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
             Icon(
               icon,
               size: 18,
-              color: const Color(0xFF6B9B5B),
+              color: AppPalette.emerald,
             ),
             const SizedBox(width: 8),
             Text(
@@ -1004,10 +1006,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            color: provider.isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+            color: provider.isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: const Color(0xFF6B9B5B).withAlpha(30),
+              color: AppPalette.emerald.withAlpha(30),
               width: 1.5,
             ),
           ),
@@ -1029,7 +1031,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 onPressed: onToggle,
                 icon: Icon(
                   obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: const Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   size: 22,
                 ),
                 splashRadius: 20,

@@ -20,6 +20,8 @@ import '../../theme/app_theme_extension.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
 
+import '../../theme/app_colors.dart';
+
 /// Mapbox Tracking Screen - Real-time trip tracking with Mapbox native SDK
 ///
 /// Features:
@@ -78,7 +80,24 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   // Data
   Trip? _trip;
   PreloadedTripData? _preloadedData;
-  List<TripStudent> _students = [];
+  List<TripStudent> _allStudents = [];
+
+  /// Set for guardians only. Their trip roster is cut down to their own
+  /// children so the map never shows other families' kids.
+  String? _guardianPhone;
+
+  List<TripStudent> get _students {
+    if (_guardianPhone == null) return _allStudents;
+    final phone = normalizeGuardianPhone(_guardianPhone);
+    return _allStudents
+        .where(
+          (s) =>
+              phone.isNotEmpty &&
+              normalizeGuardianPhone(s.guardianPhoneNumber) == phone,
+        )
+        .toList();
+  }
+
   RouteResult? _routeResult;
 
   // State
@@ -112,6 +131,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       vsync: this,
       duration: const Duration(seconds: 2), // Smooth 2s interpolation
     )..addListener(_onAnimationUpdate);
+
+    final auth = context.read<AuthProvider>();
+    if (!auth.isDriver) _guardianPhone = auth.userPhone ?? '';
 
     _initializeMapbox();
     _loadPreloadedData();
@@ -486,7 +508,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       if (preloadedData.students.isEmpty) return;
 
       _preloadedData = preloadedData;
-      _students = List<TripStudent>.from(preloadedData.students);
+      _allStudents = List<TripStudent>.from(preloadedData.students);
       _isLoading = false;
     } catch (e) {
       developer.log(
@@ -497,7 +519,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   Future<void> _loadProviderTripData() async {
-    if (!mounted || _students.isNotEmpty) return;
+    if (!mounted || _allStudents.isNotEmpty) return;
 
     final activeTrip = context.read<TripProvider>().activeTrip;
     if (activeTrip == null) return;
@@ -509,7 +531,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     }
 
     setState(() {
-      _students = activeTrip.students
+      _allStudents = activeTrip.students
           .map(
             (s) => _tripStudentFromPickup(
               id: s.id,
@@ -592,7 +614,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     if (widget.tripId == null) {
       setState(() {
         _isLoading = false;
-        if (_students.isEmpty) {
+        if (_allStudents.isEmpty) {
           _errorMessage = 'No trip ID provided';
         }
       });
@@ -629,7 +651,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         setState(() {
           _trip = trip;
           if (fetchedStudents.isNotEmpty) {
-            _students = fetchedStudents;
+            _allStudents = fetchedStudents;
           }
           _errorMessage = null;
           _isLoading = false;
@@ -642,7 +664,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       } else {
         setState(() {
           _isLoading = false;
-          if (_students.isEmpty) {
+          if (_allStudents.isEmpty) {
             _errorMessage = 'Trip not found';
           }
         });
@@ -651,7 +673,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     } catch (e) {
       setState(() {
         _isLoading = false;
-        if (_students.isEmpty) {
+        if (_allStudents.isEmpty) {
           _errorMessage = 'Error loading trip: $e';
         }
       });
@@ -660,7 +682,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   Future<void> _loadMasterTripStudentsFallback(int? masterTripId) async {
-    if (masterTripId == null || masterTripId <= 0 || _students.isNotEmpty) {
+    if (masterTripId == null || masterTripId <= 0 || _allStudents.isNotEmpty) {
       return;
     }
 
@@ -669,7 +691,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       if (!mounted || students.isEmpty) return;
 
       setState(() {
-        _students = students;
+        _allStudents = students;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -1132,8 +1154,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         SnackBar(
           content: Text('${student.fullname} ${_statusMessage(status)}'),
           backgroundColor: status == 'absent'
-              ? Colors.orange
-              : const Color(0xFF6B9B5B),
+              ? AppPalette.warning
+              : AppPalette.emerald,
         ),
       );
     } finally {
@@ -1203,7 +1225,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           content: Text(
             pick ? '$count students picked up' : '$count students dropped off',
           ),
-          backgroundColor: const Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
         ),
       );
     } finally {
@@ -1214,7 +1236,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   void _showStatusError(String message) {
     setState(() => _statusErrorMessage = message);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(content: Text(message), backgroundColor: AppPalette.error),
     );
   }
 
@@ -1291,7 +1313,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       schoolName: student.schoolName,
     );
     setState(() {
-      _students = [..._students, tripStudent];
+      _allStudents = [..._allStudents, tripStudent];
       _errorMessage = null;
     });
     _syncRosterToProvider();
@@ -1353,7 +1375,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.schedule, color: Color(0xFF6B9B5B)),
+                leading: const Icon(Icons.schedule, color: AppPalette.emerald),
                 title: const Text('Running Late'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1361,7 +1383,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.traffic, color: Color(0xFF6B9B5B)),
+                leading: const Icon(Icons.traffic, color: AppPalette.emerald),
                 title: const Text('Traffic Delay'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1371,7 +1393,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
               ListTile(
                 leading: const Icon(
                   Icons.check_circle,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
                 title: const Text('On Schedule'),
                 onTap: () {
@@ -1396,7 +1418,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('$label notification sent to $guardians guardians'),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
       ),
     );
   }
@@ -1406,7 +1428,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Failed to complete trip: $errorMessage'),
-        backgroundColor: Colors.red,
+        backgroundColor: AppPalette.error,
       ),
     );
   }
@@ -1471,7 +1493,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Trip completed successfully'),
-          backgroundColor: Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
         ),
       );
       // Show the finished trip; Back from there lands on the dashboard.
@@ -1494,7 +1516,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(_routeName),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -1527,7 +1549,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+                child: CircularProgressIndicator(color: AppPalette.emerald),
               ),
             ),
 
@@ -1547,7 +1569,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                     const Icon(
                       Icons.error_outline,
                       size: 48,
-                      color: Colors.red,
+                      color: AppPalette.error,
                     ),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
@@ -1573,7 +1595,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                     padding: EdgeInsets.all(12),
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
                 ),
@@ -1600,7 +1622,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                     heroTag: 'add-student',
                     tooltip: 'Add student',
                     onPressed: _isUpdatingStudentStatus ? null : _addStudent,
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     child: const Icon(
                       Icons.person_add_alt_1_rounded,
                       color: Colors.white,
@@ -1619,7 +1641,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   backgroundColor: Colors.white,
                   child: Icon(
                     _followBus ? Icons.navigation_rounded : Icons.my_location,
-                    color: const Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                   ),
                 ),
               ],
@@ -1692,7 +1714,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                       height: 44,
                       width: 44,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6B9B5B).withValues(alpha: 0.12),
+                        color: AppPalette.emerald.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
@@ -1761,27 +1783,33 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   compact: true,
                   embedded: true,
                   padding: EdgeInsets.zero,
-                  onPickedUpStudent: (target) {
-                    final selected = _studentForCardTarget(target);
-                    if (selected != null) {
-                      _updateStudentStatus(selected, 'picked');
-                    }
-                  },
-                  onDroppedOffStudent: (target) {
-                    final selected = _studentForCardTarget(target);
-                    if (selected != null) {
-                      _updateStudentStatus(selected, 'dropped');
-                    }
-                  },
-                  onAbsentStudent: (target) {
-                    final selected = _studentForCardTarget(target);
-                    if (selected != null) {
-                      _updateStudentStatus(selected, 'absent');
-                    }
-                  },
+                  onPickedUpStudent: !canCompleteTrip
+                      ? null
+                      : (target) {
+                          final selected = _studentForCardTarget(target);
+                          if (selected != null) {
+                            _updateStudentStatus(selected, 'picked');
+                          }
+                        },
+                  onDroppedOffStudent: !canCompleteTrip
+                      ? null
+                      : (target) {
+                          final selected = _studentForCardTarget(target);
+                          if (selected != null) {
+                            _updateStudentStatus(selected, 'dropped');
+                          }
+                        },
+                  onAbsentStudent: !canCompleteTrip
+                      ? null
+                      : (target) {
+                          final selected = _studentForCardTarget(target);
+                          if (selected != null) {
+                            _updateStudentStatus(selected, 'absent');
+                          }
+                        },
                   onChat: _openTripChat,
-                  onStudents: _openStudentsList,
-                  onNotify: _showNotifyOptions,
+                  onStudents: canCompleteTrip ? _openStudentsList : null,
+                  onNotify: canCompleteTrip ? _showNotifyOptions : null,
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -1799,7 +1827,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                         icon: Icons.pending_actions_rounded,
                         value: '$waitingStudents',
                         label: 'Waiting',
-                        color: Colors.orange,
+                        color: AppPalette.warning,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1813,8 +1841,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                             '$pickedStudents',
                         label: _routeResult == null ? 'Picked' : 'ETA',
                         color: _routeResult == null
-                            ? Colors.green
-                            : Colors.blue,
+                            ? AppPalette.success
+                            : AppPalette.info,
                       ),
                     ),
                   ],
@@ -1884,10 +1912,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey.shade300,
-          disabledForegroundColor: Colors.grey.shade600,
+          disabledBackgroundColor: AppPalette.outlineLight,
+          disabledForegroundColor: AppPalette.textSecondaryLight,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -1901,14 +1929,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.grey.shade600),
+        Icon(icon, size: 14, color: AppPalette.textSecondaryLight),
         const SizedBox(width: 4),
         Text(
           label,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
+            color: AppPalette.textSecondaryLight,
           ),
         ),
       ],
@@ -1919,9 +1947,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.1),
+        color: AppPalette.success.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+        border: Border.all(color: AppPalette.success.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1930,9 +1958,9 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             width: 8,
             height: 8,
             decoration: const BoxDecoration(
-              color: Colors.green,
+              color: AppPalette.success,
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.green, blurRadius: 4)],
+              boxShadow: [BoxShadow(color: AppPalette.success, blurRadius: 4)],
             ),
           ),
           const SizedBox(width: 6),
@@ -1941,7 +1969,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: Colors.green,
+              color: AppPalette.success,
             ),
           ),
         ],
@@ -1953,7 +1981,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     required IconData icon,
     required String value,
     required String label,
-    Color color = const Color(0xFF6B9B5B),
+    Color color = AppPalette.emerald,
   }) {
     return Container(
       height: 54,
@@ -1990,7 +2018,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: AppPalette.textSecondaryLight,
                   ),
                 ),
               ],

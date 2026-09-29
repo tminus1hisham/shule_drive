@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
@@ -13,6 +14,7 @@ import '../../api/api.dart' as api;
 import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Start Trip Screen - Unified trip view for both drivers and guardians
 ///
 /// Driver Mode:
@@ -63,20 +65,20 @@ class _StartTripScreenState extends State<StartTripScreen>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: AppDuration.medium,
       vsync: this,
     );
 
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: AppCurves.easeOut,
     );
 
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.03), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _animationController,
-            curve: Curves.easeOutCubic,
+            curve: AppCurves.easeOut,
           ),
         );
 
@@ -274,7 +276,7 @@ class _StartTripScreenState extends State<StartTripScreen>
             content: Text(
               'A trip is already in progress. End it before starting a new one.',
             ),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppPalette.warning,
           ),
         );
         navigator.pushReplacementNamed(
@@ -303,7 +305,7 @@ class _StartTripScreenState extends State<StartTripScreen>
         messenger.showSnackBar(
           SnackBar(
             content: Text(tripProvider.errorMessage ?? 'Failed to start trip'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppPalette.error,
           ),
         );
         return;
@@ -339,7 +341,7 @@ class _StartTripScreenState extends State<StartTripScreen>
       messenger.showSnackBar(
         SnackBar(
           content: Text('Error starting trip: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppPalette.error,
         ),
       );
     } finally {
@@ -456,8 +458,8 @@ class _StartTripScreenState extends State<StartTripScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDarkMode
-                ? [const Color(0xFF1A1A1A), const Color(0xFF0D0D0D)]
-                : [const Color(0xFFF5F5F0), Colors.white],
+                ? [AppPalette.surfaceDark, AppPalette.bgDark]
+                : [AppPalette.bgLight, Colors.white],
           ),
         ),
         child: SafeArea(
@@ -475,7 +477,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                       children: [
                         const CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF6B9B5B),
+                            AppPalette.emerald,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -483,8 +485,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                           'Loading trip...',
                           style: TextStyle(
                             color: isDarkMode
-                                ? Colors.white60
-                                : Colors.grey.shade600,
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                           ),
                         ),
                       ],
@@ -575,27 +577,28 @@ class _StartTripScreenState extends State<StartTripScreen>
           // Animated Bus Icon
           TweenAnimationBuilder(
             tween: Tween<double>(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 1000),
+            duration: AppDuration.slow,
+            curve: AppCurves.easeOut,
             builder: (context, value, child) {
               return Transform.scale(
-                scale: 0.8 + (0.2 * value),
+                scale: 0.9 + (0.1 * value),
                 child: Container(
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
                     gradient: hasActiveTrip
                         ? const LinearGradient(
-                            colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                            colors: [AppPalette.info, AppPalette.info],
                           )
                         : const LinearGradient(
-                            colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                            colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                           ),
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
                         color: hasActiveTrip
-                            ? const Color(0xFF2196F3).withAlpha(100)
-                            : const Color(0xFF6B9B5B).withAlpha(100),
+                            ? AppPalette.info.withAlpha(100)
+                            : AppPalette.emerald.withAlpha(100),
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       ),
@@ -622,7 +625,7 @@ class _StartTripScreenState extends State<StartTripScreen>
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 8),
@@ -636,7 +639,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                       : 'Configure your trip details below'),
             style: TextStyle(
               fontSize: 15,
-              color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
           ),
         ],
@@ -659,12 +662,12 @@ class _StartTripScreenState extends State<StartTripScreen>
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                colors: [AppPalette.emerald, AppPalette.emeraldPressed],
               ),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B9B5B).withAlpha(100),
+                  color: AppPalette.emerald.withAlpha(100),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -680,7 +683,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                       width: 10,
                       height: 10,
                       decoration: const BoxDecoration(
-                        color: Colors.red,
+                        color: AppPalette.error,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -743,28 +746,6 @@ class _StartTripScreenState extends State<StartTripScreen>
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                // Stats
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildGuardianStat(
-                      Icons.access_time,
-                      '${DateTime.now().difference(trip.startTime).inMinutes}m',
-                      'Duration',
-                    ),
-                    _buildGuardianStat(
-                      Icons.people,
-                      '${trip.pickedCount}/${trip.students.length}',
-                      'Picked Up',
-                    ),
-                    _buildGuardianStat(
-                      Icons.pending,
-                      '${trip.pendingCount}',
-                      'Remaining',
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -778,7 +759,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
           ),
@@ -794,15 +775,15 @@ class _StartTripScreenState extends State<StartTripScreen>
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF1E1E1E)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.info_outline,
-                    color: isDarkMode ? Colors.white60 : Colors.grey,
+                    color: isDarkMode ? Colors.white60 : AppPalette.textMutedLight,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -810,8 +791,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                       'Your child is not assigned to this trip',
                       style: TextStyle(
                         color: isDarkMode
-                            ? Colors.white70
-                            : Colors.grey.shade700,
+                            ? AppPalette.textSecondaryDark
+                            : AppPalette.textSecondaryLight,
                       ),
                     ),
                   ),
@@ -831,7 +812,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isDarkMode
-                    ? const Color(0xFF2196F3)
+                    ? AppPalette.info
                     : const Color(0xFF90CAF9),
               ),
             ),
@@ -840,8 +821,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                 Icon(
                   Icons.security,
                   color: isDarkMode
-                      ? const Color(0xFF2196F3)
-                      : const Color(0xFF1976D2),
+                      ? AppPalette.info
+                      : AppPalette.info,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -853,8 +834,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isDarkMode
-                              ? Colors.white
-                              : const Color(0xFF1A1A1A),
+                              ? AppPalette.textPrimaryDark
+                              : AppPalette.textPrimaryLight,
                         ),
                       ),
                       Text(
@@ -862,8 +843,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                         style: TextStyle(
                           fontSize: 12,
                           color: isDarkMode
-                              ? Colors.white70
-                              : Colors.grey.shade700,
+                              ? AppPalette.textSecondaryDark
+                              : AppPalette.textSecondaryLight,
                         ),
                       ),
                     ],
@@ -877,27 +858,6 @@ class _StartTripScreenState extends State<StartTripScreen>
     );
   }
 
-  Widget _buildGuardianStat(IconData icon, String value, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white70, size: 24),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12),
-        ),
-      ],
-    );
-  }
-
   Widget _buildGuardianChildCard(api.StudentPickup student, bool isDarkMode) {
     final isPicked = student.status == 'picked';
     final isDropped = student.status == 'dropped';
@@ -907,15 +867,15 @@ class _StartTripScreenState extends State<StartTripScreen>
     IconData statusIcon;
 
     if (isDropped) {
-      statusColor = Colors.blue;
+      statusColor = AppPalette.info;
       statusText = 'Dropped Off';
       statusIcon = Icons.home;
     } else if (isPicked) {
-      statusColor = Colors.green;
+      statusColor = AppPalette.success;
       statusText = 'Picked Up';
       statusIcon = Icons.check_circle;
     } else {
-      statusColor = Colors.orange;
+      statusColor = AppPalette.warning;
       statusText = 'Waiting for Pickup';
       statusIcon = Icons.schedule;
     }
@@ -924,7 +884,7 @@ class _StartTripScreenState extends State<StartTripScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: statusColor.withAlpha(50), width: 2),
         boxShadow: [
@@ -991,7 +951,7 @@ class _StartTripScreenState extends State<StartTripScreen>
             Icon(
               Icons.calendar_today,
               size: 80,
-              color: isDarkMode ? Colors.white30 : Colors.grey.shade300,
+              color: isDarkMode ? Colors.white30 : AppPalette.outlineLight,
             ),
             const SizedBox(height: 24),
             Text(
@@ -999,7 +959,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 12),
@@ -1008,7 +968,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 32),
@@ -1017,8 +977,8 @@ class _StartTripScreenState extends State<StartTripScreen>
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF1E1E1E)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -1027,13 +987,13 @@ class _StartTripScreenState extends State<StartTripScreen>
                     Icons.schedule,
                     color: isDarkMode
                         ? Colors.white.withAlpha(100)
-                        : Colors.grey.shade400,
+                        : AppPalette.textMutedLight,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Upcoming trips will appear here',
                     style: TextStyle(
-                      color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     ),
                   ),
                 ],
@@ -1054,9 +1014,9 @@ class _StartTripScreenState extends State<StartTripScreen>
           end: Alignment.bottomCenter,
           colors: [
             isDarkMode
-                ? const Color(0xFF0D0D0D).withAlpha(0)
+                ? AppPalette.bgDark.withAlpha(0)
                 : Colors.white.withAlpha(0),
-            isDarkMode ? const Color(0xFF0D0D0D) : Colors.white,
+            isDarkMode ? AppPalette.bgDark : Colors.white,
           ],
         ),
       ),
@@ -1078,10 +1038,10 @@ class _StartTripScreenState extends State<StartTripScreen>
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6B9B5B),
+                      backgroundColor: AppPalette.emerald,
                       foregroundColor: Colors.white,
                       elevation: 8,
-                      shadowColor: const Color(0xFF6B9B5B).withAlpha(100),
+                      shadowColor: AppPalette.emerald.withAlpha(100),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
@@ -1100,8 +1060,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                     icon: const Icon(Icons.chat),
                     label: const Text('Chat with Driver'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6B9B5B),
-                      side: const BorderSide(color: Color(0xFF6B9B5B)),
+                      foregroundColor: AppPalette.emerald,
+                      side: const BorderSide(color: AppPalette.emerald),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1129,12 +1089,12 @@ class _StartTripScreenState extends State<StartTripScreen>
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                colors: [AppPalette.info, AppPalette.info],
               ),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2196F3).withAlpha(100),
+                  color: AppPalette.info.withAlpha(100),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1281,8 +1241,8 @@ class _StartTripScreenState extends State<StartTripScreen>
             height: 200,
             decoration: BoxDecoration(
               color: isDarkMode
-                  ? const Color(0xFF1E1E1E)
-                  : Colors.grey.shade100,
+                  ? AppPalette.surfaceDark
+                  : AppPalette.surfaceSubtleLight,
               borderRadius: BorderRadius.circular(16),
             ),
             child: ClipRRect(
@@ -1292,8 +1252,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                   // Map placeholder
                   Container(
                     color: isDarkMode
-                        ? const Color(0xFF2C2C2C)
-                        : const Color(0xFFE8F5E9),
+                        ? AppPalette.surfaceSubtleDark
+                        : AppPalette.emeraldSoftLight,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -1303,15 +1263,15 @@ class _StartTripScreenState extends State<StartTripScreen>
                             size: 48,
                             color: isDarkMode
                                 ? Colors.white38
-                                : const Color(0xFF6B9B5B),
+                                : AppPalette.emerald,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Route Map',
                             style: TextStyle(
                               color: isDarkMode
-                                  ? Colors.white60
-                                  : Colors.grey.shade600,
+                                  ? AppPalette.textSecondaryDark
+                                  : AppPalette.textSecondaryLight,
                             ),
                           ),
                         ],
@@ -1408,9 +1368,9 @@ class _StartTripScreenState extends State<StartTripScreen>
           end: Alignment.bottomCenter,
           colors: [
             isDarkMode
-                ? const Color(0xFF0D0D0D).withAlpha(0)
+                ? AppPalette.bgDark.withAlpha(0)
                 : Colors.white.withAlpha(0),
-            isDarkMode ? const Color(0xFF0D0D0D) : Colors.white,
+            isDarkMode ? AppPalette.bgDark : Colors.white,
           ],
         ),
       ),
@@ -1429,10 +1389,10 @@ class _StartTripScreenState extends State<StartTripScreen>
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2196F3),
+                  backgroundColor: AppPalette.info,
                   foregroundColor: Colors.white,
                   elevation: 8,
-                  shadowColor: const Color(0xFF2196F3).withAlpha(100),
+                  shadowColor: AppPalette.info.withAlpha(100),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -1442,10 +1402,10 @@ class _StartTripScreenState extends State<StartTripScreen>
             const SizedBox(height: 12),
             TextButton.icon(
               onPressed: () => _confirmEndTrip(trip),
-              icon: const Icon(Icons.stop_circle, color: Colors.red),
+              icon: const Icon(Icons.stop_circle, color: AppPalette.error),
               label: const Text(
                 'End Trip',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: AppPalette.error),
               ),
             ),
           ],
@@ -1470,21 +1430,21 @@ class _StartTripScreenState extends State<StartTripScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
+              color: isDarkMode ? Colors.white12 : AppPalette.outlineLight,
             ),
           ),
           child: Column(
             children: [
-              Icon(icon, color: const Color(0xFF6B9B5B), size: 24),
+              Icon(icon, color: AppPalette.emerald, size: 24),
               const SizedBox(height: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                 ),
               ),
             ],
@@ -1533,7 +1493,7 @@ class _StartTripScreenState extends State<StartTripScreen>
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.schedule, color: Color(0xFF6B9B5B)),
+              leading: const Icon(Icons.schedule, color: AppPalette.emerald),
               title: const Text('Running Late'),
               onTap: () {
                 Navigator.pop(context);
@@ -1541,7 +1501,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.traffic, color: Color(0xFF6B9B5B)),
+              leading: const Icon(Icons.traffic, color: AppPalette.emerald),
               title: const Text('Traffic Delay'),
               onTap: () {
                 Navigator.pop(context);
@@ -1549,7 +1509,7 @@ class _StartTripScreenState extends State<StartTripScreen>
               },
             ),
             ListTile(
-              leading: const Icon(Icons.check_circle, color: Color(0xFF6B9B5B)),
+              leading: const Icon(Icons.check_circle, color: AppPalette.emerald),
               title: const Text('On Schedule'),
               onTap: () {
                 Navigator.pop(context);
@@ -1593,7 +1553,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppPalette.error),
             child: const Text(
               'End Trip',
               style: TextStyle(color: Colors.white),
@@ -1608,7 +1568,7 @@ class _StartTripScreenState extends State<StartTripScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppPalette.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1620,7 +1580,7 @@ class _StartTripScreenState extends State<StartTripScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1657,25 +1617,26 @@ class _StartTripScreenState extends State<StartTripScreen>
       child: Column(
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
+            duration: AppDuration.medium,
+            curve: Curves.ease,
             width: 40,
             height: 40,
             decoration: BoxDecoration(
               gradient: isCompleted
                   ? const LinearGradient(
-                      colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                      colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                     )
                   : null,
               color: isCompleted
                   ? null
                   : isActive
-                  ? const Color(0xFF6B9B5B).withAlpha(30)
+                  ? AppPalette.emerald.withAlpha(30)
                   : isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : Colors.grey.shade200,
+                  ? AppPalette.surfaceSubtleDark
+                  : AppPalette.outlineLight,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isActive ? const Color(0xFF6B9B5B) : Colors.transparent,
+                color: isActive ? AppPalette.emerald : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -1687,10 +1648,10 @@ class _StartTripScreenState extends State<StartTripScreen>
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: isActive
-                            ? const Color(0xFF6B9B5B)
+                            ? AppPalette.emerald
                             : isDarkMode
-                            ? Colors.white38
-                            : Colors.grey,
+                            ? AppPalette.textMutedDark
+                            : AppPalette.textMutedLight,
                       ),
                     ),
             ),
@@ -1702,10 +1663,10 @@ class _StartTripScreenState extends State<StartTripScreen>
               fontSize: 12,
               fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
               color: isActive
-                  ? const Color(0xFF6B9B5B)
+                  ? AppPalette.emerald
                   : isDarkMode
-                  ? Colors.white38
-                  : Colors.grey,
+                  ? AppPalette.textMutedDark
+                  : AppPalette.textMutedLight,
             ),
           ),
         ],
@@ -1717,20 +1678,21 @@ class _StartTripScreenState extends State<StartTripScreen>
     return Expanded(
       flex: 2,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+        duration: AppDuration.medium,
+        curve: Curves.ease,
         height: 3,
         margin: const EdgeInsets.only(bottom: 25),
         decoration: BoxDecoration(
           gradient: isCompleted
               ? const LinearGradient(
-                  colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                  colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                 )
               : null,
           color: isCompleted
               ? null
               : isDarkMode
-              ? const Color(0xFF2C2C2C)
-              : Colors.grey.shade200,
+              ? AppPalette.surfaceSubtleDark
+              : AppPalette.outlineLight,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -1743,13 +1705,13 @@ class _StartTripScreenState extends State<StartTripScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+            valueColor: AlwaysStoppedAnimation<Color>(AppPalette.emerald),
           ),
           const SizedBox(height: 20),
           Text(
             'Loading your trips...',
             style: TextStyle(
-              color: isDarkMode ? Colors.white60 : Colors.grey,
+              color: isDarkMode ? Colors.white60 : AppPalette.textMutedLight,
               fontSize: 16,
             ),
           ),
@@ -1861,7 +1823,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           width: 4,
           height: 20,
           decoration: BoxDecoration(
-            color: const Color(0xFF6B9B5B),
+            color: AppPalette.emerald,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -1871,7 +1833,7 @@ class _StartTripScreenState extends State<StartTripScreen>
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
           ),
         ),
       ],
@@ -1895,18 +1857,19 @@ class _StartTripScreenState extends State<StartTripScreen>
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: AppDuration.fast,
+            curve: Curves.ease,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: isSelected
                   ? const LinearGradient(
-                      colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                      colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                     )
                   : null,
               color: isSelected
                   ? null
                   : isDarkMode
-                  ? const Color(0xFF1E1E1E)
+                  ? AppPalette.surfaceDark
                   : Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -1914,7 +1877,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                     ? Colors.transparent
                     : isDarkMode
                     ? Colors.white12
-                    : Colors.grey.shade200,
+                    : AppPalette.outlineLight,
               ),
               boxShadow: [
                 if (!isSelected)
@@ -1932,12 +1895,12 @@ class _StartTripScreenState extends State<StartTripScreen>
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.white.withAlpha(30)
-                        : const Color(0xFF6B9B5B).withAlpha(20),
+                        : AppPalette.emerald.withAlpha(20),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     icon,
-                    color: isSelected ? Colors.white : const Color(0xFF6B9B5B),
+                    color: isSelected ? Colors.white : AppPalette.emerald,
                     size: 24,
                   ),
                 ),
@@ -1954,8 +1917,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                           color: isSelected
                               ? Colors.white
                               : isDarkMode
-                              ? Colors.white
-                              : const Color(0xFF1A1A1A),
+                              ? AppPalette.textPrimaryDark
+                              : AppPalette.textPrimaryLight,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1966,8 +1929,8 @@ class _StartTripScreenState extends State<StartTripScreen>
                           color: isSelected
                               ? Colors.white.withAlpha(230)
                               : isDarkMode
-                              ? Colors.white60
-                              : Colors.grey.shade600,
+                              ? AppPalette.textSecondaryDark
+                              : AppPalette.textSecondaryLight,
                         ),
                       ),
                     ],
@@ -2001,14 +1964,14 @@ class _StartTripScreenState extends State<StartTripScreen>
               _selectedAttendant = selected ? attendant : null;
             });
           },
-          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-          selectedColor: const Color(0xFF6B9B5B),
+          backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
+          selectedColor: AppPalette.emerald,
           labelStyle: TextStyle(
             color: isSelected
                 ? Colors.white
                 : isDarkMode
-                ? Colors.white70
-                : Colors.grey.shade700,
+                ? AppPalette.textSecondaryDark
+                : AppPalette.textSecondaryLight,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -2017,7 +1980,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                   ? Colors.transparent
                   : isDarkMode
                   ? Colors.white12
-                  : Colors.grey.shade300,
+                  : AppPalette.outlineLight,
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2030,21 +1993,21 @@ class _StartTripScreenState extends State<StartTripScreen>
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
+        color: isDarkMode ? AppPalette.surfaceDark : AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
           Icon(
             Icons.info_outline,
-            color: isDarkMode ? Colors.white.withAlpha(100) : Colors.grey,
+            color: isDarkMode ? Colors.white.withAlpha(100) : AppPalette.textMutedLight,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
           ),
@@ -2062,9 +2025,9 @@ class _StartTripScreenState extends State<StartTripScreen>
           end: Alignment.bottomCenter,
           colors: [
             isDarkMode
-                ? const Color(0xFF0D0D0D).withAlpha(0)
+                ? AppPalette.bgDark.withAlpha(0)
                 : Colors.white.withAlpha(0),
-            isDarkMode ? const Color(0xFF0D0D0D) : Colors.white,
+            isDarkMode ? AppPalette.bgDark : Colors.white,
           ],
         ),
       ),
@@ -2075,16 +2038,16 @@ class _StartTripScreenState extends State<StartTripScreen>
           child: ElevatedButton(
             onPressed: _canStartTrip && !_isStartingTrip ? _startTrip : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
               foregroundColor: Colors.white,
               disabledBackgroundColor: isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : Colors.grey.shade200,
+                  ? AppPalette.surfaceSubtleDark
+                  : AppPalette.outlineLight,
               disabledForegroundColor: isDarkMode
                   ? Colors.white30
-                  : Colors.grey.shade400,
+                  : AppPalette.textMutedLight,
               elevation: _canStartTrip ? 8 : 0,
-              shadowColor: const Color(0xFF6B9B5B).withAlpha(100),
+              shadowColor: AppPalette.emerald.withAlpha(100),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -2098,7 +2061,7 @@ class _StartTripScreenState extends State<StartTripScreen>
                     ? Colors.white
                     : isDarkMode
                     ? Colors.white30
-                    : Colors.grey.shade400,
+                    : AppPalette.textMutedLight,
               ),
             ),
           ),

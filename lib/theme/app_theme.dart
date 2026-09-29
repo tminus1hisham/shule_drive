@@ -157,7 +157,9 @@ class AppTheme {
         showDragHandle: true,
         dragHandleColor: appColors.outline,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
         ),
       ),
 
@@ -174,7 +176,9 @@ class AppTheme {
 
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppPalette.surfaceSubtleDark : const Color(0xFF1A211E),
+        backgroundColor: isDark
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.textPrimaryLight,
         contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
         actionTextColor: appColors.brand,
         insetPadding: const EdgeInsets.all(AppSpacing.md),
@@ -228,10 +232,10 @@ class AppTheme {
     surfaceContainerHighest: AppPalette.surfaceSubtleLight,
     onSurfaceVariant: AppPalette.textSecondaryLight,
     outline: AppPalette.outlineLight,
-    outlineVariant: Color(0xFFEDF0F3),
-    shadow: AppPalette.black,
-    scrim: AppPalette.black,
-    inverseSurface: Color(0xFF1A211E),
+    outlineVariant: AppPalette.surfaceSubtleLight,
+    shadow: AppPalette.ink,
+    scrim: AppPalette.ink,
+    inverseSurface: AppPalette.textPrimaryLight,
     onInverseSurface: AppPalette.white,
     inversePrimary: AppPalette.emeraldBright,
   );
@@ -246,8 +250,8 @@ class AppTheme {
     onSecondary: AppPalette.onAmber,
     secondaryContainer: AppPalette.amberSoftDark,
     onSecondaryContainer: AppPalette.amberBright,
-    tertiary: AppPalette.info,
-    onTertiary: AppPalette.white,
+    tertiary: AppPalette.infoBright,
+    onTertiary: AppPalette.ink,
     error: AppPalette.errorBright,
     onError: Color(0xFF450A0A),
     errorContainer: Color(0xFF5B1717),
@@ -257,9 +261,9 @@ class AppTheme {
     surfaceContainerHighest: AppPalette.surfaceSubtleDark,
     onSurfaceVariant: AppPalette.textSecondaryDark,
     outline: AppPalette.outlineDark,
-    outlineVariant: Color(0xFF2C3530),
-    shadow: AppPalette.black,
-    scrim: AppPalette.black,
+    outlineVariant: AppPalette.surfaceSubtleDark,
+    shadow: AppPalette.ink,
+    scrim: AppPalette.ink,
     inverseSurface: AppPalette.surfaceLight,
     onInverseSurface: AppPalette.textPrimaryLight,
     inversePrimary: AppPalette.emerald,

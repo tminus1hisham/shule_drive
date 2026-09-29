@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
+import '../../widgets/ui/staggered_entrance.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
@@ -7,6 +9,7 @@ import '../../api/services/bus_service.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Vehicle Selection Screen
 /// Allows driver to select which vehicle they're using for the trip
 class VehicleSelectionScreen extends StatefulWidget {
@@ -45,7 +48,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: AppDuration.slow,
     );
     _loadVehicles();
   }
@@ -206,12 +209,12 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             height: 80,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                colors: [AppPalette.info, AppPalette.info],
               ),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2196F3).withValues(alpha: 0.3),
+                  color: AppPalette.info.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -229,7 +232,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 8),
@@ -238,7 +241,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               'Trip: ${widget.masterTrip!.tripName}',
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 4),
@@ -246,7 +249,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               'Route: ${widget.masterTrip!.route}',
               style: TextStyle(
                 fontSize: 14,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
           ] else ...[
@@ -254,7 +257,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               'Choose the vehicle you\'ll be using for this trip',
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
           ],
@@ -276,10 +279,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
         ),
       ),
       child: Row(
@@ -289,8 +292,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             height: 56,
             decoration: BoxDecoration(
               color: isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : const Color(0xFFE5E5EA),
+                  ? AppPalette.surfaceSubtleDark
+                  : AppPalette.outlineLight,
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -304,8 +307,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   height: 18,
                   decoration: BoxDecoration(
                     color: isDarkMode
-                        ? const Color(0xFF2C2C2C)
-                        : const Color(0xFFE5E5EA),
+                        ? AppPalette.surfaceSubtleDark
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -315,8 +318,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   height: 14,
                   decoration: BoxDecoration(
                     color: isDarkMode
-                        ? const Color(0xFF2C2C2C)
-                        : const Color(0xFFE5E5EA),
+                        ? AppPalette.surfaceSubtleDark
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -342,7 +345,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 24),
@@ -351,7 +354,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -380,13 +383,13 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               decoration: BoxDecoration(
                 color: isDarkMode
                     ? Colors.white.withValues(alpha: 0.05)
-                    : const Color(0xFF2196F3).withValues(alpha: 0.1),
+                    : AppPalette.info.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.directions_bus,
                 size: 48,
-                color: isDarkMode ? Colors.white30 : const Color(0xFF2196F3),
+                color: isDarkMode ? Colors.white30 : AppPalette.info,
               ),
             ),
             const SizedBox(height: 24),
@@ -395,7 +398,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 8),
@@ -404,7 +407,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 32),
@@ -416,7 +419,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
@@ -434,8 +437,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                   label: const Text('Go Back'),
                   style: TextButton.styleFrom(
                     foregroundColor: isDarkMode
-                        ? Colors.white70
-                        : const Color(0xFF666666),
+                        ? AppPalette.textSecondaryDark
+                        : AppPalette.textSecondaryLight,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 14,
@@ -452,7 +455,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 fontSize: 12,
                 color: isDarkMode
                     ? const Color(0x66FFFFFF)
-                    : const Color(0xFF999999),
+                    : AppPalette.textMutedLight,
               ),
             ),
             // Hidden button for development/testing - long press to add mock vehicle
@@ -494,8 +497,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
   Widget _buildVehiclesList(bool isDarkMode) {
     return RefreshIndicator(
       onRefresh: _loadVehicles,
-      color: const Color(0xFF6B9B5B),
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      color: AppPalette.emerald,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: _vehicles.length,
@@ -503,19 +506,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
           final vehicle = _vehicles[index];
           final isSelected = _selectedVehicle?.id == vehicle.id;
 
-          return AnimatedBuilder(
+          return StaggeredEntrance(
             animation: _animationController,
-            builder: (context, child) {
-              final delay = index * 0.1;
-              final value =
-                  (_animationController.value - delay).clamp(0.0, 1.0) /
-                  (1 - delay);
-
-              return Transform.translate(
-                offset: Offset(0, 20 * (1 - value)),
-                child: Opacity(opacity: value, child: child),
-              );
-            },
+            index: index,
             child: _buildVehicleCard(vehicle, isSelected, isDarkMode),
           );
         },
@@ -529,20 +522,20 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF2196F3)
+                ? AppPalette.info
                 : isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF2196F3).withValues(alpha: 0.2),
+                    color: AppPalette.info.withValues(alpha: 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -560,15 +553,15 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isSelected
-                      ? const Color(0xFF2196F3)
+                      ? AppPalette.info
                       : isDarkMode
-                      ? const Color(0xFF2C2C2C)
-                      : const Color(0xFFE5E5EA),
+                      ? AppPalette.surfaceSubtleDark
+                      : AppPalette.outlineLight,
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFF2196F3)
+                        ? AppPalette.info
                         : isDarkMode
-                        ? const Color(0xFF3A3A3C)
+                        ? AppPalette.surfaceSubtleDark
                         : const Color(0xFFD1D1D6),
                     width: 2,
                   ),
@@ -584,12 +577,12 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                  color: AppPalette.info.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.directions_bus_filled,
-                  color: Color(0xFF2196F3),
+                  color: AppPalette.info,
                   size: 28,
                 ),
               ),
@@ -606,8 +599,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
                         color: isDarkMode
-                            ? Colors.white
-                            : const Color(0xFF1A1A1A),
+                            ? AppPalette.textPrimaryDark
+                            : AppPalette.textPrimaryLight,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -617,8 +610,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
                         style: TextStyle(
                           fontSize: 14,
                           color: isDarkMode
-                              ? Colors.white60
-                              : const Color(0xFF666666),
+                              ? AppPalette.textSecondaryDark
+                              : AppPalette.textSecondaryLight,
                         ),
                       ),
                     const SizedBox(height: 6),
@@ -647,7 +640,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+        color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -656,14 +649,14 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
           Icon(
             icon,
             size: 14,
-            color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
           ),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
           ),
         ],
@@ -676,10 +669,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isActive
-            ? const Color(0xFF4CAF50).withValues(alpha: 0.1)
+            ? AppPalette.success.withValues(alpha: 0.1)
             : isDarkMode
-            ? const Color(0xFF2C2C2C)
-            : const Color(0xFFF5F5F5),
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -690,8 +683,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             height: 6,
             decoration: BoxDecoration(
               color: isActive
-                  ? const Color(0xFF4CAF50)
-                  : const Color(0xFFFF9800),
+                  ? AppPalette.success
+                  : AppPalette.warning,
               shape: BoxShape.circle,
             ),
           ),
@@ -701,10 +694,10 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             style: TextStyle(
               fontSize: 12,
               color: isActive
-                  ? const Color(0xFF4CAF50)
+                  ? AppPalette.success
                   : isDarkMode
-                  ? Colors.white60
-                  : const Color(0xFF666666),
+                  ? AppPalette.textSecondaryDark
+                  : AppPalette.textSecondaryLight,
               fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
             ),
           ),
@@ -719,12 +712,12 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         border: Border(
           top: BorderSide(
             color: isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
           ),
         ),
       ),
@@ -738,14 +731,14 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               child: ElevatedButton(
                 onPressed: canConfirm ? _onConfirm : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2196F3),
+                  backgroundColor: AppPalette.info,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: isDarkMode
-                      ? const Color(0xFF2C2C2C)
-                      : const Color(0xFFE5E5EA),
+                      ? AppPalette.surfaceSubtleDark
+                      : AppPalette.outlineLight,
                   disabledForegroundColor: isDarkMode
                       ? Colors.white30
-                      : const Color(0xFF999999),
+                      : AppPalette.textMutedLight,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -763,7 +756,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
               child: Text(
                 'Back to Trip Selection',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                 ),
               ),
             ),

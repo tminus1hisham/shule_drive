@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
+import '../../widgets/ui/staggered_entrance.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -31,7 +34,7 @@ class _ChatListScreenState extends State<ChatListScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: AppDuration.slow,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
@@ -144,7 +147,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           IconButton(
             icon: Icon(
               Icons.edit_square,
-              color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+              color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
             ),
             onPressed: _navigateToNewChat,
           ),
@@ -176,7 +179,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       separatorBuilder: (_, __) => Divider(
         height: 1,
         indent: 80,
-        color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+        color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
       ),
       itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
     );
@@ -191,7 +194,7 @@ class _ChatListScreenState extends State<ChatListScreen>
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+              color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
               shape: BoxShape.circle,
             ),
           ),
@@ -204,7 +207,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   width: 120,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -213,7 +216,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   width: 180,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -233,7 +236,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           Icon(
             Icons.error_outline,
             size: 48,
-            color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFFC7C7CC),
+            color: isDarkMode ? AppPalette.textMutedDark : const Color(0xFFC7C7CC),
           ),
           const SizedBox(height: 12),
           Text(
@@ -241,7 +244,7 @@ class _ChatListScreenState extends State<ChatListScreen>
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 8),
@@ -250,7 +253,7 @@ class _ChatListScreenState extends State<ChatListScreen>
             child: Text(
               'Try Again',
               style: TextStyle(
-                color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
               ),
             ),
           ),
@@ -270,13 +273,13 @@ class _ChatListScreenState extends State<ChatListScreen>
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.chat_bubble_outline,
                 size: 28,
-                color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
               ),
             ),
             const SizedBox(height: 16),
@@ -285,7 +288,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 6),
@@ -293,7 +296,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               'Start a conversation with drivers or guardians',
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
               ),
             ),
             const SizedBox(height: 20),
@@ -302,7 +305,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               icon: const Icon(Icons.edit, size: 18),
               label: const Text('New Message'),
               style: TextButton.styleFrom(
-                foregroundColor: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+                foregroundColor: isDarkMode ? AppPalette.infoBright : AppPalette.info,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
             ),
@@ -317,8 +320,8 @@ class _ChatListScreenState extends State<ChatListScreen>
       opacity: _fadeAnimation,
       child: RefreshIndicator(
         onRefresh: _loadConversations,
-        color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
-        backgroundColor: isDarkMode ? const Color(0xFF2C2C2E) : Colors.white,
+        color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
+        backgroundColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -330,7 +333,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                    color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -338,14 +341,14 @@ class _ChatListScreenState extends State<ChatListScreen>
                       Icon(
                         Icons.search,
                         size: 18,
-                        color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                        color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Search Messages',
                         style: TextStyle(
                           fontSize: 16,
-                          color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                         ),
                       ),
                     ],
@@ -359,7 +362,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               separatorBuilder: (_, __) => Divider(
                 height: 1,
                 indent: 80,
-                color: isDarkMode ? const Color(0xFF2C2C2E) : const Color(0xFFE5E5EA),
+                color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
               ),
               itemBuilder: (context, index) {
                 final conversation = _conversations[index];
@@ -379,20 +382,9 @@ class _ChatListScreenState extends State<ChatListScreen>
   ) {
     final hasUnread = conversation.unreadCount > 0;
     
-    return AnimatedBuilder(
+    return StaggeredEntrance(
       animation: _animationController,
-      builder: (context, child) {
-        final delay = index * 0.03;
-        final value = (_animationController.value - delay).clamp(0.0, 1.0) / (1 - delay);
-        
-        return Transform.translate(
-          offset: Offset(0, 8 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
-        );
-      },
+      index: index,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -421,7 +413,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: hasUnread ? FontWeight.w600 : FontWeight.w400,
-                                color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -433,8 +425,8 @@ class _ChatListScreenState extends State<ChatListScreen>
                             style: TextStyle(
                               fontSize: 13,
                               color: hasUnread
-                                  ? isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF)
-                                  : isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                                  ? isDarkMode ? AppPalette.infoBright : AppPalette.info
+                                  : isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                             ),
                           ),
                         ],
@@ -449,8 +441,8 @@ class _ChatListScreenState extends State<ChatListScreen>
                               style: TextStyle(
                                 fontSize: 15,
                                 color: hasUnread
-                                    ? isDarkMode ? Colors.white : const Color(0xFF1C1C1E)
-                                    : isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                                    ? isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight
+                                    : isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -465,7 +457,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: isDarkMode ? const Color(0xFF0A84FF) : const Color(0xFF007AFF),
+                                color: isDarkMode ? AppPalette.infoBright : AppPalette.info,
                                 borderRadius: BorderRadius.circular(9),
                               ),
                               constraints: const BoxConstraints(minWidth: 18),
@@ -543,7 +535,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   color: const Color(0xFF34C759),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isDarkMode ? const Color(0xFF1C1C1E) : Colors.white,
+                    color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
                     width: 2,
                   ),
                 ),
@@ -574,13 +566,13 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Color _getAvatarColor(String name) {
     final colors = [
-      const Color(0xFF007AFF),
+      AppPalette.info,
       const Color(0xFF34C759),
       const Color(0xFFFF9500),
       const Color(0xFFFF2D55),
       const Color(0xFF5856D6),
       const Color(0xFF5AC8FA),
-      const Color(0xFFFF3B30),
+      AppPalette.error,
       const Color(0xFFAF52DE),
     ];
     return colors[name.hashCode.abs() % colors.length];

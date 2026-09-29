@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/student.dart';
 
+import '../theme/app_colors.dart';
 /// Modern Student Card with enhanced styling and status indications
 ///
 /// Features:
@@ -33,13 +34,13 @@ class StudentCard extends StatelessWidget {
   Color get _statusColor {
     switch (student.status) {
       case StudentStatus.picked:
-        return const Color(0xFF6B9B5B);
+        return AppPalette.emerald;
       case StudentStatus.absent:
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
       case StudentStatus.pending:
         return const Color(0xFF607D8B);
       case StudentStatus.dropped:
-        return const Color(0xFF2196F3);
+        return AppPalette.info;
     }
   }
 
@@ -76,7 +77,7 @@ class StudentCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDarkMode
@@ -123,15 +124,16 @@ class StudentCard extends StatelessWidget {
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: isDarkMode
-                                  ? Colors.white
-                                  : const Color(0xFF1A1A1A),
+                                  ? AppPalette.textPrimaryDark
+                                  : AppPalette.textPrimaryLight,
                             ),
                           ),
                           const SizedBox(height: 6),
 
                           // Status Badge
                           AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.ease,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 5,
@@ -203,7 +205,7 @@ class StudentCard extends StatelessWidget {
                           ),
                           child: const Icon(
                             Icons.phone_outlined,
-                            color: Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             size: 20,
                           ),
                         ),
@@ -220,7 +222,7 @@ class StudentCard extends StatelessWidget {
                   endIndent: 16,
                   color: isDarkMode
                       ? Colors.white.withValues(alpha: 0.08 * 255)
-                      : Colors.grey.shade200,
+                      : AppPalette.outlineLight,
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -230,7 +232,7 @@ class StudentCard extends StatelessWidget {
                         child: _buildActionButton(
                           icon: Icons.check_circle_outline,
                           label: 'Pick Up',
-                          color: const Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                           onTap: onPick,
                           isPrimary: true,
                         ),
@@ -240,7 +242,7 @@ class StudentCard extends StatelessWidget {
                         child: _buildActionButton(
                           icon: Icons.cancel_outlined,
                           label: 'Mark Absent',
-                          color: const Color(0xFFFF9800),
+                          color: AppPalette.warning,
                           onTap: onAbsent,
                           isPrimary: false,
                         ),
@@ -256,7 +258,7 @@ class StudentCard extends StatelessWidget {
                   endIndent: 16,
                   color: isDarkMode
                       ? Colors.white.withValues(alpha: 0.08 * 255)
-                      : Colors.grey.shade200,
+                      : AppPalette.outlineLight,
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -265,8 +267,8 @@ class StudentCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF6B9B5B).withValues(alpha: 0.1 * 255),
-                          const Color(0xFF6B9B5B).withValues(alpha: 0.05 * 255),
+                          AppPalette.emerald.withValues(alpha: 0.1 * 255),
+                          AppPalette.emerald.withValues(alpha: 0.05 * 255),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
@@ -289,7 +291,7 @@ class StudentCard extends StatelessWidget {
                           ),
                           child: const Icon(
                             Icons.check_circle,
-                            color: Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             size: 18,
                           ),
                         ),
@@ -297,7 +299,7 @@ class StudentCard extends StatelessWidget {
                         const Text(
                           'Successfully Picked',
                           style: TextStyle(
-                            color: Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                           ),
@@ -343,7 +345,7 @@ class StudentCard extends StatelessWidget {
               color: _statusColor,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
                 width: 2.5,
               ),
               boxShadow: [

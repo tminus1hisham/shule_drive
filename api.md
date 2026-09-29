@@ -16,7 +16,7 @@
     },
     "version": "v1"
   },
-  "host": "staging-api.shuledrive.com",
+  "host": "myshule.transfa.org",
   "schemes": [
     "https"
   ],

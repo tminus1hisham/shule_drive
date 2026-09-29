@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
 
@@ -93,7 +94,7 @@ class _AboutScreenState extends State<AboutScreen> {
                     child: Container(
                       height: 180,
                       width: double.infinity,
-                      color: provider.isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFF5F5F5),
+                      color: provider.isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -109,7 +110,7 @@ class _AboutScreenState extends State<AboutScreen> {
                                         const Color(0xFF2C4A2C),
                                       ]
                                     : [
-                                        const Color(0xFFE8F5E9),
+                                        AppPalette.emeraldSoftLight,
                                         const Color(0xFFC8E6C9),
                                       ],
                               ),
@@ -153,7 +154,7 @@ class AboutBusPainter extends CustomPainter {
     final paint = Paint();
     
     // Draw ground line
-    paint.color = const Color(0xFF6B9B5B);
+    paint.color = AppPalette.emerald;
     paint.strokeWidth = 2;
     canvas.drawLine(
       Offset(20, size.height - 10),
@@ -166,11 +167,11 @@ class AboutBusPainter extends CustomPainter {
   }
 
   void _drawBus(Canvas canvas, double x, double y, double width, double height) {
-    final busPaint = Paint()..color = const Color(0xFFFFB800);
+    final busPaint = Paint()..color = AppPalette.amber;
     final windowPaint = Paint()..color = const Color(0xFF87CEEB);
     final wheelPaint = Paint()..color = const Color(0xFF333333);
     final rimPaint = Paint()..color = const Color(0xFF888888);
-    final stripePaint = Paint()..color = const Color(0xFFDC143C);
+    final stripePaint = Paint()..color = AppPalette.error;
     
     final busRect = RRect.fromRectAndRadius(
       Rect.fromCenter(center: Offset(x, y), width: width, height: height),

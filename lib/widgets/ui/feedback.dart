@@ -121,9 +121,7 @@ Future<T?> showAppBottomSheet<T>({
     context: context,
     isScrollControlled: isScrollControlled,
     builder: (ctx) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(ctx).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,

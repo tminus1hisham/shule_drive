@@ -1408,8 +1408,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildGuardianActiveTrip(TripProvider tripProvider) {
     final trip = tripProvider.activeTrip!;
     final guardianChildren = trip.students.toList();
-    final total = trip.students.length;
-    final picked = trip.students.where((s) => s.status == 'picked').length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1465,33 +1463,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              // Divider keeps the metrics visually separate from the header.
-              Divider(color: Colors.white.withValues(alpha: 0.18), height: 1),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  StatTile(
-                    icon: Icons.groups_outlined,
-                    value: '$total',
-                    label: 'Students',
-                    onLight: true,
-                  ),
-                  StatTile(
-                    icon: Icons.check_circle_outline,
-                    value: '$picked',
-                    label: 'Picked up',
-                    onLight: true,
-                  ),
-                  StatTile(
-                    icon: Icons.timelapse_outlined,
-                    value: '${total - picked}',
-                    label: 'Remaining',
-                    onLight: true,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Expanded(
@@ -2002,7 +1973,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                         const SizedBox(height: AppSpacing.sm),
                         TweenAnimationBuilder<double>(
                           tween: Tween(begin: 0.88, end: 1),
-                          duration: const Duration(milliseconds: 650),
+                          duration: AppDuration.slow,
                           curve: Curves.easeOutBack,
                           builder: (context, value, child) =>
                               Transform.scale(scale: value, child: child),

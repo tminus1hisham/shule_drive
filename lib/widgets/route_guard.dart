@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 
+import '../theme/app_colors.dart';
 /// RouteGuard - Protects routes by checking authentication
 /// Redirects to login if user is not authenticated
 class RouteGuard extends StatelessWidget {
@@ -23,7 +24,7 @@ class RouteGuard extends StatelessWidget {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
               ),
             ),
           );
@@ -44,7 +45,7 @@ class RouteGuard extends StatelessWidget {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
               ),
             ),
           );
@@ -88,13 +89,13 @@ class _AccessDeniedScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 30),
+                  color: AppPalette.error.withAlpha(30),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.block,
                   size: 64,
-                  color: Colors.red,
+                  color: AppPalette.error,
                 ),
               ),
               const SizedBox(height: 24),
@@ -111,14 +112,14 @@ class _AccessDeniedScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: AppPalette.textMutedLight,
                 ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: onBack,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   shape: RoundedRectangleBorder(

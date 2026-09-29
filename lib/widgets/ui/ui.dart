@@ -12,6 +12,8 @@ export 'app_text_field.dart';
 export 'empty_state.dart';
 export 'feedback.dart';
 export 'gradient_hero_card.dart';
+export 'press_scale.dart';
 export 'section_header.dart';
+export 'staggered_entrance.dart';
 export 'stat_tile.dart';
 export 'status_pill.dart';

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 
+import '../../theme/app_colors.dart';
 /// Advanced Onboarding Screen with animations, glassmorphism, and parallax effects
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -27,7 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       title: 'Safe School Transport',
       description:
           "Track your child's school bus in real-time. Know exactly when they board, travel, and arrive safely.",
-      primaryColor: const Color(0xFF1FA971),
+      primaryColor: AppPalette.emerald,
       secondaryColor: const Color(0xFF34C98B),
       illustration: const BusIllustration(),
     ),
@@ -585,11 +586,11 @@ class BusPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF1FA971)
+      ..color = AppPalette.emerald
       ..style = PaintingStyle.fill;
 
     final shadowPaint = Paint()
-      ..color = const Color(0xFF1FA971).withValues(alpha: 0.2)
+      ..color = AppPalette.emerald.withValues(alpha: 0.2)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
 
     // Shadow
@@ -710,11 +711,11 @@ class MapPainter extends CustomPainter {
 
     // Location pin
     final pinPaint = Paint()
-      ..color = const Color(0xFFE74C3C)
+      ..color = AppPalette.error
       ..style = PaintingStyle.fill;
 
     final pinShadow = Paint()
-      ..color = const Color(0xFFE74C3C).withValues(alpha: 0.3)
+      ..color = AppPalette.error.withValues(alpha: 0.3)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
     // Pin shadow
@@ -743,7 +744,7 @@ class MapPainter extends CustomPainter {
       const Offset(100, 100),
       35,
       Paint()
-        ..color = const Color(0xFFE74C3C).withValues(alpha: 0.2)
+        ..color = AppPalette.error.withValues(alpha: 0.2)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -827,7 +828,7 @@ class ChatPainter extends CustomPainter {
     canvas.drawCircle(
       const Offset(155, 55),
       12,
-      Paint()..color = const Color(0xFF1FA971),
+      Paint()..color = AppPalette.emerald,
     );
 
     // Typing indicator dots

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import '../../../theme/app_spacing.dart';
 import 'package:provider/provider.dart';
 import '../../../api/services/student_service.dart' as student_service;
 import '../../../api/services/route_service.dart' as route_service;
@@ -11,6 +12,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/trip_provider.dart';
 import '../../../widgets/main_scaffold.dart';
 
+import '../../../theme/app_colors.dart';
 /// Manage Master Trips Screen
 /// Allows admins to create/edit trips and add students to them
 class ManageMasterTripsScreen extends StatefulWidget {
@@ -64,11 +66,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: AppDuration.medium,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: AppCurves.easeOut,
     );
 
     _loadInitialData();
@@ -421,7 +423,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppPalette.error),
             child: const Text('Delete'),
           ),
         ],
@@ -455,7 +457,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -467,7 +469,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppPalette.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -495,8 +497,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       ],
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
-        color: const Color(0xFF6B9B5B),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: AppPalette.emerald,
+        backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         child: _buildBody(isDarkMode, tripProvider),
       ),
     );
@@ -537,14 +539,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           CircularProgressIndicator(
-            color: const Color(0xFF6B9B5B),
-            backgroundColor: isDarkMode ? Colors.white24 : Colors.grey.shade200,
+            color: AppPalette.emerald,
+            backgroundColor: isDarkMode ? Colors.white24 : AppPalette.outlineLight,
           ),
           const SizedBox(height: 16),
           Text(
             'Loading trips...',
             style: TextStyle(
-              color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
           ),
         ],
@@ -571,7 +573,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               if (trips.isNotEmpty)
@@ -581,7 +583,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -589,7 +591,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
                 ),
@@ -602,11 +604,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF1E1E1E)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDarkMode ? Colors.white12 : Colors.grey.shade200,
+                  color: isDarkMode ? Colors.white12 : AppPalette.outlineLight,
                 ),
               ),
               child: Center(
@@ -615,7 +617,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     Icon(
                       Icons.route_outlined,
                       size: 48,
-                      color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
+                      color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -624,8 +626,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: isDarkMode
-                            ? Colors.white70
-                            : Colors.grey.shade600,
+                            ? AppPalette.textSecondaryDark
+                            : AppPalette.textSecondaryLight,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -634,8 +636,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       style: TextStyle(
                         fontSize: 14,
                         color: isDarkMode
-                            ? Colors.white54
-                            : Colors.grey.shade500,
+                            ? AppPalette.textMutedDark
+                            : AppPalette.textMutedLight,
                       ),
                     ),
                   ],
@@ -672,9 +674,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF6B9B5B)
+              ? AppPalette.emerald
               : isDarkMode
-              ? const Color(0xFF1E1E1E)
+              ? AppPalette.surfaceDark
               : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
@@ -699,8 +701,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       color: isSelected
                           ? Colors.white
                           : isDarkMode
-                          ? Colors.white
-                          : const Color(0xFF1A1A1A),
+                          ? AppPalette.textPrimaryDark
+                          : AppPalette.textPrimaryLight,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -718,8 +720,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 color: isSelected
                     ? Colors.white.withAlpha(200)
                     : isDarkMode
-                    ? Colors.white70
-                    : Colors.grey.shade600,
+                    ? AppPalette.textSecondaryDark
+                    : AppPalette.textSecondaryLight,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -733,8 +735,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                   color: isSelected
                       ? Colors.white.withAlpha(180)
                       : isDarkMode
-                      ? Colors.white54
-                      : Colors.grey.shade500,
+                      ? AppPalette.textMutedDark
+                      : AppPalette.textMutedLight,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -744,8 +746,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     color: isSelected
                         ? Colors.white.withAlpha(180)
                         : isDarkMode
-                        ? Colors.white54
-                        : Colors.grey.shade500,
+                        ? AppPalette.textMutedDark
+                        : AppPalette.textMutedLight,
                   ),
                 ),
               ],
@@ -763,8 +765,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     color: isSelected
                         ? Colors.white.withAlpha(30)
                         : trip.tripDirection == 'to_school'
-                        ? Colors.blue.withAlpha(30)
-                        : Colors.orange.withAlpha(30),
+                        ? AppPalette.info.withAlpha(30)
+                        : AppPalette.warning.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -775,8 +777,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       color: isSelected
                           ? Colors.white
                           : trip.tripDirection == 'to_school'
-                          ? Colors.blue
-                          : Colors.orange,
+                          ? AppPalette.info
+                          : AppPalette.warning,
                     ),
                   ),
                 ),
@@ -786,7 +788,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     child: Icon(
                       Icons.delete_outline,
                       size: 18,
-                      color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                      color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                     ),
                   ),
               ],
@@ -802,7 +804,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -822,10 +824,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.edit_note, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.edit_note, color: AppPalette.emerald),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -838,8 +840,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: isDarkMode
-                              ? Colors.white
-                              : const Color(0xFF1A1A1A),
+                              ? AppPalette.textPrimaryDark
+                              : AppPalette.textPrimaryLight,
                         ),
                       ),
                       Text(
@@ -849,8 +851,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         style: TextStyle(
                           fontSize: 14,
                           color: isDarkMode
-                              ? Colors.white60
-                              : Colors.grey.shade600,
+                              ? AppPalette.textSecondaryDark
+                              : AppPalette.textSecondaryLight,
                         ),
                       ),
                     ],
@@ -925,18 +927,18 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceSubtleDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDarkMode ? Colors.white24 : Colors.grey.shade200,
+                  color: isDarkMode ? Colors.white24 : AppPalette.outlineLight,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.person_outline,
-                    color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -948,8 +950,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                           style: TextStyle(
                             fontSize: 12,
                             color: isDarkMode
-                                ? Colors.white60
-                                : Colors.grey.shade600,
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -959,8 +961,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: isDarkMode
-                                ? Colors.white
-                                : const Color(0xFF1A1A1A),
+                                ? AppPalette.textPrimaryDark
+                                : AppPalette.textPrimaryLight,
                           ),
                         ),
                       ],
@@ -972,7 +974,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6B9B5B).withAlpha(30),
+                      color: AppPalette.emerald.withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Row(
@@ -981,14 +983,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         Icon(
                           Icons.check_circle,
                           size: 14,
-                          color: Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                         ),
                         SizedBox(width: 4),
                         Text(
                           'Assigned',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -1014,22 +1016,22 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(20),
+                  color: AppPalette.error.withAlpha(20),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withAlpha(50)),
+                  border: Border.all(color: AppPalette.error.withAlpha(50)),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.error_outline,
-                      color: Colors.red,
+                      color: AppPalette.error,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _errorMessage!,
-                        style: const TextStyle(color: Colors.red, fontSize: 14),
+                        style: const TextStyle(color: AppPalette.error, fontSize: 14),
                       ),
                     ),
                   ],
@@ -1087,16 +1089,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       controller: controller,
       validator: validator,
       style: TextStyle(
-        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+        color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
       ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon, color: const Color(0xFF6B9B5B)),
+        prefixIcon: Icon(icon, color: AppPalette.emerald),
         filled: true,
         fillColor: isDarkMode
-            ? const Color(0xFF2C2C2C)
-            : const Color(0xFFF5F5F5),
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.surfaceSubtleLight,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1107,13 +1109,13 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF6B9B5B), width: 2),
+          borderSide: const BorderSide(color: AppPalette.emerald, width: 2),
         ),
         labelStyle: TextStyle(
-          color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+          color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
         ),
         hintStyle: TextStyle(
-          color: isDarkMode ? Colors.white38 : Colors.grey.shade500,
+          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
         ),
       ),
     );
@@ -1133,11 +1135,11 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF6B9B5B)),
+        prefixIcon: Icon(icon, color: AppPalette.emerald),
         filled: true,
         fillColor: isDarkMode
-            ? const Color(0xFF2C2C2C)
-            : const Color(0xFFF5F5F5),
+            ? AppPalette.surfaceSubtleDark
+            : AppPalette.surfaceSubtleLight,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -1148,21 +1150,21 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF6B9B5B), width: 2),
+          borderSide: const BorderSide(color: AppPalette.emerald, width: 2),
         ),
         labelStyle: TextStyle(
-          color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+          color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
         ),
       ),
       hint: Text(
         hint,
         style: TextStyle(
-          color: isDarkMode ? Colors.white38 : Colors.grey.shade500,
+          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
         ),
       ),
-      dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+      dropdownColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
       style: TextStyle(
-        color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+        color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
       ),
       items: items.map((item) {
         return DropdownMenuItem<T>(
@@ -1183,7 +1185,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
           ),
         ),
         const SizedBox(height: 8),
@@ -1193,7 +1195,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               child: _buildDirectionOption(
                 'Pickup',
                 Icons.arrow_forward,
-                Colors.blue,
+                AppPalette.info,
                 isDarkMode,
               ),
             ),
@@ -1202,7 +1204,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               child: _buildDirectionOption(
                 'Dropoff',
                 Icons.arrow_back,
-                Colors.orange,
+                AppPalette.warning,
                 isDarkMode,
               ),
             ),
@@ -1228,8 +1230,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           color: isSelected
               ? color.withAlpha(30)
               : isDarkMode
-              ? const Color(0xFF2C2C2C)
-              : const Color(0xFFF5F5F5),
+              ? AppPalette.surfaceSubtleDark
+              : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? color : Colors.transparent,
@@ -1244,8 +1246,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               color: isSelected
                   ? color
                   : isDarkMode
-                  ? Colors.white54
-                  : Colors.grey.shade500,
+                  ? AppPalette.textMutedDark
+                  : AppPalette.textMutedLight,
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -1257,8 +1259,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 color: isSelected
                     ? color
                     : isDarkMode
-                    ? Colors.white70
-                    : Colors.grey.shade700,
+                    ? AppPalette.textSecondaryDark
+                    : AppPalette.textSecondaryLight,
               ),
             ),
           ],
@@ -1274,7 +1276,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -1295,10 +1297,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withAlpha(30),
+                      color: AppPalette.info.withAlpha(30),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.people_outline, color: Colors.blue),
+                    child: const Icon(Icons.people_outline, color: AppPalette.info),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -1310,8 +1312,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: isDarkMode
-                              ? Colors.white
-                              : const Color(0xFF1A1A1A),
+                              ? AppPalette.textPrimaryDark
+                              : AppPalette.textPrimaryLight,
                         ),
                       ),
                       Text(
@@ -1319,8 +1321,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         style: TextStyle(
                           fontSize: 14,
                           color: isDarkMode
-                              ? Colors.white60
-                              : Colors.grey.shade600,
+                              ? AppPalette.textSecondaryDark
+                              : AppPalette.textSecondaryLight,
                         ),
                       ),
                     ],
@@ -1332,7 +1334,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
+                  backgroundColor: AppPalette.info,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -1352,8 +1354,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceSubtleDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -1365,7 +1367,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          const Color(0xFF6B9B5B),
+                          AppPalette.emerald,
                         ),
                       ),
                     ),
@@ -1375,8 +1377,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       style: TextStyle(
                         fontSize: 14,
                         color: isDarkMode
-                            ? Colors.white60
-                            : Colors.grey.shade600,
+                            ? AppPalette.textSecondaryDark
+                            : AppPalette.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -1388,8 +1390,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: isDarkMode
-                    ? const Color(0xFF2C2C2C)
-                    : Colors.grey.shade50,
+                    ? AppPalette.surfaceSubtleDark
+                    : AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -1398,7 +1400,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     Icon(
                       Icons.person_off_outlined,
                       size: 48,
-                      color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
+                      color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -1407,8 +1409,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: isDarkMode
-                            ? Colors.white70
-                            : Colors.grey.shade600,
+                            ? AppPalette.textSecondaryDark
+                            : AppPalette.textSecondaryLight,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1417,8 +1419,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       style: TextStyle(
                         fontSize: 14,
                         color: isDarkMode
-                            ? Colors.white54
-                            : Colors.grey.shade500,
+                            ? AppPalette.textMutedDark
+                            : AppPalette.textMutedLight,
                       ),
                     ),
                   ],
@@ -1449,19 +1451,19 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+        color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
+            backgroundColor: AppPalette.emerald.withAlpha(30),
             child: Text(
               student.fullname.isNotEmpty
                   ? student.fullname[0].toUpperCase()
                   : '?',
               style: const TextStyle(
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1476,7 +1478,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1484,7 +1486,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                   '${student.classname} • ${student.route}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDarkMode ? Colors.white60 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                 ),
               ],
@@ -1494,7 +1496,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
             onPressed: () => _removeStudentFromTrip(student, tripProvider),
             icon: Icon(
               Icons.remove_circle_outline,
-              color: Colors.red.withAlpha(200),
+              color: AppPalette.error.withAlpha(200),
             ),
           ),
         ],
@@ -1615,7 +1617,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       padding: const EdgeInsets.all(20),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF6B9B5B), Color(0xFF4A7C59)],
+                          colors: [AppPalette.emerald, Color(0xFF4A7C59)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -1709,7 +1711,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             Icons.search,
                                             size: 16,
                                             color: !showPhoneSearch
-                                                ? const Color(0xFF6B9B5B)
+                                                ? AppPalette.emerald
                                                 : Colors.white70,
                                           ),
                                           const SizedBox(width: 6),
@@ -1717,7 +1719,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             'By Name',
                                             style: TextStyle(
                                               color: !showPhoneSearch
-                                                  ? const Color(0xFF6B9B5B)
+                                                  ? AppPalette.emerald
                                                   : Colors.white70,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -1759,7 +1761,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             Icons.phone,
                                             size: 16,
                                             color: showPhoneSearch
-                                                ? const Color(0xFF6B9B5B)
+                                                ? AppPalette.emerald
                                                 : Colors.white70,
                                           ),
                                           const SizedBox(width: 6),
@@ -1767,7 +1769,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             'By Phone',
                                             style: TextStyle(
                                               color: showPhoneSearch
-                                                  ? const Color(0xFF6B9B5B)
+                                                  ? AppPalette.emerald
                                                   : Colors.white70,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -1828,9 +1830,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                       child: showPhoneSearch
                           ? Container(
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: AppPalette.surfaceSubtleLight,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: AppPalette.outlineLight),
                               ),
                               child: Row(
                                 children: [
@@ -1841,7 +1843,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                       decoration: InputDecoration(
                                         hintText: 'Enter guardian phone...',
                                         hintStyle: TextStyle(
-                                          color: Colors.grey.shade500,
+                                          color: AppPalette.textMutedLight,
                                         ),
                                         border: InputBorder.none,
                                         contentPadding:
@@ -1851,7 +1853,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             ),
                                         prefixIcon: Icon(
                                           Icons.phone,
-                                          color: Colors.grey.shade500,
+                                          color: AppPalette.textMutedLight,
                                         ),
                                       ),
                                       onSubmitted: (_) async {
@@ -1902,16 +1904,16 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                             )
                           : Container(
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: AppPalette.surfaceSubtleLight,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: AppPalette.outlineLight),
                               ),
                               child: TextField(
                                 decoration: InputDecoration(
                                   hintText:
                                       'Search by name, class or school...',
                                   hintStyle: TextStyle(
-                                    color: Colors.grey.shade500,
+                                    color: AppPalette.textMutedLight,
                                   ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
@@ -1920,7 +1922,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                   ),
                                   prefixIcon: Icon(
                                     Icons.search,
-                                    color: Colors.grey.shade500,
+                                    color: AppPalette.textMutedLight,
                                   ),
                                 ),
                                 onChanged: (value) =>
@@ -1940,7 +1942,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B).withAlpha(20),
+                              color: AppPalette.emerald.withAlpha(20),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
@@ -1950,7 +1952,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                   '${filteredStudents.length} students',
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFF6B9B5B),
+                                    color: AppPalette.emerald,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -1961,7 +1963,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                     height: 12,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: const Color(0xFF6B9B5B),
+                                      color: AppPalette.emerald,
                                     ),
                                   ),
                                 ],
@@ -1974,7 +1976,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                               'Loading...',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade500,
+                                color: AppPalette.textMutedLight,
                                 fontStyle: FontStyle.italic,
                               ),
                             )
@@ -1985,7 +1987,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.blue.withAlpha(20),
+                                color: AppPalette.info.withAlpha(20),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(
@@ -2023,7 +2025,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                   Container(
                                     padding: const EdgeInsets.all(20),
                                     decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
+                                      color: AppPalette.surfaceSubtleLight,
                                       shape: BoxShape.circle,
                                     ),
                                     child:
@@ -2032,7 +2034,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             width: 48,
                                             height: 48,
                                             child: CircularProgressIndicator(
-                                              color: Color(0xFF6B9B5B),
+                                              color: AppPalette.emerald,
                                             ),
                                           )
                                         : Icon(
@@ -2040,7 +2042,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                                 ? Icons.phone_android
                                                 : Icons.search_off,
                                             size: 48,
-                                            color: Colors.grey.shade400,
+                                            color: AppPalette.textMutedLight,
                                           ),
                                   ),
                                   const SizedBox(height: 16),
@@ -2054,7 +2056,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                         : 'No students match your search',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                      color: Colors.grey.shade600,
+                                      color: AppPalette.textSecondaryLight,
                                       fontSize: 14,
                                     ),
                                   ),
@@ -2087,8 +2089,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: isSelected
-                                            ? const Color(0xFF6B9B5B)
-                                            : Colors.grey.shade200,
+                                            ? AppPalette.emerald
+                                            : AppPalette.outlineLight,
                                         width: isSelected ? 2 : 1,
                                       ),
                                       boxShadow: [
@@ -2108,12 +2110,12 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             gradient: LinearGradient(
                                               colors: isSelected
                                                   ? [
-                                                      const Color(0xFF6B9B5B),
+                                                      AppPalette.emerald,
                                                       const Color(0xFF4A7C59),
                                                     ]
                                                   : [
-                                                      Colors.grey.shade300,
-                                                      Colors.grey.shade400,
+                                                      AppPalette.outlineLight,
+                                                      AppPalette.textMutedLight,
                                                     ],
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
@@ -2148,8 +2150,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                                   fontSize: 16,
                                                   fontWeight: FontWeight.w600,
                                                   color: isSelected
-                                                      ? const Color(0xFF6B9B5B)
-                                                      : const Color(0xFF1A1A1A),
+                                                      ? AppPalette.emerald
+                                                      : AppPalette.textPrimaryLight,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
@@ -2158,7 +2160,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                                   Icon(
                                                     Icons.school,
                                                     size: 12,
-                                                    color: Colors.grey.shade500,
+                                                    color: AppPalette.textMutedLight,
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Text(
@@ -2166,14 +2168,14 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       color:
-                                                          Colors.grey.shade600,
+                                                          AppPalette.textSecondaryLight,
                                                     ),
                                                   ),
                                                   const SizedBox(width: 12),
                                                   Icon(
                                                     Icons.route,
                                                     size: 12,
-                                                    color: Colors.grey.shade500,
+                                                    color: AppPalette.textMutedLight,
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Expanded(
@@ -2233,7 +2235,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFF6B9B5B),
+                                              color: AppPalette.emerald,
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
@@ -2248,13 +2250,13 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                             width: 36,
                                             height: 36,
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.shade100,
+                                              color: AppPalette.surfaceSubtleLight,
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
                                             child: Icon(
                                               Icons.add,
-                                              color: Colors.grey.shade400,
+                                              color: AppPalette.textMutedLight,
                                             ),
                                           ),
                                       ],
@@ -2269,13 +2271,13 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
+                        color: AppPalette.surfaceSubtleLight,
                         borderRadius: const BorderRadius.only(
                           bottomLeft: Radius.circular(20),
                           bottomRight: Radius.circular(20),
                         ),
                         border: Border(
-                          top: BorderSide(color: Colors.grey.shade200),
+                          top: BorderSide(color: AppPalette.outlineLight),
                         ),
                       ),
                       child: Row(
@@ -2284,8 +2286,8 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(context),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.grey.shade700,
-                                side: BorderSide(color: Colors.grey.shade300),
+                                foregroundColor: AppPalette.textSecondaryLight,
+                                side: BorderSide(color: AppPalette.outlineLight),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
                                 ),
@@ -2310,9 +2312,9 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
                                       _addStudentToTrip(selectedStudent!);
                                     },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6B9B5B),
+                                backgroundColor: AppPalette.emerald,
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: Colors.grey.shade300,
+                                disabledBackgroundColor: AppPalette.outlineLight,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
                                 ),
@@ -2440,7 +2442,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppPalette.error),
             child: const Text('Remove'),
           ),
         ],

@@ -72,3 +72,15 @@ class AppDuration {
   static const Duration medium = Duration(milliseconds: 250);
   static const Duration slow = Duration(milliseconds: 400);
 }
+
+/// Standard animation curves. The built-in `Curves.easeOut*` are too soft;
+/// these start fast so motion answers the user the instant they act.
+class AppCurves {
+  AppCurves._();
+
+  /// Things entering or reacting to a tap.
+  static const Curve easeOut = Cubic(0.23, 1, 0.32, 1);
+
+  /// Things already on screen moving to a new place.
+  static const Curve easeInOut = Cubic(0.77, 0, 0.175, 1);
+}

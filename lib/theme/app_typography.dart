@@ -53,8 +53,8 @@ class AppTypography {
       // Titles / labels / body — Inter
       titleMedium: ui(16, FontWeight.w600, height: 1.3),
       titleSmall: ui(14, FontWeight.w600, height: 1.3),
-      bodyLarge: ui(16, FontWeight.w400),
-      bodyMedium: ui(14, FontWeight.w400),
+      bodyLarge: ui(16, FontWeight.w400, height: 1.5),
+      bodyMedium: ui(14, FontWeight.w400, height: 1.5),
       bodySmall: ui(12, FontWeight.w400, color: secondary),
       labelLarge: ui(14, FontWeight.w600, height: 1.2),
       labelMedium: ui(12, FontWeight.w500, height: 1.2),

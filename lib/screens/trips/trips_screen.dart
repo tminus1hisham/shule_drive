@@ -7,6 +7,7 @@ import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 import 'guardian_trips_screen.dart';
 
+import '../../theme/app_colors.dart';
 /// Trips Screen - Shows trip history for DRIVERS
 /// Shows ACTIVE trips for GUARDIANS (involving their students)
 class TripsScreen extends StatefulWidget {
@@ -129,7 +130,7 @@ class _TripsScreenState extends State<TripsScreen> {
     // Show loading
     if (_isLoading && _trips.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        child: CircularProgressIndicator(color: AppPalette.emerald),
       );
     }
 
@@ -198,14 +199,14 @@ class _TripsScreenState extends State<TripsScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withAlpha(100),
+            color: AppPalette.emerald.withAlpha(100),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -325,7 +326,7 @@ class _TripsScreenState extends State<TripsScreen> {
           ElevatedButton(
             onPressed: _loadTrips,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
               foregroundColor: Colors.white,
             ),
             child: const Text('Retry'),
@@ -344,7 +345,7 @@ class _TripsScreenState extends State<TripsScreen> {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withAlpha(20),
+              color: AppPalette.emerald.withAlpha(20),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -374,7 +375,7 @@ class _TripsScreenState extends State<TripsScreen> {
             child: ElevatedButton.icon(
               onPressed: () => Navigator.pushNamed(context, '/start-trip'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -401,8 +402,8 @@ class _TripsScreenState extends State<TripsScreen> {
     final isCompleted = trip.isCompleted;
     final statusText = isCompleted ? 'Completed' : 'Active';
     final statusColor = isCompleted
-        ? const Color(0xFF6B9B5B)
-        : const Color(0xFFFF9800);
+        ? AppPalette.emerald
+        : AppPalette.warning;
 
     // Calculate trip duration
     final duration = trip.endTime?.difference(trip.startTime);
@@ -514,7 +515,7 @@ class _TripsScreenState extends State<TripsScreen> {
             const SizedBox(height: 12),
             Divider(
               height: 1,
-              color: provider.isDarkMode ? Colors.grey[700] : Colors.grey[300],
+              color: provider.isDarkMode ? AppPalette.textSecondaryLight : AppPalette.outlineLight,
             ),
             const SizedBox(height: 12),
             Row(
@@ -555,7 +556,7 @@ class _TripsScreenState extends State<TripsScreen> {
   Widget _buildTripStatItem(AppProvider provider, IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF6B9B5B)),
+        Icon(icon, size: 16, color: AppPalette.emerald),
         const SizedBox(width: 6),
         Text(
           text,
@@ -564,7 +565,7 @@ class _TripsScreenState extends State<TripsScreen> {
             fontWeight: FontWeight.w600,
             color: provider.isDarkMode
                 ? const Color(0xFF8BC48B)
-                : const Color(0xFF6B9B5B),
+                : AppPalette.emerald,
           ),
         ),
       ],

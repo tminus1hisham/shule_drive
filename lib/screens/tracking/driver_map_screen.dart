@@ -10,6 +10,7 @@ import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 
+import '../../theme/app_colors.dart';
 /// Driver Map Screen - Shows driver their route with all students as pins on the map
 ///
 /// Features:
@@ -388,13 +389,13 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${student.fullname} picked up'),
-          backgroundColor: const Color(0xFF4CAF50),
+          backgroundColor: AppPalette.success,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppPalette.error),
       );
     }
   }
@@ -425,13 +426,13 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${student.fullname} marked absent'),
-          backgroundColor: const Color(0xFF9E9E9E),
+          backgroundColor: AppPalette.textMutedLight,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppPalette.error),
       );
     }
   }
@@ -441,7 +442,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trip Map'),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -471,7 +472,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+                child: CircularProgressIndicator(color: AppPalette.emerald),
               ),
             ),
 
@@ -491,7 +492,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                     const Icon(
                       Icons.error_outline,
                       size: 48,
-                      color: Colors.red,
+                      color: AppPalette.error,
                     ),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
@@ -517,7 +518,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                     padding: EdgeInsets.all(12),
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
                 ),
@@ -550,7 +551,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                   backgroundColor: Colors.white,
                   child: const Icon(
                     Icons.my_location,
-                    color: Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                   ),
                 ),
               ],
@@ -591,14 +592,14 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withAlpha(20),
+              color: AppPalette.emerald.withAlpha(20),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.people, color: Color(0xFF6B9B5B)),
+                const Icon(Icons.people, color: AppPalette.emerald),
                 const SizedBox(width: 8),
                 Text(
                   'Students ($pendingCount pending)',
@@ -613,7 +614,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                     '${_currentRoute!.formattedDuration} • ${_currentRoute!.formattedDistance}',
                     style: const TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                     ),
                   ),
               ],
@@ -646,15 +647,15 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
     String statusText;
     switch (status) {
       case 'dropped':
-        statusColor = const Color(0xFF2196F3);
+        statusColor = AppPalette.info;
         statusText = 'Dropped';
         break;
       case 'picked':
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = AppPalette.success;
         statusText = 'Picked';
         break;
       case 'absent':
-        statusColor = const Color(0xFF9E9E9E);
+        statusColor = AppPalette.textMutedLight;
         statusText = 'Absent';
         break;
       default:
@@ -669,7 +670,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isPending ? statusColor.withAlpha(20) : Colors.grey.shade100,
+          color: isPending ? statusColor.withAlpha(20) : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isPending ? statusColor : Colors.transparent,
@@ -694,7 +695,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                   const Icon(
                     Icons.location_off,
                     size: 16,
-                    color: Colors.orange,
+                    color: AppPalette.warning,
                   ),
               ],
             ),
@@ -747,7 +748,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
             children: [
               CircleAvatar(
                 radius: 28,
-                backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
+                backgroundColor: AppPalette.emerald.withAlpha(30),
                 child: Text(
                   _getStatusEmoji(student),
                   style: const TextStyle(fontSize: 28),
@@ -769,7 +770,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                       '${student.classname} • ${student.schoolname}',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey.shade600,
+                        color: AppPalette.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -783,12 +784,12 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.withAlpha(30),
+                color: AppPalette.warning.withAlpha(30),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.orange),
+                  Icon(Icons.info_outline, color: AppPalette.warning),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -814,7 +815,7 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4CAF50),
+                  backgroundColor: AppPalette.success,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -828,14 +829,14 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
               height: 56,
               child: OutlinedButton.icon(
                 onPressed: () => _markAbsent(student),
-                icon: const Icon(Icons.cancel, color: Colors.grey),
+                icon: const Icon(Icons.cancel, color: AppPalette.textMutedLight),
                 label: const Text(
                   'Mark Absent',
                   style: TextStyle(fontSize: 16),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey.shade700,
-                  side: BorderSide(color: Colors.grey.shade300),
+                  foregroundColor: AppPalette.textSecondaryLight,
+                  side: BorderSide(color: AppPalette.outlineLight),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -851,8 +852,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: student.isStudentPicked
-                      ? const Color(0xFF4CAF50).withAlpha(30)
-                      : Colors.grey.shade200,
+                      ? AppPalette.success.withAlpha(30)
+                      : AppPalette.outlineLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -864,8 +865,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     color: student.isStudentPicked
-                        ? const Color(0xFF4CAF50)
-                        : Colors.grey.shade700,
+                        ? AppPalette.success
+                        : AppPalette.textSecondaryLight,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

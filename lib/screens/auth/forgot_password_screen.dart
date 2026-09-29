@@ -30,17 +30,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: AppDuration.medium,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOut,
+      curve: AppCurves.easeOut,
     );
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.03), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _animationController,
-            curve: Curves.easeOutCubic,
+            curve: AppCurves.easeOut,
           ),
         );
     _animationController.forward();

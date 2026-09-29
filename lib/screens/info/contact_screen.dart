@@ -4,6 +4,7 @@ import '../../providers/app_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../theme/app_colors.dart';
 class ContactScreen extends StatefulWidget {
   const ContactScreen({super.key});
 
@@ -183,10 +184,10 @@ class _ContactScreenState extends State<ContactScreen> {
             decoration: BoxDecoration(
               color: provider.isDarkMode
                   ? const Color(0xFF2C4A2C)
-                  : const Color(0xFFE8F5E9),
+                  : AppPalette.emeraldSoftLight,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: const Color(0xFF6B9B5B), size: 22),
+            child: Icon(icon, color: AppPalette.emerald, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(

@@ -153,8 +153,8 @@ class AppConfig {
 
     // Priority 3: Default based on environment
     return isProduction
-        ? 'https://api.shuledrive.com'
-        : 'https://staging-api.shuledrive.com';
+        ? 'https://myshule.transfa.org'
+        : 'https://myshule.transfa.org';
   }
 
   /// Get current environment

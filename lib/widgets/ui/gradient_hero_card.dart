@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
+import 'press_scale.dart';
 
 /// The branded gradient "hero" surface used for primary calls-to-action and the
 /// live-trip card. Renders the brand gradient with soft decorative circles and
@@ -31,11 +32,21 @@ class GradientHeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: borderRadius,
+        // A 1px light top edge reads as a physical surface; the brand-tinted
+        // shadow stays soft rather than glowing.
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+        ),
         boxShadow: [
           BoxShadow(
-            color: context.colors.brand.withValues(alpha: 0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: context.colors.brand.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: context.colors.brand.withValues(alpha: 0.22),
+            blurRadius: 32,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
@@ -62,13 +73,16 @@ class GradientHeroCard extends StatelessWidget {
     );
 
     if (onTap != null) {
-      content = Material(
-        color: Colors.transparent,
-        borderRadius: borderRadius,
-        child: InkWell(
-          onTap: onTap,
+      content = PressScale(
+        scale: 0.985,
+        child: Material(
+          color: Colors.transparent,
           borderRadius: borderRadius,
-          child: content,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: borderRadius,
+            child: content,
+          ),
         ),
       );
     }

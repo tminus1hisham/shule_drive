@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
+import '../../widgets/ui/staggered_entrance.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Trip Selection Screen
 /// Displays available master trips for the driver to select from
 class TripSelectionScreen extends StatefulWidget {
@@ -38,7 +41,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: AppDuration.slow,
     );
     _loadMasterTrips();
   }
@@ -250,12 +253,12 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             height: 80,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                colors: [AppPalette.emerald, AppPalette.emeraldPressed],
               ),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                  color: AppPalette.emerald.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -273,7 +276,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 8),
@@ -281,7 +284,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             'Select a trip to get started',
             style: TextStyle(
               fontSize: 15,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
           ),
         ],
@@ -302,10 +305,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE5E5EA),
+          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
         ),
       ),
       child: Row(
@@ -315,8 +318,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
             height: 48,
             decoration: BoxDecoration(
               color: isDarkMode
-                  ? const Color(0xFF2C2C2C)
-                  : const Color(0xFFE5E5EA),
+                  ? AppPalette.surfaceSubtleDark
+                  : AppPalette.outlineLight,
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -330,8 +333,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   height: 16,
                   decoration: BoxDecoration(
                     color: isDarkMode
-                        ? const Color(0xFF2C2C2C)
-                        : const Color(0xFFE5E5EA),
+                        ? AppPalette.surfaceSubtleDark
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -341,8 +344,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                   height: 14,
                   decoration: BoxDecoration(
                     color: isDarkMode
-                        ? const Color(0xFF2C2C2C)
-                        : const Color(0xFFE5E5EA),
+                        ? AppPalette.surfaceSubtleDark
+                        : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -368,7 +371,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 24),
@@ -377,7 +380,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
@@ -411,13 +414,13 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               decoration: BoxDecoration(
                 color: isDarkMode
                     ? Colors.white.withValues(alpha: 0.05)
-                    : const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                    : AppPalette.emerald.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.calendar_today,
                 size: 48,
-                color: isDarkMode ? Colors.white30 : const Color(0xFF6B9B5B),
+                color: isDarkMode ? Colors.white30 : AppPalette.emerald,
               ),
             ),
             const SizedBox(height: 24),
@@ -426,7 +429,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 8),
@@ -435,7 +438,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
             const SizedBox(height: 32),
@@ -444,7 +447,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               icon: const Icon(Icons.add_circle_outline),
               label: const Text('Start New Trip'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -464,8 +467,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
   Widget _buildTripsList(bool isDarkMode) {
     return RefreshIndicator(
       onRefresh: _loadMasterTrips,
-      color: const Color(0xFF6B9B5B),
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      color: AppPalette.emerald,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: _masterTrips.length,
@@ -475,19 +478,9 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
 
           final isPreloadingThisTrip = isSelected && _isPreloading;
 
-          return AnimatedBuilder(
+          return StaggeredEntrance(
             animation: _animationController,
-            builder: (context, child) {
-              final delay = index * 0.1;
-              final value =
-                  (_animationController.value - delay).clamp(0.0, 1.0) /
-                  (1 - delay);
-
-              return Transform.translate(
-                offset: Offset(0, 20 * (1 - value)),
-                child: Opacity(opacity: value, child: child),
-              );
-            },
+            index: index,
             child: _buildTripCard(
               trip,
               isSelected,
@@ -513,20 +506,20 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF6B9B5B)
+                ? AppPalette.emerald
                 : isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.2),
+                    color: AppPalette.emerald.withValues(alpha: 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -544,15 +537,15 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isSelected
-                      ? const Color(0xFF6B9B5B)
+                      ? AppPalette.emerald
                       : isDarkMode
-                      ? const Color(0xFF2C2C2C)
-                      : const Color(0xFFE5E5EA),
+                      ? AppPalette.surfaceSubtleDark
+                      : AppPalette.outlineLight,
                   border: Border.all(
                     color: isSelected
-                        ? const Color(0xFF6B9B5B)
+                        ? AppPalette.emerald
                         : isDarkMode
-                        ? const Color(0xFF3A3A3C)
+                        ? AppPalette.surfaceSubtleDark
                         : const Color(0xFFD1D1D6),
                     width: 2,
                   ),
@@ -583,12 +576,12 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                  color: AppPalette.emerald.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.directions_bus,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   size: 24,
                 ),
               ),
@@ -605,8 +598,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: isDarkMode
-                            ? Colors.white
-                            : const Color(0xFF1A1A1A),
+                            ? AppPalette.textPrimaryDark
+                            : AppPalette.textPrimaryLight,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -615,8 +608,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                       style: TextStyle(
                         fontSize: 14,
                         color: isDarkMode
-                            ? Colors.white60
-                            : const Color(0xFF666666),
+                            ? AppPalette.textSecondaryDark
+                            : AppPalette.textSecondaryLight,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -627,7 +620,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           size: 14,
                           color: isDarkMode
                               ? Colors.white.withValues(alpha: 0.4)
-                              : const Color(0xFF999999),
+                              : AppPalette.textMutedLight,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -635,8 +628,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           style: TextStyle(
                             fontSize: 13,
                             color: isDarkMode
-                                ? Colors.white60
-                                : const Color(0xFF666666),
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -645,7 +638,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           size: 14,
                           color: isDarkMode
                               ? Colors.white.withValues(alpha: 0.4)
-                              : const Color(0xFF999999),
+                              : AppPalette.textMutedLight,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -653,8 +646,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                           style: TextStyle(
                             fontSize: 13,
                             color: isDarkMode
-                                ? Colors.white60
-                                : const Color(0xFF666666),
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                           ),
                         ),
                       ],
@@ -669,7 +662,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                             size: 14,
                             color: isDarkMode
                                 ? Colors.white.withValues(alpha: 0.4)
-                                : const Color(0xFF999999),
+                                : AppPalette.textMutedLight,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -677,8 +670,8 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
                             style: TextStyle(
                               fontSize: 13,
                               color: isDarkMode
-                                  ? Colors.white60
-                                  : const Color(0xFF666666),
+                                  ? AppPalette.textSecondaryDark
+                                  : AppPalette.textSecondaryLight,
                             ),
                           ),
                         ],
@@ -700,12 +693,12 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         border: Border(
           top: BorderSide(
             color: isDarkMode
-                ? const Color(0xFF2C2C2C)
-                : const Color(0xFFE5E5EA),
+                ? AppPalette.surfaceSubtleDark
+                : AppPalette.outlineLight,
           ),
         ),
       ),
@@ -719,14 +712,14 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               child: ElevatedButton(
                 onPressed: canContinue ? _onContinue : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: isDarkMode
-                      ? const Color(0xFF2C2C2C)
-                      : const Color(0xFFE5E5EA),
+                      ? AppPalette.surfaceSubtleDark
+                      : AppPalette.outlineLight,
                   disabledForegroundColor: isDarkMode
                       ? Colors.white30
-                      : const Color(0xFF999999),
+                      : AppPalette.textMutedLight,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -744,7 +737,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               child: Text(
                 'Start a Different Trip',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                 ),
               ),
             ),

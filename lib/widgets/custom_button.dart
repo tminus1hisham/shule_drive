@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 class CustomButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
@@ -22,7 +23,7 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = backgroundColor ?? const Color(0xFF6B9B5B);
+    final bgColor = backgroundColor ?? AppPalette.emerald;
     final fgColor = textColor ?? Colors.white;
 
     if (isOutlined) {

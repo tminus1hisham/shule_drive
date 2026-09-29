@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../theme/app_colors.dart';
 // import '../../widgets/map_selector.dart'; // Re-enable when using Google Maps
 
 class HomeScreen extends StatefulWidget {
@@ -131,12 +132,12 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 44,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                colors: [AppPalette.emerald, AppPalette.emeraldPressed],
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                  color: AppPalette.emerald.withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -155,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               letterSpacing: -0.5,
             ),
           ),
@@ -167,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                  color: AppPalette.emerald.withValues(alpha: 0.3),
                   width: 2,
                 ),
               ),
@@ -203,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               color: isDarkMode
                   ? Colors.white.withValues(alpha: 0.1)
-                  : const Color(0xFF2196F3).withValues(alpha: 0.1),
+                  : AppPalette.info.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -214,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? Icons.family_restroom
                       : Icons.local_shipping_outlined,
                   size: 14,
-                  color: isDarkMode ? Colors.white70 : const Color(0xFF2196F3),
+                  color: isDarkMode ? Colors.white70 : AppPalette.info,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -224,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w600,
                     color: isDarkMode
                         ? Colors.white70
-                        : const Color(0xFF2196F3),
+                        : AppPalette.info,
                   ),
                 ),
               ],
@@ -236,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               letterSpacing: -1,
             ),
           ),
@@ -247,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : 'Ready for today\'s trip?',
             style: TextStyle(
               fontSize: 16,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
             ),
           ),
         ],
@@ -265,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.check_circle_outline,
               value: provider.completedTrips.toString(),
               label: 'Trips Done',
-              color: const Color(0xFF6B9B5B),
+              color: AppPalette.emerald,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -275,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.people_outline,
               value: provider.pickedStudentsCount.toString(),
               label: 'Students',
-              color: const Color(0xFF2196F3),
+              color: AppPalette.info,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -285,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.route_outlined,
               value: '${provider.totalDistance.toStringAsFixed(0)}km',
               label: 'Distance',
-              color: const Color(0xFFFF9800),
+              color: AppPalette.warning,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -304,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -330,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 4),
@@ -338,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -354,12 +355,12 @@ class _HomeScreenState extends State<HomeScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF6B9B5B), Color(0xFF4A7A3A)],
+          colors: [AppPalette.emerald, Color(0xFF4A7A3A)],
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withValues(alpha: 0.4),
+            color: AppPalette.emerald.withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -557,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
             ),
           ),
           const SizedBox(height: 16),
@@ -583,7 +584,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.add_circle_outline,
                 label: 'Start Trip',
                 subtitle: 'Begin new journey',
-                color: const Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 onTap: () => Navigator.pushNamed(context, '/start-trip'),
                 isDarkMode: isDarkMode,
                 isPrimary: true,
@@ -595,7 +596,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.people_outline,
                 label: 'Students',
                 subtitle: 'View all students',
-                color: const Color(0xFF2196F3),
+                color: AppPalette.info,
                 onTap: () => Navigator.pushNamed(context, '/students-list'),
                 isDarkMode: isDarkMode,
               ),
@@ -621,7 +622,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.chat_bubble_outline,
                 label: 'Messages',
                 subtitle: 'Chat with guardians',
-                color: const Color(0xFFFF9800),
+                color: AppPalette.warning,
                 onTap: () => Navigator.pushNamed(context, '/chat'),
                 isDarkMode: isDarkMode,
               ),
@@ -654,7 +655,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.local_shipping,
                 label: 'My Trips',
                 subtitle: 'Track journeys',
-                color: const Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 onTap: () => Navigator.pushNamed(context, '/trips'),
                 isDarkMode: isDarkMode,
               ),
@@ -669,7 +670,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.chat_bubble_outline,
                 label: 'Messages',
                 subtitle: 'Chat with driver',
-                color: const Color(0xFFFF9800),
+                color: AppPalette.warning,
                 onTap: () => Navigator.pushNamed(context, '/chat'),
                 isDarkMode: isDarkMode,
               ),
@@ -697,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: isPrimary
               ? Border.all(color: color.withAlpha(100), width: 2)
@@ -735,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: isDarkMode ? Colors.white60 : Colors.grey[600],
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
           ],
@@ -762,7 +763,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               TextButton(
@@ -770,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text(
                   'See All',
                   style: TextStyle(
-                    color: Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -797,7 +798,7 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -812,12 +813,12 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
+              color: AppPalette.emerald.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.directions_bus,
-              color: Color(0xFF6B9B5B),
+              color: AppPalette.emerald,
               size: 24,
             ),
           ),
@@ -831,7 +832,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -842,8 +843,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     color: isDarkMode
-                        ? Colors.white60
-                        : const Color(0xFF666666),
+                        ? AppPalette.textSecondaryDark
+                        : AppPalette.textSecondaryLight,
                   ),
                 ),
               ],
@@ -852,7 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
+              color: AppPalette.emeraldSoftLight,
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
@@ -860,7 +861,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
               ),
             ),
           ),

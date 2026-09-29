@@ -5,6 +5,7 @@ import '../api/api.dart' as api;
 import '../models/student.dart';
 import '../models/trip.dart';
 import '../models/child.dart';
+import '../theme/app_colors.dart';
 
 class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   // API Services
@@ -35,15 +36,16 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   // Theme mode: null = system default, true = dark, false = light
   bool? _manualDarkMode;
 
-  // Theme colors
-  static const Color primaryGreen = Color(0xFF6B9B5B);
-  static const Color lightBackground = Color(0xFFF5F5F0);
-  static const Color darkBackground = Color(0xFF121212);
-  static const Color cardLight = Colors.white;
-  static const Color cardDark = Color(0xFF1E1E1E);
-  static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF666666);
-  static const Color accentGreen = Color(0xFFE8F5E9);
+  // Legacy color names, kept for older screens; values come from the design
+  // system palette so every screen shares one brand.
+  static const Color primaryGreen = AppPalette.emerald;
+  static const Color lightBackground = AppPalette.bgLight;
+  static const Color darkBackground = AppPalette.bgDark;
+  static const Color cardLight = AppPalette.surfaceLight;
+  static const Color cardDark = AppPalette.surfaceDark;
+  static const Color textPrimary = AppPalette.textPrimaryLight;
+  static const Color textSecondary = AppPalette.textSecondaryLight;
+  static const Color accentGreen = AppPalette.emeraldSoftLight;
 
   AppProvider() {
     WidgetsBinding.instance.addObserver(this);
@@ -153,8 +155,10 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Color get backgroundColor => isDarkMode ? darkBackground : lightBackground;
   Color get cardColor => isDarkMode ? cardDark : cardLight;
-  Color get textColor => isDarkMode ? Colors.white : textPrimary;
-  Color get textMutedColor => isDarkMode ? Colors.white70 : textSecondary;
+  Color get textColor =>
+      isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight;
+  Color get textMutedColor =>
+      isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight;
 
   // ==========================================================================
   // API INTEGRATION - ROUTES

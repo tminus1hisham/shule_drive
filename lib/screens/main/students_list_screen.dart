@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Students List Screen - Professional UI for managing student pickups
 /// 
 /// Features:
@@ -271,7 +272,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(
-                color: const Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 strokeWidth: 3,
               ),
               const SizedBox(height: 16),
@@ -407,14 +408,14 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         gradient: LinearGradient(
           colors: isDarkMode
               ? [const Color(0xFF2D3B2D), const Color(0xFF1E2A1E)]
-              : [const Color(0xFF6B9B5B), const Color(0xFF4A7A3E)],
+              : [AppPalette.emerald, AppPalette.emeraldPressed],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withValues(alpha: isDarkMode ? 0.2 : 0.35),
+            color: AppPalette.emerald.withValues(alpha: isDarkMode ? 0.2 : 0.35),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -515,12 +516,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDarkMode
               ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.shade200,
+              : AppPalette.outlineLight,
         ),
         boxShadow: isDarkMode
             ? null
@@ -562,8 +563,8 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: progress >= 1.0
-                        ? [const Color(0xFF6B9B5B), const Color(0xFF4A7A3E)]
-                        : [const Color(0xFF2196F3), const Color(0xFF1976D2)],
+                        ? [AppPalette.emerald, AppPalette.emeraldPressed]
+                        : [AppPalette.info, AppPalette.info],
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -591,7 +592,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   decoration: BoxDecoration(
                     color: isDarkMode
                         ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.grey.shade100,
+                        : AppPalette.surfaceSubtleLight,
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -603,12 +604,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   width: (MediaQuery.of(context).size.width - 72) * progress,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF6B9B5B), Color(0xFF8BC48A)],
+                      colors: [AppPalette.emerald, AppPalette.emeraldBright],
                     ),
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6B9B5B).withValues(alpha: 0.4),
+                        color: AppPalette.emerald.withValues(alpha: 0.4),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -627,7 +628,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 Icons.check_circle_rounded,
                 pickedCount.toString(),
                 'Picked',
-                const Color(0xFF6B9B5B),
+                AppPalette.emerald,
                 isDarkMode,
               ),
               const SizedBox(width: 12),
@@ -726,12 +727,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         decoration: BoxDecoration(
           color: isDarkMode
               ? Colors.white.withValues(alpha: 0.06)
-              : Colors.grey.shade50,
+              : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDarkMode
                 ? Colors.white.withValues(alpha: 0.1)
-                : Colors.grey.shade200,
+                : AppPalette.outlineLight,
           ),
           boxShadow: isDarkMode
               ? null
@@ -763,12 +764,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                color: AppPalette.emerald.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 Icons.search_rounded,
-                color: const Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 size: 18,
               ),
             ),
@@ -782,7 +783,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                     child: Container(
                       margin: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.2),
+                        color: AppPalette.textMutedLight.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -819,7 +820,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         decoration: BoxDecoration(
           color: isDarkMode
               ? const Color(0xFF252525)
-              : const Color(0xFFF5F5F5),
+              : AppPalette.surfaceSubtleLight,
           borderRadius: BorderRadius.circular(16),
         ),
         padding: const EdgeInsets.all(4),
@@ -879,13 +880,13 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF6B9B5B)
+                ? AppPalette.emerald
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(13),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                      color: AppPalette.emerald.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -918,7 +919,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                         ? Colors.white.withValues(alpha: 0.25)
                         : isDarkMode
                             ? Colors.white.withValues(alpha: 0.1)
-                            : Colors.grey.shade300.withValues(alpha: 0.5),
+                            : AppPalette.outlineLight.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -955,10 +956,10 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 decoration: BoxDecoration(
                   color: isDarkMode
                       ? const Color(0xFF2D3B2D)
-                      : const Color(0xFFE8F5E9),
+                      : AppPalette.emeraldSoftLight,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                    color: AppPalette.emerald.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -966,7 +967,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   children: [
                     Icon(
                       Icons.check_circle_outline,
-                      color: const Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -975,7 +976,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF6B9B5B),
+                        color: AppPalette.emerald,
                       ),
                     ),
                   ],
@@ -1050,13 +1051,13 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isDarkMode
-                  ? const Color(0xFF1E1E1E)
+                  ? AppPalette.surfaceDark
                   : Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isDarkMode
                     ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.grey.shade100,
+                    : AppPalette.surfaceSubtleLight,
                 width: 1.5,
               ),
               boxShadow: isDarkMode
@@ -1127,7 +1128,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 if (student.status == StudentStatus.pending) ...[
                   _buildQuickAction(
                     icon: Icons.check_rounded,
-                    color: const Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                     onTap: () =>
                         _updateStudentStatus(student.id, StudentStatus.picked),
                   ),
@@ -1181,12 +1182,12 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF6B9B5B), Color(0xFF4A7A3E)],
+              colors: [AppPalette.emerald, AppPalette.emeraldPressed],
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6B9B5B).withValues(alpha: 0.3),
+                color: AppPalette.emerald.withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1221,7 +1222,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.orange.withValues(alpha: 0.3),
+                color: AppPalette.warning.withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1295,7 +1296,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               color: statusColor,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
                 width: 3,
               ),
             ),
@@ -1347,11 +1348,11 @@ class _StudentsListScreenState extends State<StudentsListScreen>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(30),
         gradient: const LinearGradient(
-          colors: [Color(0xFF6B9B5B), Color(0xFF4A7A3E)],
+          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withValues(alpha: 0.4),
+            color: AppPalette.emerald.withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -1401,7 +1402,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
               foregroundColor: Colors.white,
             ),
             child: const Text('End Trip'),
@@ -1427,7 +1428,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Trip completed successfully'),
-              backgroundColor: Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
             ),
           );
           Navigator.pushReplacementNamed(
@@ -1441,7 +1442,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
               content: Text(
                 'Failed to complete trip: ${tripProvider.errorMessage ?? "Unknown error"}',
               ),
-              backgroundColor: Colors.red,
+              backgroundColor: AppPalette.error,
             ),
           );
         }
@@ -1449,7 +1450,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppPalette.error),
         );
       }
     }
@@ -1478,7 +1479,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('All students picked up'),
-            backgroundColor: Color(0xFF6B9B5B),
+            backgroundColor: AppPalette.emerald,
           ),
         );
       }
@@ -1490,7 +1491,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to pick all: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppPalette.error,
           ),
         );
       }
@@ -1522,7 +1523,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('All students dropped off'),
-            backgroundColor: Colors.blue,
+            backgroundColor: AppPalette.info,
           ),
         );
       }
@@ -1534,7 +1535,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to drop all: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppPalette.error,
           ),
         );
       }
@@ -1555,7 +1556,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDark ? AppPalette.surfaceDark : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             boxShadow: [
               BoxShadow(
@@ -1574,7 +1575,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    color: isDark ? Colors.white24 : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -1616,7 +1617,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDark ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1663,7 +1664,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       child: _buildActionBtn(
                         icon: Icons.check_circle_rounded,
                         label: 'Pick Up',
-                        color: const Color(0xFF6B9B5B),
+                        color: AppPalette.emerald,
                         enabled: student.status == StudentStatus.pending,
                         onTap: () {
                           _updateStudentStatus(student.id, StudentStatus.picked);
@@ -1717,18 +1718,18 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                       },
                       icon: Icon(
                         Icons.refresh_rounded,
-                        color: isDark ? Colors.white60 : Colors.grey.shade600,
+                        color: isDark ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                       ),
                       label: Text(
                         'Reset to Pending',
                         style: TextStyle(
-                          color: isDark ? Colors.white60 : Colors.grey.shade600,
+                          color: isDark ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: BorderSide(
-                          color: isDark ? Colors.white24 : Colors.grey.shade300,
+                          color: isDark ? Colors.white24 : AppPalette.outlineLight,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -1799,7 +1800,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
   Color _getStatusColor(StudentStatus status) {
     switch (status) {
       case StudentStatus.picked:
-        return const Color(0xFF6B9B5B);
+        return AppPalette.emerald;
       case StudentStatus.absent:
         return Colors.orange.shade600;
       case StudentStatus.dropped:
@@ -1853,7 +1854,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                color: AppPalette.emerald.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -1861,7 +1862,7 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                     ? Icons.search_off_rounded
                     : Icons.person_off_outlined,
                 size: 48,
-                color: const Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
               ),
             ),
             const SizedBox(height: 24),
@@ -1897,8 +1898,8 @@ class _StudentsListScreenState extends State<StudentsListScreen>
                 icon: const Icon(Icons.clear_all_rounded),
                 label: const Text('Clear Search'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF6B9B5B),
-                  side: const BorderSide(color: Color(0xFF6B9B5B)),
+                  foregroundColor: AppPalette.emerald,
+                  side: const BorderSide(color: AppPalette.emerald),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

@@ -40,12 +40,11 @@ class StatTile extends StatelessWidget {
           style: context.text.titleMedium?.copyWith(
             color: fg,
             fontWeight: FontWeight.w700,
+            // Fixed-width digits so live ETA/speed values don't jitter.
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
-        Text(
-          label,
-          style: context.text.labelSmall?.copyWith(color: muted),
-        ),
+        Text(label, style: context.text.labelSmall?.copyWith(color: muted)),
       ],
     );
   }

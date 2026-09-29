@@ -8,6 +8,7 @@ import '../../services/guardian_trip_notification_service.dart';
 import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Model for guardian trip history entry
 /// Groups students by trip so shared trips appear together
 class GuardianTripHistoryEntry {
@@ -369,11 +370,11 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
         children: [
           // Tab Bar
           Container(
-            color: provider.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            color: provider.isDarkMode ? AppPalette.surfaceDark : Colors.white,
             child: TabBar(
               controller: _tabController,
-              indicatorColor: const Color(0xFF6B9B5B),
-              labelColor: const Color(0xFF6B9B5B),
+              indicatorColor: AppPalette.emerald,
+              labelColor: AppPalette.emerald,
               unselectedLabelColor: provider.textMutedColor,
               tabs: const [
                 Tab(icon: Icon(Icons.local_shipping), text: 'Active'),
@@ -389,14 +390,14 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
                 // Active Tab
                 RefreshIndicator(
                   onRefresh: _loadActiveTrip,
-                  color: const Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   backgroundColor: provider.cardColor,
                   child: _buildActiveTab(provider),
                 ),
                 // History Tab
                 RefreshIndicator(
                   onRefresh: _loadTripHistory,
-                  color: const Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   backgroundColor: provider.cardColor,
                   child: _buildHistoryTab(provider),
                 ),
@@ -412,7 +413,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     // Show loading
     if (_isLoadingActive) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        child: CircularProgressIndicator(color: AppPalette.emerald),
       );
     }
 
@@ -461,7 +462,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     // Show loading
     if (_isLoadingHistory) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+        child: CircularProgressIndicator(color: AppPalette.emerald),
       );
     }
 
@@ -493,14 +494,14 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withAlpha(100),
+            color: AppPalette.emerald.withAlpha(100),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -620,13 +621,13 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withAlpha(20),
+                color: AppPalette.emerald.withAlpha(20),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '${_myStudents.length} on this trip',
                 style: const TextStyle(
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -643,7 +644,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               color: provider.cardColor,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: provider.isDarkMode ? Colors.white12 : Colors.grey.shade200,
+                color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
               ),
             ),
             child: Row(
@@ -686,22 +687,22 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     
     switch (student.status) {
       case 'picked':
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = AppPalette.success;
         statusIcon = Icons.check_circle;
         statusText = 'Picked Up';
         break;
       case 'absent':
-        statusColor = const Color(0xFFFF9800);
+        statusColor = AppPalette.warning;
         statusIcon = Icons.cancel;
         statusText = 'Absent';
         break;
       case 'dropped':
-        statusColor = const Color(0xFF2196F3);
+        statusColor = AppPalette.info;
         statusIcon = Icons.logout;
         statusText = 'Dropped Off';
         break;
       default:
-        statusColor = Colors.grey;
+        statusColor = AppPalette.textMutedLight;
         statusIcon = Icons.schedule;
         statusText = 'Waiting';
     }
@@ -794,15 +795,14 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     
     return CircleAvatar(
       radius: 28,
-      backgroundColor: const Color(0xFF6B9B5B).withAlpha(30),
-      child: const Icon(Icons.person, color: Color(0xFF6B9B5B)),
+      backgroundColor: AppPalette.emerald.withAlpha(30),
+      child: const Icon(Icons.person, color: AppPalette.emerald),
     );
   }
 
   Widget _buildTripProgress(AppProvider provider) {
-    final trip = _activeTrip!;
-    final totalStudents = trip.students.length;
-    final pickedCount = trip.pickedCount;
+    final totalStudents = _myStudents.length;
+    final pickedCount = _myStudents.where((s) => s.status == 'picked').length;
     final progress = totalStudents > 0 ? pickedCount / totalStudents : 0.0;
 
     return Container(
@@ -837,8 +837,8 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               minHeight: 10,
               backgroundColor: provider.isDarkMode 
                   ? Colors.white12 
-                  : Colors.grey.shade200,
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6B9B5B)),
+                  : AppPalette.outlineLight,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppPalette.emerald),
             ),
           ),
           const SizedBox(height: 12),
@@ -857,7 +857,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
               ),
             ],
@@ -884,13 +884,13 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
           );
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 4,
-          shadowColor: const Color(0xFF6B9B5B).withAlpha(100),
+          shadowColor: AppPalette.emerald.withAlpha(100),
         ),
         icon: const Icon(Icons.location_on, size: 24),
         label: const Text(
@@ -915,7 +915,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withAlpha(20),
+                color: AppPalette.emerald.withAlpha(20),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -950,7 +950,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               child: ElevatedButton.icon(
                 onPressed: _loadActiveTrip,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1003,7 +1003,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
             ElevatedButton(
               onPressed: onRetry,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Retry'),
@@ -1025,7 +1025,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: const Color(0xFF6B9B5B).withAlpha(20),
+                color: AppPalette.emerald.withAlpha(20),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -1087,8 +1087,8 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isCompleted
-                    ? [const Color(0xFF6B9B5B), const Color(0xFF5A8A4A)]
-                    : [const Color(0xFFFF9800), const Color(0xFFF57C00)],
+                    ? [AppPalette.emerald, AppPalette.emeraldPressed]
+                    : [AppPalette.warning, const Color(0xFFF57C00)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -1170,7 +1170,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
                 Container(
                   width: 1,
                   height: 40,
-                  color: provider.isDarkMode ? Colors.white12 : Colors.grey.shade200,
+                  color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
                 ),
                 Expanded(
                   child: _buildTimeInfo(
@@ -1183,7 +1183,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
                 Container(
                   width: 1,
                   height: 40,
-                  color: provider.isDarkMode ? Colors.white12 : Colors.grey.shade200,
+                  color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
                 ),
                 Expanded(
                   child: _buildTimeInfo(
@@ -1224,7 +1224,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
   Widget _buildTimeInfo(AppProvider provider, String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
+        Icon(icon, size: 20, color: AppPalette.emerald),
         const SizedBox(height: 4),
         Text(
           value,
@@ -1254,17 +1254,17 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     switch (student.status) {
       case 'picked':
       case 'dropped':
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = AppPalette.success;
         statusIcon = Icons.check_circle;
         statusText = 'Completed';
         break;
       case 'absent':
-        statusColor = const Color(0xFFFF9800);
+        statusColor = AppPalette.warning;
         statusIcon = Icons.cancel;
         statusText = 'Absent';
         break;
       default:
-        statusColor = Colors.grey;
+        statusColor = AppPalette.textMutedLight;
         statusIcon = Icons.schedule;
         statusText = 'Pending';
     }
@@ -1273,7 +1273,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: provider.isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+        color: provider.isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: statusColor.withAlpha(30),

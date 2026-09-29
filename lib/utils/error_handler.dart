@@ -277,7 +277,7 @@ mixin ErrorHandlingMixin<T extends StatefulWidget> on State<T> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 30),
+                color: Colors.red.withAlpha(30),
                 shape: BoxShape.circle,
               ),
               child: const Icon(

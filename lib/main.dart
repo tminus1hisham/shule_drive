@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/auth/splash.dart';
+import 'theme/app_spacing.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'api/api_client.dart';
 import 'providers/app_provider.dart';
@@ -522,12 +523,12 @@ Route _buildPageRoute(RouteSettings settings) {
     pageBuilder: (context, a1, a2) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        opacity: CurvedAnimation(parent: animation, curve: AppCurves.easeOut),
         child: ScaleTransition(
           scale: Tween<double>(
             begin: 0.98,
             end: 1.0,
-          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          ).animate(CurvedAnimation(parent: animation, curve: AppCurves.easeOut)),
           child: child,
         ),
       );

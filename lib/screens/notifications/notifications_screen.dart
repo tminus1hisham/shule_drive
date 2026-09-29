@@ -6,6 +6,7 @@ import '../../api/services/user_service.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class NotificationItem {
   final String id;
   final String title;
@@ -128,7 +129,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load notifications: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppPalette.error,
           ),
         );
       }
@@ -263,7 +264,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             child: const Text(
               'Mark all read',
               style: TextStyle(
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -273,12 +274,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         children: [
           // Tab Bar
           Container(
-            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
             child: TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFF6B9B5B),
-              unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.grey,
-              indicatorColor: const Color(0xFF6B9B5B),
+              labelColor: AppPalette.emerald,
+              unselectedLabelColor: isDarkMode ? Colors.white60 : AppPalette.textMutedLight,
+              indicatorColor: AppPalette.emerald,
               tabs: [
                 const Tab(text: 'All'),
                 Tab(
@@ -291,7 +292,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -320,8 +321,8 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     ? _buildEmptyState(isDarkMode)
                     : RefreshIndicator(
                         onRefresh: _loadNotifications,
-                        color: const Color(0xFF6B9B5B),
-                        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                        color: AppPalette.emerald,
+                        backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: filteredNotifications.length,
@@ -350,7 +351,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -359,7 +360,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+              color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
               shape: BoxShape.circle,
             ),
           ),
@@ -372,7 +373,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   width: 150,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+                    color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -381,7 +382,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   width: double.infinity,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : Colors.grey.shade200,
+                    color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -405,13 +406,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               decoration: BoxDecoration(
                 color: isDarkMode
                     ? Colors.white.withAlpha(10)
-                    : const Color(0xFF6B9B5B).withAlpha(30),
+                    : AppPalette.emerald.withAlpha(30),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.notifications_none,
                 size: 48,
-                color: isDarkMode ? Colors.white38 : const Color(0xFF6B9B5B),
+                color: isDarkMode ? Colors.white38 : AppPalette.emerald,
               ),
             ),
             const SizedBox(height: 24),
@@ -422,7 +423,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
               ),
             ),
             const SizedBox(height: 8),
@@ -433,7 +434,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isDarkMode ? Colors.white54 : const Color(0xFF666666),
+                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               ),
             ),
           ],
@@ -467,7 +468,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -479,7 +480,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           border: notification.isRead
               ? null
               : Border.all(
-                  color: const Color(0xFF6B9B5B).withAlpha(50),
+                  color: AppPalette.emerald.withAlpha(50),
                   width: 1,
                 ),
         ),
@@ -517,10 +518,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             width: 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                                color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
                                 width: 2,
                               ),
                             ),
@@ -545,7 +546,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                                   fontWeight: notification.isRead
                                       ? FontWeight.w500
                                       : FontWeight.w700,
-                                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                                 ),
                               ),
                             ),
@@ -553,7 +554,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                               notification.timeAgo,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDarkMode ? Colors.white38 : Colors.grey.shade500,
+                                color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                               ),
                             ),
                           ],
@@ -563,7 +564,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           notification.message,
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDarkMode ? Colors.white70 : const Color(0xFF666666),
+                            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                             height: 1.4,
                           ),
                           maxLines: 2,
@@ -601,11 +602,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   Color _getColorForType(NotificationType type) {
     switch (type) {
       case NotificationType.trip:
-        return const Color(0xFF6B9B5B);
+        return AppPalette.emerald;
       case NotificationType.message:
-        return const Color(0xFF2196F3);
+        return AppPalette.info;
       case NotificationType.alert:
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
       case NotificationType.payment:
         return const Color(0xFF9C27B0);
       case NotificationType.child:

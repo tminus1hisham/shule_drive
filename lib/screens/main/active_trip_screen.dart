@@ -21,6 +21,7 @@ import '../../utils/student_trip_logic.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 
+import '../../theme/app_colors.dart';
 /// Active Trip Screen - Shows live map tracking with flutter_map
 ///
 /// Features:
@@ -893,7 +894,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       builder: (context) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.warning, color: Colors.red),
+            Icon(Icons.warning, color: AppPalette.error),
             SizedBox(width: 8),
             Text('Emergency'),
           ],
@@ -909,7 +910,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: AppPalette.error,
               foregroundColor: Colors.white,
             ),
             child: const Text('Call Emergency'),
@@ -962,7 +963,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   if (_routePoints.isNotEmpty)
                     Polyline(
                       points: _routePoints,
-                      color: const Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                       strokeWidth: 4,
                     ),
                 ],
@@ -982,8 +983,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: isProcessed
-                              ? Colors.grey
-                              : const Color(0xFF6B9B5B),
+                              ? AppPalette.textMutedLight
+                              : AppPalette.emerald,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
                         ),
@@ -1022,7 +1023,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       height: 24,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
                         ),
@@ -1038,7 +1039,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+                child: CircularProgressIndicator(color: AppPalette.emerald),
               ),
             ),
 
@@ -1053,7 +1054,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 decoration: BoxDecoration(
                   color: Colors.orange.shade100,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange),
+                  border: Border.all(color: AppPalette.warning),
                 ),
                 child: Row(
                   children: [
@@ -1100,7 +1101,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 _buildMapButton(
                   icon: Icons.my_location,
                   label: 'Center',
-                  color: const Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   onPressed: _centerOnBus,
                 ),
                 const SizedBox(height: 8),
@@ -1155,7 +1156,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     Color? color,
   }) {
     final isDark = context.read<AppProvider>().isDarkMode;
-    final bgColor = color ?? (isDark ? const Color(0xFF2C2C2C) : Colors.white);
+    final bgColor = color ?? (isDark ? AppPalette.surfaceSubtleDark : Colors.white);
     final fgColor = color != null
         ? Colors.white
         : (isDark ? Colors.white : Colors.black87);
@@ -1198,7 +1199,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       },
       offset: const Offset(-50, 0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+      color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
       itemBuilder: (context) => styles.map((style) {
         final isSelected = _currentMapStyle == style['key'];
         return PopupMenuItem<String>(
@@ -1209,7 +1210,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 style['icon'] as IconData,
                 size: 20,
                 color: isSelected
-                    ? const Color(0xFF6B9B5B)
+                    ? AppPalette.emerald
                     : (isDarkMode ? Colors.white70 : Colors.black54),
               ),
               const SizedBox(width: 12),
@@ -1218,13 +1219,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   color: isSelected
-                      ? const Color(0xFF6B9B5B)
+                      ? AppPalette.emerald
                       : (isDarkMode ? Colors.white : Colors.black87),
                 ),
               ),
               if (isSelected) ...[
                 const Spacer(),
-                const Icon(Icons.check, size: 18, color: Color(0xFF6B9B5B)),
+                const Icon(Icons.check, size: 18, color: AppPalette.emerald),
               ],
             ],
           ),
@@ -1232,7 +1233,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       }).toList(),
       child: FloatingActionButton.small(
         onPressed: null,
-        backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+        backgroundColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
         foregroundColor: isDarkMode ? Colors.white : Colors.black87,
         child: const Icon(Icons.layers),
       ),
@@ -1243,7 +1244,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
@@ -1268,7 +1269,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   '$_pickedCount/$_totalCount students picked',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                 ),
               ],
@@ -1277,19 +1278,19 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+              color: AppPalette.emerald.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                const Icon(Icons.circle, color: Color(0xFF6B9B5B), size: 8),
+                const Icon(Icons.circle, color: AppPalette.emerald, size: 8),
                 const SizedBox(width: 6),
                 Text(
                   'LIVE',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                   ),
                 ),
               ],
@@ -1307,7 +1308,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -1335,7 +1336,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       '${alert.stopName} - ${alert.formattedDistance}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -1345,7 +1346,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 alert.formattedEta,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
               ),
             ],
@@ -1368,7 +1369,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 16),
@@ -1386,28 +1387,28 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   Icon(
                     Icons.speed,
                     size: 16,
-                    color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${_currentLocation!.speed.toStringAsFixed(0)} km/h',
                     style: TextStyle(
                       fontSize: 13,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Icon(
                     Icons.navigation,
                     size: 16,
-                    color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${_currentLocation!.heading.toStringAsFixed(0)}°',
                     style: TextStyle(
                       fontSize: 13,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     ),
                   ),
                 ],
@@ -1454,8 +1455,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isDarkMode
-                            ? const Color(0xFF2C2C2C)
-                            : Colors.grey[100],
+                            ? AppPalette.surfaceSubtleDark
+                            : AppPalette.surfaceSubtleLight,
                         foregroundColor: isDarkMode
                             ? Colors.white
                             : Colors.black87,
@@ -1494,7 +1495,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6B9B5B),
+                        backgroundColor: AppPalette.emerald,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -1580,7 +1581,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
               foregroundColor: Colors.white,
             ),
             child: const Text('Pick All'),
@@ -1625,7 +1626,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ All pending students marked as picked'),
-          backgroundColor: Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
         ),
       );
     }
@@ -1650,7 +1651,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6B9B5B),
+              backgroundColor: AppPalette.emerald,
               foregroundColor: Colors.white,
             ),
             child: const Text('Drop All'),
@@ -1695,7 +1696,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ All students marked as dropped'),
-          backgroundColor: Color(0xFF6B9B5B),
+          backgroundColor: AppPalette.emerald,
         ),
       );
     }
@@ -1804,7 +1805,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(tripProvider.errorMessage ?? 'Failed to update status'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppPalette.error,
         ),
       );
       return;
@@ -1837,8 +1838,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           ],
         ),
         backgroundColor: newStatus == 'absent'
-            ? Colors.orange
-            : const Color(0xFF6B9B5B),
+            ? AppPalette.warning
+            : AppPalette.emerald,
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1906,7 +1907,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.schedule, color: Color(0xFF6B9B5B)),
+                leading: const Icon(Icons.schedule, color: AppPalette.emerald),
                 title: const Text('Running Late'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1914,7 +1915,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.traffic, color: Color(0xFF6B9B5B)),
+                leading: const Icon(Icons.traffic, color: AppPalette.emerald),
                 title: const Text('Traffic Delay'),
                 onTap: () {
                   Navigator.pop(context);
@@ -1924,7 +1925,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               ListTile(
                 leading: const Icon(
                   Icons.check_circle,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                 ),
                 title: const Text('On Schedule'),
                 onTap: () {
@@ -1933,7 +1934,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.edit_note, color: Color(0xFF6B9B5B)),
+                leading: const Icon(Icons.edit_note, color: AppPalette.emerald),
                 title: const Text('Custom Message'),
                 onTap: () {
                   Navigator.pop(context);
@@ -2022,7 +2023,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Trip completed successfully'),
-                  backgroundColor: Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                 ),
               );
               Navigator.pushNamedAndRemoveUntil(
@@ -2037,7 +2038,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   content: Text(
                     'Failed to complete trip: ${tripProvider.errorMessage ?? "Unknown error"}',
                   ),
-                  backgroundColor: Colors.red,
+                  backgroundColor: AppPalette.error,
                 ),
               );
             }
@@ -2047,7 +2048,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppPalette.error),
         );
       }
     } finally {
@@ -2073,16 +2074,16 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  color: AppPalette.emerald.withAlpha(30),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.check_circle, color: Color(0xFF6B9B5B)),
+                child: const Icon(Icons.check_circle, color: AppPalette.emerald),
               ),
               const SizedBox(width: 12),
               Text(
@@ -2118,9 +2119,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 child: LinearProgressIndicator(
                   value: _totalCount > 0 ? _pickedCount / _totalCount : 0,
                   backgroundColor: isDarkMode
-                      ? Colors.grey.shade800
-                      : Colors.grey.shade200,
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFF6B9B5B)),
+                      ? AppPalette.textSecondaryLight
+                      : AppPalette.outlineLight,
+                  valueColor: const AlwaysStoppedAnimation(AppPalette.emerald),
                   minHeight: 8,
                 ),
               ),
@@ -2129,7 +2130,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 '${_totalCount > 0 ? (_pickedCount / _totalCount * 100).toInt() : 0}% pickup rate',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDarkMode ? Colors.white54 : Colors.grey,
+                  color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                 ),
               ),
             ],
@@ -2140,7 +2141,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -2168,7 +2169,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
           Text(
             label,
             style: TextStyle(
-              color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
               fontSize: 14,
             ),
           ),
@@ -2345,7 +2346,7 @@ class _StudentListBottomSheet extends StatelessWidget {
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -2371,10 +2372,10 @@ class _StudentListBottomSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                    color: AppPalette.emerald.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.people, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.people, color: AppPalette.emerald),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -2393,7 +2394,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                         '$pickedCount of $totalCount picked up',
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                          color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                         ),
                       ),
                     ],
@@ -2401,7 +2402,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: onMessageAll,
-                  icon: const Icon(Icons.campaign, color: Color(0xFF6B9B5B)),
+                  icon: const Icon(Icons.campaign, color: AppPalette.emerald),
                   tooltip: 'Alert all guardians',
                 ),
                 IconButton(
@@ -2419,9 +2420,9 @@ class _StudentListBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: totalCount > 0 ? pickedCount / totalCount : 0,
-                backgroundColor: isDarkMode ? Colors.white12 : Colors.grey[200],
+                backgroundColor: isDarkMode ? Colors.white12 : AppPalette.outlineLight,
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                  Color(0xFF6B9B5B),
+                  AppPalette.emerald,
                 ),
                 minHeight: 8,
               ),
@@ -2441,7 +2442,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                   icon: const Icon(Icons.campaign),
                   label: Text('Alert All Guardians (${students.length})'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -2468,7 +2469,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isDarkMode
                             ? Colors.white12
-                            : Colors.grey[100],
+                            : AppPalette.surfaceSubtleLight,
                         foregroundColor: isDarkMode
                             ? Colors.white
                             : Colors.black87,
@@ -2479,7 +2480,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                           side: BorderSide(
                             color: isDarkMode
                                 ? Colors.white24
-                                : Colors.grey[300]!,
+                                : AppPalette.outlineLight,
                           ),
                         ),
                       ),
@@ -2494,7 +2495,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isDarkMode
                             ? Colors.white12
-                            : Colors.grey[100],
+                            : AppPalette.surfaceSubtleLight,
                         foregroundColor: isDarkMode
                             ? Colors.white
                             : Colors.black87,
@@ -2505,7 +2506,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                           side: BorderSide(
                             color: isDarkMode
                                 ? Colors.white24
-                                : Colors.grey[300]!,
+                                : AppPalette.outlineLight,
                           ),
                         ),
                       ),
@@ -2527,7 +2528,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                         Icon(
                           Icons.people_outline,
                           size: 64,
-                          color: isDarkMode ? Colors.white30 : Colors.grey[400],
+                          color: isDarkMode ? Colors.white30 : AppPalette.textMutedLight,
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -2535,8 +2536,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 16,
                             color: isDarkMode
-                                ? Colors.white60
-                                : Colors.grey[600],
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                           ),
                         ),
                       ],
@@ -2557,8 +2558,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: isDarkMode
-                              ? const Color(0xFF2C2C2C)
-                              : Colors.grey[50],
+                              ? AppPalette.surfaceSubtleDark
+                              : AppPalette.surfaceSubtleLight,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ListTile(
@@ -2568,12 +2569,12 @@ class _StudentListBottomSheet extends StatelessWidget {
                             height: 44,
                             decoration: BoxDecoration(
                               color: isPicked
-                                  ? const Color(0xFF6B9B5B)
+                                  ? AppPalette.emerald
                                   : isDropped
-                                  ? Colors.blue
+                                  ? AppPalette.info
                                   : isDarkMode
                                   ? Colors.white12
-                                  : Colors.grey[200],
+                                  : AppPalette.outlineLight,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -2585,8 +2586,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                               color: isPicked || isDropped
                                   ? Colors.white
                                   : isDarkMode
-                                  ? Colors.white60
-                                  : Colors.grey[600],
+                                  ? AppPalette.textSecondaryDark
+                                  : AppPalette.textSecondaryLight,
                             ),
                           ),
                           title: Text(
@@ -2601,8 +2602,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 13,
                               color: isDarkMode
-                                  ? Colors.white60
-                                  : Colors.grey[600],
+                                  ? AppPalette.textSecondaryDark
+                                  : AppPalette.textSecondaryLight,
                             ),
                           ),
                           trailing: isPending
@@ -2612,7 +2613,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                                     // Pick button
                                     _buildMiniActionButton(
                                       icon: Icons.check,
-                                      color: const Color(0xFF6B9B5B),
+                                      color: AppPalette.emerald,
                                       onTap: () => onUpdateStatus(
                                         student['id'],
                                         'picked',
@@ -2622,7 +2623,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                                     // Absent button
                                     _buildMiniActionButton(
                                       icon: Icons.person_off,
-                                      color: Colors.orange,
+                                      color: AppPalette.warning,
                                       onTap: () => onUpdateStatus(
                                         student['id'],
                                         'absent',
@@ -2641,7 +2642,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                                         icon: const Icon(
                                           Icons.chat_bubble_outline,
                                         ),
-                                        color: const Color(0xFF6B9B5B),
+                                        color: AppPalette.emerald,
                                       ),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -2654,8 +2655,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                                                 0xFF6B9B5B,
                                               ).withValues(alpha: 0.1)
                                             : isDropped
-                                            ? Colors.blue.withValues(alpha: 0.1)
-                                            : Colors.orange.withValues(
+                                            ? AppPalette.info.withValues(alpha: 0.1)
+                                            : AppPalette.warning.withValues(
                                                 alpha: 0.1,
                                               ),
                                         borderRadius: BorderRadius.circular(20),
@@ -2670,10 +2671,10 @@ class _StudentListBottomSheet extends StatelessWidget {
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                           color: isPicked
-                                              ? const Color(0xFF6B9B5B)
+                                              ? AppPalette.emerald
                                               : isDropped
-                                              ? Colors.blue
-                                              : Colors.orange,
+                                              ? AppPalette.info
+                                              : AppPalette.warning,
                                         ),
                                       ),
                                     ),
@@ -2712,8 +2713,8 @@ class _StudentListBottomSheet extends StatelessWidget {
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
                             color: isPending
-                                ? const Color(0xFF6B9B5B)
-                                : Colors.blue,
+                                ? AppPalette.emerald
+                                : AppPalette.info,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           alignment: Alignment.centerLeft,
@@ -2741,7 +2742,7 @@ class _StudentListBottomSheet extends StatelessWidget {
                             ? Container(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange,
+                                  color: AppPalette.warning,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 alignment: Alignment.centerRight,
@@ -2834,7 +2835,7 @@ class _StudentActionDialog extends StatelessWidget {
         width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 400),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -2951,7 +2952,7 @@ class _StudentActionDialog extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2963,7 +2964,7 @@ class _StudentActionDialog extends StatelessWidget {
                         child: _buildActionButton(
                           icon: Icons.check_circle,
                           label: 'Pick',
-                          color: const Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                           isActive: isPicked,
                           onTap: isPicked ? null : onPick,
                         ),
@@ -2973,7 +2974,7 @@ class _StudentActionDialog extends StatelessWidget {
                         child: _buildActionButton(
                           icon: Icons.person_off,
                           label: 'Absent',
-                          color: Colors.orange,
+                          color: AppPalette.warning,
                           isActive: isAbsent,
                           onTap: isAbsent ? null : onAbsent,
                         ),
@@ -2983,7 +2984,7 @@ class _StudentActionDialog extends StatelessWidget {
                         child: _buildActionButton(
                           icon: Icons.logout,
                           label: 'Drop',
-                          color: Colors.blue,
+                          color: AppPalette.info,
                           isActive: isDropped,
                           onTap: isDropped ? null : onDrop,
                         ),
@@ -3004,7 +3005,7 @@ class _StudentActionDialog extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isDarkMode
                               ? const Color(0xFF3C3C3C)
-                              : Colors.grey[100],
+                              : AppPalette.surfaceSubtleLight,
                           foregroundColor: isDarkMode
                               ? Colors.white
                               : Colors.black87,
@@ -3026,10 +3027,10 @@ class _StudentActionDialog extends StatelessWidget {
   }
 
   List<Color> _getHeaderGradient() {
-    if (isPicked) return [const Color(0xFF6B9B5B), const Color(0xFF5A8A4A)];
-    if (isAbsent) return [Colors.orange, Colors.deepOrange];
-    if (isDropped) return [Colors.blue, Colors.blueAccent];
-    return [const Color(0xFF6B9B5B), const Color(0xFF4A7A3A)];
+    if (isPicked) return [AppPalette.emerald, AppPalette.emeraldPressed];
+    if (isAbsent) return [AppPalette.warning, Colors.deepOrange];
+    if (isDropped) return [AppPalette.info, Colors.blueAccent];
+    return [AppPalette.emerald, const Color(0xFF4A7A3A)];
   }
 
   Widget _buildStatusBadge() {
@@ -3085,11 +3086,11 @@ class _StudentActionDialog extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.grey[500]),
+          Icon(icon, size: 18, color: AppPalette.textMutedLight),
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 13, color: AppPalette.textMutedLight),
           ),
           Expanded(
             child: Text(
@@ -3166,14 +3167,14 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
   bool _isSending = false;
 
   final List<Map<String, dynamic>> _quickMessages = [
-    {'icon': Icons.schedule, 'text': 'Running late', 'color': Colors.orange},
-    {'icon': Icons.traffic, 'text': 'Traffic delay', 'color': Colors.red},
+    {'icon': Icons.schedule, 'text': 'Running late', 'color': AppPalette.warning},
+    {'icon': Icons.traffic, 'text': 'Traffic delay', 'color': AppPalette.error},
     {
       'icon': Icons.access_time_filled,
       'text': 'Arriving soon',
-      'color': const Color(0xFF6B9B5B),
+      'color': AppPalette.emerald,
     },
-    {'icon': Icons.location_on, 'text': 'At the stop', 'color': Colors.blue},
+    {'icon': Icons.location_on, 'text': 'At the stop', 'color': AppPalette.info},
   ];
 
   @override
@@ -3193,7 +3194,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
         width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 420, maxHeight: 600),
         decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+          color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -3213,7 +3214,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+                    colors: [AppPalette.emerald, AppPalette.emeraldPressed],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -3294,7 +3295,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -3354,7 +3355,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -3367,12 +3368,12 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                       decoration: InputDecoration(
                         hintText: 'Type your alert message...',
                         hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                         ),
                         filled: true,
                         fillColor: isDarkMode
-                            ? const Color(0xFF1E1E1E)
-                            : const Color(0xFFF5F5F0),
+                            ? AppPalette.surfaceDark
+                            : AppPalette.bgLight,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
@@ -3380,7 +3381,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(
-                            color: Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             width: 2,
                           ),
                         ),
@@ -3397,7 +3398,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                         '${_messageController.text.length} chars',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDarkMode ? Colors.white38 : Colors.grey[400],
+                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
                         ),
                       ),
                     ),
@@ -3420,8 +3421,8 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                               'Cancel',
                               style: TextStyle(
                                 color: isDarkMode
-                                    ? Colors.white60
-                                    : Colors.grey[600],
+                                    ? AppPalette.textSecondaryDark
+                                    : AppPalette.textSecondaryLight,
                               ),
                             ),
                           ),
@@ -3461,7 +3462,7 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                               _isSending ? 'Sending...' : 'Send Alert',
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6B9B5B),
+                              backgroundColor: AppPalette.emerald,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -3514,7 +3515,7 @@ class _CompleteTripDialog extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
           decoration: BoxDecoration(
-            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -3527,8 +3528,8 @@ class _CompleteTripDialog extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: isComplete
-                          ? [const Color(0xFF6B9B5B), const Color(0xFF4A7A3A)]
-                          : [const Color(0xFFFF9800), const Color(0xFFF57C00)],
+                          ? [AppPalette.emerald, const Color(0xFF4A7A3A)]
+                          : [AppPalette.warning, const Color(0xFFF57C00)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -3590,7 +3591,7 @@ class _CompleteTripDialog extends StatelessWidget {
                             value: totalStudents.toString(),
                             label: 'Students',
                             icon: Icons.people_outline,
-                            color: Colors.blue,
+                            color: AppPalette.info,
                             isDarkMode: isDarkMode,
                           ),
                           const SizedBox(width: 10),
@@ -3598,7 +3599,7 @@ class _CompleteTripDialog extends StatelessWidget {
                             value: pickedCount.toString(),
                             label: 'Picked Up',
                             icon: Icons.check_circle_outline,
-                            color: const Color(0xFF6B9B5B),
+                            color: AppPalette.emerald,
                             isDarkMode: isDarkMode,
                           ),
                           const SizedBox(width: 10),
@@ -3606,7 +3607,7 @@ class _CompleteTripDialog extends StatelessWidget {
                             value: absentCount.toString(),
                             label: 'Absent',
                             icon: Icons.person_off_outlined,
-                            color: Colors.orange,
+                            color: AppPalette.warning,
                             isDarkMode: isDarkMode,
                           ),
                         ],
@@ -3629,11 +3630,11 @@ class _CompleteTripDialog extends StatelessWidget {
                                     strokeWidth: 8,
                                     backgroundColor: isDarkMode
                                         ? Colors.white.withValues(alpha: 0.1)
-                                        : Colors.grey[200],
+                                        : AppPalette.outlineLight,
                                     valueColor: AlwaysStoppedAnimation<Color>(
                                       isComplete
-                                          ? const Color(0xFF6B9B5B)
-                                          : const Color(0xFFFF9800),
+                                          ? AppPalette.emerald
+                                          : AppPalette.warning,
                                     ),
                                   ),
                                   Center(
@@ -3666,7 +3667,7 @@ class _CompleteTripDialog extends StatelessWidget {
                             vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: 0.1),
+                            color: AppPalette.warning.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -3699,7 +3700,7 @@ class _CompleteTripDialog extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: isDarkMode
                               ? Colors.white.withValues(alpha: 0.05)
-                              : const Color(0xFFF5F5F0),
+                              : AppPalette.bgLight,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDarkMode
@@ -3720,7 +3721,7 @@ class _CompleteTripDialog extends StatelessWidget {
                               ),
                               child: const Icon(
                                 Icons.notifications_active_outlined,
-                                color: Color(0xFF6B9B5B),
+                                color: AppPalette.emerald,
                                 size: 18,
                               ),
                             ),
@@ -3745,8 +3746,8 @@ class _CompleteTripDialog extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: isDarkMode
-                                          ? Colors.white60
-                                          : Colors.grey[600],
+                                          ? AppPalette.textSecondaryDark
+                                          : AppPalette.textSecondaryLight,
                                     ),
                                   ),
                                 ],
@@ -3777,8 +3778,8 @@ class _CompleteTripDialog extends StatelessWidget {
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: isComplete
-                                ? const Color(0xFF6B9B5B)
-                                : const Color(0xFFFF9800),
+                                ? AppPalette.emerald
+                                : AppPalette.warning,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
@@ -3795,8 +3796,8 @@ class _CompleteTripDialog extends StatelessWidget {
                           child: const Text('Go Back'),
                           style: TextButton.styleFrom(
                             foregroundColor: isDarkMode
-                                ? Colors.white60
-                                : Colors.grey[600],
+                                ? AppPalette.textSecondaryDark
+                                : AppPalette.textSecondaryLight,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
@@ -3894,10 +3895,10 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.1),
+                  color: AppPalette.emerald.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.location_on, color: Color(0xFF6B9B5B)),
+                child: const Icon(Icons.location_on, color: AppPalette.emerald),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -3906,7 +3907,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                   children: [
                     Text(
                       'Arrived at',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 13, color: AppPalette.textSecondaryLight),
                     ),
                     Text(
                       widget.stopName,
@@ -3944,10 +3945,10 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
                     backgroundColor: isPicked
-                        ? Colors.green
+                        ? AppPalette.success
                         : isAbsent
-                        ? Colors.orange
-                        : Colors.grey[200],
+                        ? AppPalette.warning
+                        : AppPalette.outlineLight,
                     child: Text(
                       studentName.isNotEmpty
                           ? studentName[0].toUpperCase()
@@ -3979,7 +3980,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                           isPicked
                               ? Icons.check_circle
                               : Icons.check_circle_outline,
-                          color: isPicked ? Colors.green : Colors.grey,
+                          color: isPicked ? AppPalette.success : AppPalette.textMutedLight,
                         ),
                       ),
                       IconButton(
@@ -3995,7 +3996,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                         },
                         icon: Icon(
                           isAbsent ? Icons.cancel : Icons.cancel_outlined,
-                          color: isAbsent ? Colors.orange : Colors.grey,
+                          color: isAbsent ? AppPalette.warning : AppPalette.textMutedLight,
                         ),
                       ),
                     ],
@@ -4016,7 +4017,7 @@ class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),

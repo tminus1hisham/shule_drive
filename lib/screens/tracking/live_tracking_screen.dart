@@ -8,6 +8,7 @@ import '../../providers/tracking_provider.dart';
 import '../../models/map_models.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 /// Live Tracking Screen - Real-time bus location on map
 class LiveTrackingScreen extends StatefulWidget {
   final String? tripId;
@@ -210,7 +211,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+                child: CircularProgressIndicator(color: AppPalette.emerald),
               ),
             ),
 
@@ -275,7 +276,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const Icon(Icons.error_outline, size: 48, color: AppPalette.error),
               const SizedBox(height: 16),
               const Text(
                 'Failed to load map',
@@ -285,13 +286,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               const Text(
                 'Please check your connection and try again.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppPalette.textMutedLight),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _initializeTracking,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                 ),
                 child: const Text('Retry'),
               ),
@@ -313,7 +314,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -333,12 +334,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  color: AppPalette.emerald.withAlpha(30),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.directions_bus,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   size: 24,
                 ),
               ),
@@ -359,7 +360,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       'Driver: ${info['driverName']}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDarkMode ? Colors.white70 : Colors.grey,
+                        color: isDarkMode ? Colors.white70 : AppPalette.textMutedLight,
                       ),
                     ),
                   ],
@@ -442,13 +443,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isNext
-                          ? const Color(0xFF6B9B5B).withAlpha(30)
+                          ? AppPalette.emerald.withAlpha(30)
                           : (isDarkMode
                                 ? Colors.white10
-                                : Colors.grey.shade100),
+                                : AppPalette.surfaceSubtleLight),
                       borderRadius: BorderRadius.circular(12),
                       border: isNext
-                          ? Border.all(color: const Color(0xFF6B9B5B), width: 1)
+                          ? Border.all(color: AppPalette.emerald, width: 1)
                           : null,
                     ),
                     child: Column(
@@ -472,7 +473,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                             eta,
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                             ),
                           ),
                       ],
@@ -528,7 +529,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           '${alert.stopName} • ${alert.formattedDistance} • ${alert.formattedEta}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDarkMode ? Colors.white70 : Colors.grey,
+                            color: isDarkMode ? Colors.white70 : AppPalette.textMutedLight,
                           ),
                         ),
                       ],
@@ -553,7 +554,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     bool isActive = false,
   }) {
     return Material(
-      color: isActive ? const Color(0xFF6B9B5B) : Colors.white,
+      color: isActive ? AppPalette.emerald : Colors.white,
       elevation: 4,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -565,7 +566,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
           child: Icon(
             icon,
-            color: isActive ? Colors.white : const Color(0xFF6B9B5B),
+            color: isActive ? Colors.white : AppPalette.emerald,
             size: 20,
           ),
         ),
@@ -581,7 +582,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }) {
     return Column(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
+        Icon(icon, size: 20, color: AppPalette.emerald),
         const SizedBox(height: 4),
         Text(
           value,
@@ -595,7 +596,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           label,
           style: TextStyle(
             fontSize: 11,
-            color: isDarkMode ? Colors.white60 : Colors.grey,
+            color: isDarkMode ? Colors.white60 : AppPalette.textMutedLight,
           ),
         ),
       ],
@@ -605,13 +606,13 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Color _getStatusColor(BusStatus? status) {
     switch (status) {
       case BusStatus.active:
-        return const Color(0xFF4CAF50);
+        return AppPalette.success;
       case BusStatus.idle:
         return const Color(0xFFFFC107);
       case BusStatus.maintenance:
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
       case BusStatus.offline:
-        return const Color(0xFF9E9E9E);
+        return AppPalette.textMutedLight;
       default:
         return const Color(0xFF607D8B);
     }
@@ -620,11 +621,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Color _getAlertColor(GeofenceType type) {
     switch (type) {
       case GeofenceType.approaching:
-        return const Color(0xFF2196F3);
+        return AppPalette.info;
       case GeofenceType.arriving:
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
       case GeofenceType.arrived:
-        return const Color(0xFF4CAF50);
+        return AppPalette.success;
     }
   }
 }
@@ -659,7 +660,7 @@ class LiveTrackingMiniMap extends StatelessWidget {
         height: height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          color: Colors.grey.shade200,
+          color: AppPalette.outlineLight,
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -667,7 +668,7 @@ class LiveTrackingMiniMap extends StatelessWidget {
             children: [
               // Placeholder map
               Container(
-                color: const Color(0xFFE8F5E9),
+                color: AppPalette.emeraldSoftLight,
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -700,7 +701,7 @@ class LiveTrackingMiniMap extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.red,
+                    color: AppPalette.error,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -747,7 +748,7 @@ class LiveTrackingMiniMap extends StatelessWidget {
                   child: const Icon(
                     Icons.fullscreen,
                     size: 20,
-                    color: Color(0xFF6B9B5B),
+                    color: AppPalette.emerald,
                   ),
                 ),
               ),

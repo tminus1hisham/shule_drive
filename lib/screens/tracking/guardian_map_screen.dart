@@ -6,6 +6,7 @@ import '../../services/mapbox_service.dart';
 import '../../api/services/trip_service.dart';
 import '../../api/services/student_service.dart';
 
+import '../../theme/app_colors.dart';
 /// Guardian Map Screen - Shows driver location, child status, and trip progress
 ///
 /// Features:
@@ -284,13 +285,13 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
 
     switch (tripStudent?.status) {
       case 'picked':
-        return const Color(0xFF4CAF50);
+        return AppPalette.success;
       case 'dropped':
-        return const Color(0xFF2196F3);
+        return AppPalette.info;
       case 'absent':
-        return const Color(0xFF9E9E9E);
+        return AppPalette.textMutedLight;
       default:
-        return const Color(0xFFFF9800);
+        return AppPalette.warning;
     }
   }
 
@@ -299,7 +300,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Track Bus'),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -329,7 +330,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             Container(
               color: Colors.black26,
               child: const Center(
-                child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+                child: CircularProgressIndicator(color: AppPalette.emerald),
               ),
             ),
 
@@ -349,7 +350,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                     const Icon(
                       Icons.error_outline,
                       size: 48,
-                      color: Colors.red,
+                      color: AppPalette.error,
                     ),
                     const SizedBox(height: 16),
                     Text(_errorMessage!, textAlign: TextAlign.center),
@@ -399,7 +400,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withAlpha(30),
+                  color: AppPalette.emerald.withAlpha(30),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text('🚌', style: TextStyle(fontSize: 24)),
@@ -421,7 +422,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                         '${_driverLocation!.speed.toStringAsFixed(0)} km/h',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey.shade600,
+                          color: AppPalette.textSecondaryLight,
                         ),
                       ),
                   ],
@@ -433,7 +434,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.withAlpha(30),
+                  color: AppPalette.success.withAlpha(30),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -443,7 +444,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                       width: 6,
                       height: 6,
                       decoration: const BoxDecoration(
-                        color: Colors.green,
+                        color: AppPalette.success,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -453,7 +454,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green,
+                        color: AppPalette.success,
                       ),
                     ),
                   ],
@@ -494,7 +495,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
                       _student?.className ?? '',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: AppPalette.textSecondaryLight,
                       ),
                     ),
                   ],
@@ -528,7 +529,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: AppPalette.surfaceSubtleLight,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -566,7 +567,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
   }) {
     return Column(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFF6B9B5B)),
+        Icon(icon, size: 20, color: AppPalette.emerald),
         const SizedBox(height: 4),
         Text(
           value,
@@ -574,7 +575,7 @@ class _GuardianMapScreenState extends State<GuardianMapScreen> {
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 11, color: AppPalette.textSecondaryLight),
         ),
       ],
     );

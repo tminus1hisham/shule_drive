@@ -9,6 +9,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class ChildProfileScreen extends StatefulWidget {
   const ChildProfileScreen({super.key});
 
@@ -246,7 +247,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
         },
         body: const Center(
           child: CircularProgressIndicator(
-            color: Color(0xFF6B9B5B),
+            color: AppPalette.emerald,
           ),
         ),
       );
@@ -269,7 +270,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
           await _fetchGuardians();
           await _fetchUserProfile();
         },
-        color: const Color(0xFF6B9B5B),
+        color: AppPalette.emerald,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           physics: const AlwaysScrollableScrollPhysics(),
@@ -294,7 +295,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                               shape: BoxShape.circle,
                               border: Border.all(color: provider.cardColor, width: 2),
                             ),
@@ -325,7 +326,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                       child.schoolName ?? 'No School',
                       style: const TextStyle(
                         fontSize: 14,
-                        color: Color(0xFF6B9B5B),
+                        color: AppPalette.emerald,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -371,14 +372,14 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                             ),
                           )
                         else if (_guardians.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B).withAlpha(30),
+                              color: AppPalette.emerald.withAlpha(30),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -386,7 +387,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF6B9B5B),
+                                color: AppPalette.emerald,
                               ),
                             ),
                           ),
@@ -446,7 +447,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B9B5B),
+                    backgroundColor: AppPalette.emerald,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -501,14 +502,14 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
           height: 44,
           decoration: BoxDecoration(
             color: guardian.isPrimary 
-                ? const Color(0xFF6B9B5B).withAlpha(30)
-                : Colors.grey.withAlpha(30),
+                ? AppPalette.emerald.withAlpha(30)
+                : AppPalette.textMutedLight.withAlpha(30),
             shape: BoxShape.circle,
           ),
           child: Icon(
             Icons.person,
             color: guardian.isPrimary 
-                ? const Color(0xFF6B9B5B)
+                ? AppPalette.emerald
                 : provider.textMutedColor,
             size: 24,
           ),
@@ -540,7 +541,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                       margin: const EdgeInsets.only(left: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6B9B5B).withAlpha(30),
+                        color: AppPalette.emerald.withAlpha(30),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
@@ -548,7 +549,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF6B9B5B),
+                          color: AppPalette.emerald,
                         ),
                       ),
                     ),
@@ -585,7 +586,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             onPressed: () => _callGuardian(guardian.phone!),
             icon: const Icon(
               Icons.phone,
-              color: Color(0xFF6B9B5B),
+              color: AppPalette.emerald,
               size: 20,
             ),
             padding: EdgeInsets.zero,
@@ -667,14 +668,14 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red.withAlpha(20),
+        color: AppPalette.error.withAlpha(20),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.error_outline,
-            color: Colors.red,
+            color: AppPalette.error,
             size: 20,
           ),
           const SizedBox(width: 8),
@@ -692,7 +693,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             child: const Text(
               'Retry',
               style: TextStyle(
-                color: Color(0xFF6B9B5B),
+                color: AppPalette.emerald,
                 fontSize: 13,
               ),
             ),
@@ -748,7 +749,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
       return CircleAvatar(
         radius: 50,
         backgroundImage: NetworkImage(photoUrl),
-        backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+        backgroundColor: AppPalette.emerald.withAlpha(50),
         onBackgroundImageError: (e, s) {
           if (kDebugMode) print('⚠️ Failed to load photo: $e');
         },
@@ -758,10 +759,10 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     // Fallback to default avatar
     return CircleAvatar(
       radius: 50,
-      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
+      backgroundColor: AppPalette.emerald.withAlpha(50),
       child: const Icon(
         Icons.person,
-        color: Color(0xFF6B9B5B),
+        color: AppPalette.emerald,
         size: 40,
       ),
     );

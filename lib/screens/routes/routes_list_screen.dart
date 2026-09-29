@@ -4,6 +4,7 @@ import '../../api/api.dart' as api;
 import '../../providers/app_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class RoutesListScreen extends StatefulWidget {
   const RoutesListScreen({super.key});
 
@@ -59,7 +60,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
     if (isLoading && routes.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(
-          color: Color(0xFF6B9B5B),
+          color: AppPalette.emerald,
         ),
       );
     }
@@ -97,7 +98,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
             ElevatedButton(
               onPressed: () => provider.fetchRoutesByUser(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6B9B5B),
+                backgroundColor: AppPalette.emerald,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Retry'),
@@ -178,12 +179,12 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6B9B5B).withValues(alpha: 0.15),
+                  color: AppPalette.emerald.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.route_outlined,
-                  color: Color(0xFF6B9B5B),
+                  color: AppPalette.emerald,
                   size: 24,
                 ),
               ),
@@ -220,7 +221,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
           const SizedBox(height: 16),
           Divider(
             height: 1,
-            color: provider.isDarkMode ? Colors.grey[700] : Colors.grey[300],
+            color: provider.isDarkMode ? AppPalette.textSecondaryLight : AppPalette.outlineLight,
           ),
           const SizedBox(height: 12),
           Row(
@@ -253,7 +254,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
           size: 14,
           color: provider.isDarkMode
               ? const Color(0xFF8BC48B)
-              : const Color(0xFF6B9B5B),
+              : AppPalette.emerald,
         ),
         const SizedBox(width: 6),
         Text(
@@ -263,7 +264,7 @@ class _RoutesListScreenState extends State<RoutesListScreen> {
             fontWeight: FontWeight.w500,
             color: provider.isDarkMode
                 ? const Color(0xFF8BC48B)
-                : const Color(0xFF6B9B5B),
+                : AppPalette.emerald,
           ),
         ),
       ],

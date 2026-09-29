@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
+import 'press_scale.dart';
 
 enum AppButtonVariant { primary, secondary, danger, outline, tertiary, onBrand }
 
@@ -74,8 +75,17 @@ class AppButton extends StatelessWidget {
     };
 
     final style = ButtonStyle(
-      backgroundColor: WidgetStatePropertyAll(bg),
-      foregroundColor: WidgetStatePropertyAll(fg),
+      // Disabled buttons fade instead of looking identical to enabled ones.
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.disabled) && !loading
+            ? bg.withValues(alpha: bg.a * 0.4)
+            : bg,
+      ),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.disabled) && !loading
+            ? fg.withValues(alpha: 0.55)
+            : fg,
+      ),
       overlayColor: WidgetStatePropertyAll(
         (variant == AppButtonVariant.outline ||
                 variant == AppButtonVariant.tertiary ||
@@ -123,10 +133,13 @@ class AppButton extends StatelessWidget {
       child: child,
     );
 
-    return SizedBox(
-      width: expand ? double.infinity : null,
-      height: _height,
-      child: button,
+    return PressScale(
+      enabled: enabled,
+      child: SizedBox(
+        width: expand ? double.infinity : null,
+        height: _height,
+        child: button,
+      ),
     );
   }
 }

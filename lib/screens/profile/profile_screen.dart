@@ -12,6 +12,7 @@ import '../../widgets/autoload_trips_toggle.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/ui/ui.dart';
 
+import '../../theme/app_colors.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -93,10 +94,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 24),
 
-            // Stats Row
-            _buildStatsCard(provider, isDarkMode),
-
-            const SizedBox(height: 24),
+            // Stats Row (driver only)
+            if (authProvider.isDriver) ...[
+              _buildStatsCard(provider, isDarkMode),
+              const SizedBox(height: 24),
+            ],
 
             // Preferences (driver only)
             if (authProvider.isDriver) ...[
@@ -127,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     showModalBottomSheet(
       context: parentContext,
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -142,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               const SizedBox(height: 20),
@@ -150,21 +152,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withValues(alpha: 30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
                 ),
                 title: Text(
                   'Take Photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 subtitle: Text(
                   'Use camera to take a photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                     fontSize: 13,
                   ),
                 ),
@@ -194,24 +196,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withValues(alpha: 30),
+                    color: AppPalette.info.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.photo_library,
-                    color: Color(0xFF2196F3),
+                    color: AppPalette.info,
                   ),
                 ),
                 title: Text(
                   'Choose from Gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 subtitle: Text(
                   'Select a photo from your gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
                   ),
                 ),
                 onTap: () async {
@@ -280,7 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         barrierDismissible: false,
         useRootNavigator: true,
         builder: (dialogContext) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+          child: CircularProgressIndicator(color: AppPalette.emerald),
         ),
       );
 
@@ -301,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: const Text('Profile photo updated successfully'),
-            backgroundColor: const Color(0xFF6B9B5B),
+            backgroundColor: AppPalette.emerald,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -359,14 +361,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF6B9B5B), Color(0xFF5A8A4A)],
+          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6B9B5B).withValues(alpha: 0.4),
+            color: AppPalette.emerald.withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -400,13 +402,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Colors.white,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFF6B9B5B),
+                        color: AppPalette.emerald,
                         width: 2,
                       ),
                     ),
                     child: const Icon(
                       Icons.camera_alt,
-                      color: Color(0xFF6B9B5B),
+                      color: AppPalette.emerald,
                       size: 18,
                     ),
                   ),
@@ -492,7 +494,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -509,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value: _driverStats.totalTrips.toString(),
               label: 'Trips',
               icon: Icons.route_outlined,
-              color: const Color(0xFF6B9B5B),
+              color: AppPalette.emerald,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -523,7 +525,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value: _driverStats.totalStudents.toString(),
               label: 'Students',
               icon: Icons.people_outline,
-              color: const Color(0xFF2196F3),
+              color: AppPalette.info,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -537,7 +539,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value: _driverStats.totalPicked.toString(),
               label: 'Picked Up',
               icon: Icons.check_circle_outline,
-              color: const Color(0xFFFF9800),
+              color: AppPalette.warning,
               isDarkMode: isDarkMode,
             ),
           ),
@@ -569,7 +571,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
           ),
         ),
         const SizedBox(height: 2),
@@ -577,7 +579,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           label,
           style: TextStyle(
             fontSize: 11,
-            color: isDarkMode ? Colors.white60 : const Color(0xFF666666),
+            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
           ),
         ),
       ],
@@ -615,21 +617,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'title': 'Edit Profile',
         'subtitle': 'Update your information',
         'route': '/edit-profile',
-        'color': const Color(0xFF6B9B5B),
+        'color': AppPalette.emerald,
       },
       {
         'icon': Icons.lock_outline,
         'title': 'Change Password',
         'subtitle': 'Update your security',
         'route': '/change-password',
-        'color': const Color(0xFF2196F3),
+        'color': AppPalette.info,
       },
       {
         'icon': Icons.phone_outlined,
         'title': 'Contact',
         'subtitle': 'Get in touch with us',
         'route': '/contact',
-        'color': const Color(0xFFFF9800),
+        'color': AppPalette.warning,
       },
       {
         'icon': Icons.description_outlined,
@@ -650,14 +652,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'title': 'Delete Account',
         'subtitle': 'Remove your data',
         'route': null,
-        'color': const Color(0xFFDC143C),
+        'color': AppPalette.error,
         'isDestructive': true,
       },
     ];
 
     return Container(
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -728,8 +730,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: isDestructive
               ? color
               : isDarkMode
-              ? Colors.white
-              : const Color(0xFF1A1A1A),
+              ? AppPalette.textPrimaryDark
+              : AppPalette.textPrimaryLight,
         ),
       ),
       subtitle: Text(
@@ -738,7 +740,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           fontSize: 12,
           color: isDarkMode
               ? Colors.white.withValues(alpha: 0.5)
-              : const Color(0xFF999999),
+              : AppPalette.textMutedLight,
         ),
       ),
       trailing: Icon(
@@ -772,7 +774,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFDC143C),
+          backgroundColor: AppPalette.error,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -803,7 +805,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return const CircleAvatar(
       radius: 45,
       backgroundColor: Colors.white,
-      child: Icon(Icons.person, size: 45, color: Color(0xFF6B9B5B)),
+      child: Icon(Icons.person, size: 45, color: AppPalette.emerald),
     );
   }
 }

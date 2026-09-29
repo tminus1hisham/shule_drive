@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 
+import '../theme/app_colors.dart';
 /// Role Guard - Restricts access based on user role
 /// Usage: Wrap any widget that should only be visible to certain roles
 class RoleGuard extends StatelessWidget {
@@ -108,7 +109,7 @@ class RoleBasedNavigator {
         content: Text(
           'Access denied. You don\'t have permission to access this feature.',
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: AppPalette.error,
       ),
     );
   }
@@ -163,7 +164,7 @@ class _AccessDeniedScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.block, size: 80, color: Colors.red),
+            const Icon(Icons.block, size: 80, color: AppPalette.error),
             const SizedBox(height: 16),
             const Text(
               'Access Denied',
@@ -198,13 +199,13 @@ class RoleBadge extends StatelessWidget {
     Color badgeColor;
     switch (role) {
       case UserRole.driver:
-        badgeColor = Colors.blue;
+        badgeColor = AppPalette.info;
         break;
       case UserRole.guardian:
-        badgeColor = Colors.green;
+        badgeColor = AppPalette.success;
         break;
       default:
-        badgeColor = Colors.grey;
+        badgeColor = AppPalette.textMutedLight;
     }
 
     return Container(

@@ -8,6 +8,7 @@ import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
+import '../../theme/app_colors.dart';
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -137,7 +138,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6B9B5B)),
+          child: CircularProgressIndicator(color: AppPalette.emerald),
         ),
       );
     }
@@ -188,7 +189,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -203,7 +204,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                 ),
               ),
               const SizedBox(height: 20),
@@ -211,15 +212,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6B9B5B).withAlpha(30),
+                    color: AppPalette.emerald.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.camera_alt, color: Color(0xFF6B9B5B)),
+                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
                 ),
                 title: Text(
                   'Take Photo',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 onTap: () {
@@ -232,18 +233,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withAlpha(30),
+                    color: AppPalette.info.withAlpha(30),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.photo_library,
-                    color: Color(0xFF2196F3),
+                    color: AppPalette.info,
                   ),
                 ),
                 title: Text(
                   'Choose from Gallery',
                   style: TextStyle(
-                    color: isDarkMode ? Colors.white : const Color(0xFF1A1A1A),
+                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
                   ),
                 ),
                 onTap: () {
@@ -313,7 +314,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: const Color(0xFF6B9B5B),
+        backgroundColor: AppPalette.emerald,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -355,7 +356,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6B9B5B),
+                              color: AppPalette.emerald,
                               shape: BoxShape.circle,
                               border: Border.all(
                                 color: provider.cardColor,
@@ -394,7 +395,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     icon: const Icon(Icons.camera_alt, size: 16),
                     label: const Text('Change Photo'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF6B9B5B),
+                      foregroundColor: AppPalette.emerald,
                     ),
                   ),
                 ],
@@ -440,7 +441,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: ElevatedButton(
                 onPressed: authProvider.isLoading ? null : _saveProfile,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B9B5B),
+                  backgroundColor: AppPalette.emerald,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -483,7 +484,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return CircleAvatar(
         radius: 50,
         backgroundImage: FileImage(_selectedImage!),
-        backgroundColor: Colors.grey.shade200,
+        backgroundColor: AppPalette.outlineLight,
       );
     }
 
@@ -494,7 +495,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return CircleAvatar(
         radius: 50,
         backgroundImage: NetworkImage(avatarUrl),
-        backgroundColor: Colors.grey.shade200,
+        backgroundColor: AppPalette.outlineLight,
         onBackgroundImageError: (e, s) {
           // Fallback to placeholder on error
           if (kDebugMode) print('⚠️ Failed to load avatar: $e');
@@ -505,8 +506,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Default placeholder
     return CircleAvatar(
       radius: 50,
-      backgroundColor: const Color(0xFF6B9B5B).withAlpha(50),
-      child: const Icon(Icons.person, size: 50, color: Color(0xFF6B9B5B)),
+      backgroundColor: AppPalette.emerald.withAlpha(50),
+      child: const Icon(Icons.person, size: 50, color: AppPalette.emerald),
     );
   }
 
@@ -537,8 +538,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             prefixIcon: Icon(icon, color: provider.textMutedColor),
             filled: true,
             fillColor: provider.isDarkMode
-                ? Colors.grey[800]
-                : const Color(0xFFF5F5F5),
+                ? AppPalette.textSecondaryLight
+                : AppPalette.surfaceSubtleLight,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -571,15 +572,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           controller: _phoneController,
           decoration: InputDecoration(
             hintText: '712 345 678',
-            hintStyle: TextStyle(color: Colors.grey.shade400),
+            hintStyle: TextStyle(color: AppPalette.textMutedLight),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
             ),
             filled: true,
             fillColor: provider.isDarkMode
-                ? Colors.grey[800]
-                : const Color(0xFFF5F5F5),
+                ? AppPalette.textSecondaryLight
+                : AppPalette.surfaceSubtleLight,
           ),
           style: TextStyle(color: provider.textColor),
           dropdownTextStyle: TextStyle(color: provider.textColor),
