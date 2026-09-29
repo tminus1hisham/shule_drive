@@ -35,16 +35,13 @@ import 'screens/info/contact_screen.dart';
 import 'screens/trips/trips_screen.dart';
 import 'screens/trips/trip_details_screen.dart';
 import 'screens/trips/manage/manage_master_trips_screen.dart';
-import 'screens/routes/routes_list_screen.dart';
 import 'screens/children/manage_children_screen.dart';
 import 'screens/children/child_profile_screen.dart';
 import 'screens/chat/chat_screen.dart';
 import 'screens/chat/chat_list_screen.dart';
 import 'screens/chat/user_list_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
-import 'screens/tracking/live_tracking_screen.dart';
 import 'screens/tracking/osm_tracking_screen.dart';
-import 'screens/tracking/driver_map_screen.dart';
 
 import 'services/token_storage.dart';
 import 'services/local_database_service.dart';
@@ -55,14 +52,14 @@ import 'widgets/route_guard.dart';
 import 'theme/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// ============================================================================ 
+// ============================================================================
 // APP ENTRY POINT
 // ============================================================================
 
 Future<void> main() async {
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize AppConfig (loads .env, dart-define, etc.)
   // This must happen before runApp()
   await AppConfig().initialize();
@@ -71,16 +68,16 @@ Future<void> main() async {
   if (kDebugMode) {
     HttpOverrides.global = _DevHttpOverrides();
   }
-  
+
   // Schedule the actual initialization after the first frame is rendered
   binding.addPostFrameCallback((_) async {
     // Initialize critical services after first frame is shown
     await _initCriticalServices();
-    
+
     // Start non-critical services in background
     _initNonCriticalServices();
   });
-  
+
   // Run the app immediately - the splash screen background will be shown
   runApp(const ShuleDriveApp());
 }
@@ -210,57 +207,63 @@ class _SplashWithTransitionState extends State<SplashWithTransition>
   // Splash enters from right to center
   late AnimationController _splashEnterController;
   late Animation<Offset> _splashEnterAnimation;
-  
+
   // Splash exits to bottom, Login enters from top
   late AnimationController _transitionController;
   late Animation<Offset> _splashExitAnimation;
   late Animation<Offset> _loginEnterAnimation;
-  
+
   bool _showSplash = true;
   bool _showLogin = false;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Splash enter animation (right to center) - faster
     _splashEnterController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    
-    _splashEnterAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0), // Start from right
-      end: Offset.zero,             // End at center
-    ).animate(CurvedAnimation(
-      parent: _splashEnterController,
-      curve: Curves.easeOutCubic,
-    ));
-    
+
+    _splashEnterAnimation =
+        Tween<Offset>(
+          begin: const Offset(1.0, 0), // Start from right
+          end: Offset.zero, // End at center
+        ).animate(
+          CurvedAnimation(
+            parent: _splashEnterController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+
     // Transition animation (splash down, login from top) - faster
     _transitionController = AnimationController(
       duration: const Duration(milliseconds: 350),
       vsync: this,
     );
-    
+
     // Splash slides down
-    _splashExitAnimation = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(0, 1.0),
-    ).animate(CurvedAnimation(
-      parent: _transitionController,
-      curve: Curves.easeInOutCubic,
-    ));
-    
+    _splashExitAnimation =
+        Tween<Offset>(begin: Offset.zero, end: const Offset(0, 1.0)).animate(
+          CurvedAnimation(
+            parent: _transitionController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+
     // Login slides from top
-    _loginEnterAnimation = Tween<Offset>(
-      begin: const Offset(0, -1.0), // Start from top
-      end: Offset.zero,              // End at center
-    ).animate(CurvedAnimation(
-      parent: _transitionController,
-      curve: Curves.easeOutCubic,
-    ));
-    
+    _loginEnterAnimation =
+        Tween<Offset>(
+          begin: const Offset(0, -1.0), // Start from top
+          end: Offset.zero, // End at center
+        ).animate(
+          CurvedAnimation(
+            parent: _transitionController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+
     _runSequence();
   }
 
@@ -274,22 +277,22 @@ class _SplashWithTransitionState extends State<SplashWithTransition>
   Future<void> _runSequence() async {
     // Phase 1: Animate splash in from right
     await _splashEnterController.forward();
-    
+
     // Phase 2: Initialize auth while splash is showing
     final authProvider = context.read<AuthProvider>();
     await authProvider.initialize();
-    
+
     // Minimum time splash stays visible after entering (reduced)
     await Future.delayed(const Duration(milliseconds: 200));
-    
+
     if (mounted) {
       setState(() {
         _showLogin = true; // Build login (hidden at first)
       });
-      
+
       // Small delay to ensure login is built
       await Future.delayed(const Duration(milliseconds: 30));
-      
+
       if (mounted) {
         // Phase 3: Transition - splash slides down, login slides from top
         await _transitionController.forward();
@@ -359,7 +362,7 @@ Route _buildPageRoute(RouteSettings settings) {
       protected = true;
       break;
     case '/home':
-      page = const DashboardScreen();  // Unified dashboard for all users
+      page = const DashboardScreen(); // Unified dashboard for all users
       protected = true;
       break;
     case '/start-trip':
@@ -382,16 +385,6 @@ Route _buildPageRoute(RouteSettings settings) {
       break;
     case '/active-trip':
       page = const ActiveTripScreen();
-      protected = true;
-      allowedRoles = [UserRole.driver];
-      break;
-    case '/driver-map':
-      // Native Mapbox driver map with vector tiles - requires arguments
-      final args = settings.arguments as Map<String, dynamic>?;
-      page = DriverMapScreen(
-        tripId: args?['tripId'] as String? ?? '',
-        preloadedData: args?['preloadedData'] as Map<String, dynamic>?,
-      );
       protected = true;
       allowedRoles = [UserRole.driver];
       break;
@@ -429,10 +422,6 @@ Route _buildPageRoute(RouteSettings settings) {
       break;
     case '/trips':
       page = const TripsScreen();
-      protected = true;
-      break;
-    case '/routes':
-      page = const RoutesListScreen();
       protected = true;
       break;
     case '/trip-details':
@@ -477,15 +466,6 @@ Route _buildPageRoute(RouteSettings settings) {
       );
       protected = true;
       break;
-    case '/live-tracking':
-      final args = settings.arguments as Map<String, dynamic>?;
-      page = LiveTrackingScreen(
-        tripId: args?['tripId']?.toString(),
-        busId: args?['busId'] as String?,
-        routeId: args?['routeId'] as String?,
-      );
-      protected = true;
-      break;
     case '/osm-tracking':
       final args = settings.arguments as Map<String, dynamic>?;
       page = OsmTrackingScreen(
@@ -508,13 +488,22 @@ Route _buildPageRoute(RouteSettings settings) {
     page = RouteGuard(allowedRoles: allowedRoles, child: page);
   }
 
+  // Tabs are siblings: a quick fade-through (the bottom bar stays planted as a
+  // shared hero). Pushed screens are depth: they rise into place while the
+  // screen underneath recedes slightly.
   if (isTabRoute) {
     return PageRouteBuilder(
       settings: settings,
       pageBuilder: (context, a1, a2) => page,
-      transitionsBuilder: (ctx, anim, anim2, child) => child,
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        if (MediaQuery.disableAnimationsOf(context)) return child;
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: AppCurves.easeOut),
+          child: child,
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 180),
+      reverseTransitionDuration: const Duration(milliseconds: 180),
     );
   }
 
@@ -522,19 +511,32 @@ Route _buildPageRoute(RouteSettings settings) {
     settings: settings,
     pageBuilder: (context, a1, a2) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: AppCurves.easeOut),
-        child: ScaleTransition(
-          scale: Tween<double>(
-            begin: 0.98,
-            end: 1.0,
-          ).animate(CurvedAnimation(parent: animation, curve: AppCurves.easeOut)),
-          child: child,
+      if (MediaQuery.disableAnimationsOf(context)) return child;
+      final enter = CurvedAnimation(
+        parent: animation,
+        curve: AppCurves.easeOut,
+        reverseCurve: Curves.easeIn,
+      );
+      final recede = CurvedAnimation(
+        parent: secondaryAnimation,
+        curve: AppCurves.easeOut,
+      );
+      return ScaleTransition(
+        scale: Tween<double>(begin: 1, end: 0.96).animate(recede),
+        child: FadeTransition(
+          opacity: enter,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.04),
+              end: Offset.zero,
+            ).animate(enter),
+            child: child,
+          ),
         ),
       );
     },
-    transitionDuration: const Duration(milliseconds: 150),
-    reverseTransitionDuration: const Duration(milliseconds: 150),
+    transitionDuration: AppDuration.page,
+    reverseTransitionDuration: const Duration(milliseconds: 220),
   );
 }
 
@@ -553,7 +555,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _checkOnboardingStatus();
-    
+
     // Services init happens in background
     final authProvider = context.read<AuthProvider>();
     if (authProvider.isAuthenticated && !kIsWeb) {
@@ -565,7 +567,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _checkOnboardingStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final hasSeen = prefs.getBool('has_seen_onboarding') ?? false;
-    
+
     if (mounted) {
       setState(() {
         _hasSeenOnboarding = hasSeen;
@@ -626,7 +628,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             body: SizedBox.shrink(),
           );
         }
-        
+
         // User is authenticated -> Dashboard
         if (authProvider.isAuthenticated) {
           return const DashboardScreen();

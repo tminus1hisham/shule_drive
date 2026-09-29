@@ -11,6 +11,8 @@ class MainScaffold extends StatefulWidget {
   final Widget? titleWidget;
   final bool showBottomNav;
   final int bottomNavIndex;
+
+  /// Overrides the default tab navigation (index 4 always opens start-trip).
   final Function(int)? onBottomNavTap;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
@@ -45,7 +47,8 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   Widget build(BuildContext context) {
     // Determine if we should show an app bar
-    final bool showAppBar = widget.title != null || widget.showBackButton || widget.showMenuButton;
+    final bool showAppBar =
+        widget.title != null || widget.showBackButton || widget.showMenuButton;
 
     return Scaffold(
       drawer: const SideMenu(),
@@ -53,7 +56,8 @@ class _MainScaffoldState extends State<MainScaffold> {
           ? AppBar(
               centerTitle: widget.centerTitle,
               leading: widget.leading ?? _buildLeadingButton(context),
-              title: widget.titleWidget ??
+              title:
+                  widget.titleWidget ??
                   (widget.title != null ? Text(widget.title!) : null),
               actions: widget.actions,
             )
@@ -66,8 +70,10 @@ class _MainScaffoldState extends State<MainScaffold> {
                 if (index == 4) {
                   // Center action button - navigate to start trip
                   Navigator.pushNamed(context, '/start-trip');
+                } else if (widget.onBottomNavTap != null) {
+                  widget.onBottomNavTap!(index);
                 } else {
-                  widget.onBottomNavTap?.call(index);
+                  _goToTab(index);
                 }
               },
             )
@@ -75,6 +81,33 @@ class _MainScaffoldState extends State<MainScaffold> {
       floatingActionButton: widget.floatingActionButton,
       floatingActionButtonLocation: widget.floatingActionButtonLocation,
     );
+  }
+
+  static const _tabRoutes = [
+    '/dashboard',
+    '/chat',
+    '/notifications',
+    '/profile',
+  ];
+
+  /// Default tab navigation, so screens don't each re-implement the switch.
+  /// Does nothing when that tab is already the current route.
+  void _goToTab(int index) {
+    if (index < 0 || index >= _tabRoutes.length) return;
+    final target = _tabRoutes[index];
+    final current = ModalRoute.of(context)?.settings.name;
+    final onHome = const {
+      '/',
+      '/dashboard',
+      '/home',
+      '/landing',
+    }.contains(current);
+    if (current == target || (index == 0 && onHome)) return;
+    if (index == 0) {
+      Navigator.pushReplacementNamed(context, target);
+    } else {
+      Navigator.pushNamed(context, target);
+    }
   }
 
   /// Build the leading button (back button or menu button)

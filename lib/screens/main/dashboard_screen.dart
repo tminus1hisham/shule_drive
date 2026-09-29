@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -89,7 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (args is Map && args['fromTripEnd'] == true) {
         _fromTripEnd = true;
         debugPrint(
-          '📍 Dashboard: Arrived from trip end, skipping auto-redirect',
+          'ðŸ“ Dashboard: Arrived from trip end, skipping auto-redirect',
         );
       }
       _initDashboard();
@@ -125,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final activeTrip = tripProvider.activeTrip;
 
     if (authProvider.isDriver && activeTrip != null && !_fromTripEnd) {
-      debugPrint('🚌 Active trip found on open, resuming: ${activeTrip.id}');
+      debugPrint('ðŸšŒ Active trip found on open, resuming: ${activeTrip.id}');
       navigator.pushNamed(
         '/osm-tracking',
         arguments: {'tripId': activeTrip.id, 'preloadedData': null},
@@ -143,7 +143,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     if (_hasCheckedMasterTrips || _isCheckingMasterTrips) {
       debugPrint(
-        '🔍 Master trip check already performed or in progress, skipping',
+        'ðŸ” Master trip check already performed or in progress, skipping',
       );
       return;
     }
@@ -152,19 +152,19 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final authProvider = context.read<AuthProvider>();
 
-    debugPrint('🔍 =========================================');
-    debugPrint('🔍 CHECKING MASTER TRIPS FOR DRIVER');
-    debugPrint('🔍 =========================================');
-    debugPrint('🔍 isDriver: ${authProvider.isDriver}');
-    debugPrint('🔍 User role: ${authProvider.userRole}');
-    debugPrint('🔍 User role from data: ${authProvider.userData['role']}');
-    debugPrint('🔍 Current user ID: ${authProvider.currentUser?.id}');
-    debugPrint('🔍 Current user name: ${authProvider.currentUser?.name}');
+    debugPrint('ðŸ” =========================================');
+    debugPrint('ðŸ” CHECKING MASTER TRIPS FOR DRIVER');
+    debugPrint('ðŸ” =========================================');
+    debugPrint('ðŸ” isDriver: ${authProvider.isDriver}');
+    debugPrint('ðŸ” User role: ${authProvider.userRole}');
+    debugPrint('ðŸ” User role from data: ${authProvider.userData['role']}');
+    debugPrint('ðŸ” Current user ID: ${authProvider.currentUser?.id}');
+    debugPrint('ðŸ” Current user name: ${authProvider.currentUser?.name}');
 
     // Only check for drivers
     if (!authProvider.isDriver) {
       debugPrint(
-        '🔍 User is NOT a driver (role: ${authProvider.userRole}), skipping check',
+        'ðŸ” User is NOT a driver (role: ${authProvider.userRole}), skipping check',
       );
       setState(() {
         _hasCheckedMasterTrips = true;
@@ -175,7 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     // Driver opted out of autoload - they open scheduled trips themselves
     if (!context.read<AppProvider>().autoloadTrips) {
-      debugPrint('🔍 Autoload is off, skipping master trip check');
+      debugPrint('ðŸ” Autoload is off, skipping master trip check');
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -187,7 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final tripProvider = context.read<TripProvider>();
     final navigator = Navigator.of(context);
     if (tripProvider.activeTrip != null) {
-      debugPrint('🔍 Active trip exists, skipping master trip check');
+      debugPrint('ðŸ” Active trip exists, skipping master trip check');
       setState(() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -199,10 +199,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       final tripService = TripService();
       final driverId = authProvider.currentUser?.id;
 
-      debugPrint('🔍 Driver ID: $driverId');
+      debugPrint('ðŸ” Driver ID: $driverId');
 
       if (driverId == null || driverId.isEmpty) {
-        debugPrint('❌ Driver ID is null or empty');
+        debugPrint('âŒ Driver ID is null or empty');
         setState(() {
           _hasCheckedMasterTrips = true;
           _isCheckingMasterTrips = false;
@@ -210,14 +210,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
 
-      debugPrint('🔍 Calling API: getMasterTripsByDriverCached($driverId)');
+      debugPrint('ðŸ” Calling API: getMasterTripsByDriverCached($driverId)');
 
       // Use cache-first pattern - shows cached trips immediately while fetching fresh data
       MasterTrip? firstTrip;
       final masterTrips = await tripService.getMasterTripsByDriverCached(
         driverId,
         onRefresh: (freshTrips) {
-          debugPrint('🔄 Background refresh: ${freshTrips.length} trips');
+          debugPrint('ðŸ”„ Background refresh: ${freshTrips.length} trips');
           // Only redirect on background refresh if NOT coming from trip end
           if (freshTrips.isNotEmpty &&
               _canRunScheduledWork &&
@@ -225,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               !_fromTripEnd) {
             if (firstTrip == null) {
               debugPrint(
-                '✅ Fresh data available, redirecting to trip selection',
+                'âœ… Fresh data available, redirecting to trip selection',
               );
               navigator.pushReplacementNamed('/trip-selection');
             }
@@ -239,7 +239,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
 
       debugPrint(
-        '🔍 Loaded ${masterTrips.length} master trips (from cache or API)',
+        'ðŸ” Loaded ${masterTrips.length} master trips (from cache or API)',
       );
       for (final trip in masterTrips) {
         debugPrint(
@@ -249,20 +249,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       if (!mounted || !_canRunScheduledWork || !navigator.mounted) {
         _isCheckingMasterTrips = false;
-        debugPrint('🔍 Dashboard is no longer active');
+        debugPrint('ðŸ” Dashboard is no longer active');
         return;
       }
 
       if (masterTrips.isNotEmpty && !_fromTripEnd) {
-        debugPrint('✅ Redirecting to trip selection screen');
+        debugPrint('âœ… Redirecting to trip selection screen');
 
         // Redirect to trip selection screen
         navigator.pushReplacementNamed('/trip-selection');
       } else {
         if (_fromTripEnd) {
-          debugPrint('📍 Skipping auto-redirect (came from trip end)');
+          debugPrint('ðŸ“ Skipping auto-redirect (came from trip end)');
         } else {
-          debugPrint('ℹ️ No master trips found');
+          debugPrint('â„¹ï¸ No master trips found');
         }
         setState(() {
           _hasCheckedMasterTrips = true;
@@ -270,8 +270,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e, stackTrace) {
-      debugPrint('❌ Error: $e');
-      debugPrint('❌ Stack: $stackTrace');
+      debugPrint('âŒ Error: $e');
+      debugPrint('âŒ Stack: $stackTrace');
       void finishCheck() {
         _hasCheckedMasterTrips = true;
         _isCheckingMasterTrips = false;
@@ -359,7 +359,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
     } catch (e) {
-      debugPrint('⚠️ Upcoming trip check error: $e');
+      debugPrint('âš ï¸ Upcoming trip check error: $e');
     }
   }
 
@@ -514,7 +514,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final authProvider = context.read<AuthProvider>();
 
     if (kDebugMode) {
-      print('📱 Dashboard _loadData:');
+      print('ðŸ“± Dashboard _loadData:');
       print('  isGuardian: ${authProvider.isGuardian}');
       print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
@@ -598,7 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (tripProvider == null || authProvider == null) return;
 
     if (kDebugMode) {
-      print('📱 Dashboard _refresh:');
+      print('ðŸ“± Dashboard _refresh:');
       print('  isGuardian: ${authProvider.isGuardian}');
       print('  isDriver: ${authProvider.isDriver}');
       print('  userPhone: ${authProvider.userPhone}');
@@ -645,7 +645,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       onBottomNavTap: (index) => _handleNavigation(index, isDriver),
       body: Stack(
         children: [
-          const Positioned.fill(child: _DashboardBackdrop()),
+          const Positioned.fill(child: AppBackdrop()),
           RefreshIndicator(
             onRefresh: _refresh,
             color: context.colors.brand,
@@ -661,7 +661,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: _buildGreeting(userData, isDriver, hasActiveTrip),
                   ),
 
-                  // Primary content — adapts to role and live trip status.
+                  // Primary content â€” adapts to role and live trip status.
                   if (isDriver)
                     ..._driverSlivers(tripProvider, hasActiveTrip)
                   else if (isGuardian)
@@ -864,7 +864,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final String subtitle;
     if (isDriver) {
       subtitle = hasActiveTrip
-          ? 'Trip in progress — drive safe.'
+          ? 'Trip in progress â€” drive safe.'
           : 'Ready to start your next trip?';
     } else {
       subtitle = hasActiveTrip
@@ -989,7 +989,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// so the countdown is scannable at a glance.
   Widget _buildNextTripCard() {
     final next = _nextScheduledTrip!;
-    return _DashboardGlassPanel(
+    return GlassPanel(
       onTap: () => Navigator.pushNamed(
         context,
         '/trip-selection',
@@ -1003,7 +1003,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           Positioned(
             top: -52,
             right: -44,
-            child: _GlassGlow(
+            child: GlassGlow(
               color: context.colors.accent,
               diameter: 140,
               opacity: context.isDark ? 0.13 : 0.10,
@@ -1412,7 +1412,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Live tracking hero — tappable to open the unified trip view
+        // Live tracking hero â€” tappable to open the unified trip view
         GradientHeroCard(
           onTap: () => Navigator.pushNamed(context, '/start-trip'),
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -1702,7 +1702,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           const SectionHeader(title: 'Quick actions'),
           const SizedBox(height: AppSpacing.xs),
-          _DashboardGlassPanel(
+          GlassPanel(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.xxs,
               vertical: AppSpacing.xs,
@@ -1885,7 +1885,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                   Positioned(
                     top: -72,
                     right: -50,
-                    child: _GlassGlow(
+                    child: GlassGlow(
                       color: context.colors.accent,
                       diameter: 190,
                     ),
@@ -1893,7 +1893,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                   Positioned(
                     bottom: -86,
                     left: -68,
-                    child: _GlassGlow(
+                    child: GlassGlow(
                       color: context.colors.brand,
                       diameter: 220,
                     ),
@@ -2078,7 +2078,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${trip.route} • ${trip.tripTime}',
+                                      '${trip.route} â€¢ ${trip.tripTime}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: context.text.bodySmall?.copyWith(
@@ -2110,182 +2110,6 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassGlow extends StatelessWidget {
-  const _GlassGlow({
-    required this.color,
-    required this.diameter,
-    this.opacity = 0.17,
-  });
-
-  final Color color;
-  final double diameter;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: diameter,
-        height: diameter,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              color.withValues(alpha: opacity),
-              Colors.transparent,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A quiet tinted canvas gives translucent cards something to refract on light
-/// themes while remaining subtle enough to keep the dashboard content primary.
-class _DashboardBackdrop extends StatelessWidget {
-  const _DashboardBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    final base = context.theme.scaffoldBackgroundColor;
-
-    return IgnorePointer(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.alphaBlend(
-                    context.colors.brand.withValues(
-                      alpha: context.isDark ? 0.08 : 0.055,
-                    ),
-                    base,
-                  ),
-                  base,
-                  Color.alphaBlend(
-                    context.colors.accent.withValues(
-                      alpha: context.isDark ? 0.06 : 0.04,
-                    ),
-                    base,
-                  ),
-                ],
-                stops: const [0, 0.52, 1],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 220,
-            right: -110,
-            child: _GlassGlow(
-              color: context.colors.brand,
-              diameter: 300,
-              opacity: context.isDark ? 0.08 : 0.065,
-            ),
-          ),
-          Positioned(
-            bottom: 40,
-            left: -120,
-            child: _GlassGlow(
-              color: context.colors.accent,
-              diameter: 290,
-              opacity: context.isDark ? 0.07 : 0.05,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A theme-aware frosted surface used by the dashboard's compact utility
-/// panels. The blur, translucent gradient and hairline edge provide the glass
-/// effect without sacrificing contrast in either brightness mode.
-class _DashboardGlassPanel extends StatelessWidget {
-  const _DashboardGlassPanel({
-    required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.md),
-    this.tint,
-    this.onTap,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final Color? tint;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const borderRadius = AppRadius.brLg;
-    final glassTint = tint ?? context.colors.brand;
-    final glassBase = context.isDark
-        ? context.scheme.surface.withValues(alpha: 0.70)
-        : Colors.white.withValues(alpha: 0.88);
-    final glassEnd = Color.alphaBlend(
-      glassTint.withValues(alpha: context.isDark ? 0.13 : 0.10),
-      context.scheme.surface,
-    ).withValues(alpha: context.isDark ? 0.70 : 0.84);
-    final edgeColor = context.isDark
-        ? Colors.white.withValues(alpha: 0.14)
-        : Color.alphaBlend(
-            glassTint.withValues(alpha: 0.16),
-            context.colors.outline,
-          );
-
-    Widget content = Padding(padding: padding, child: child);
-    if (onTap != null) {
-      content = Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: borderRadius,
-          child: content,
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDark ? 0.24 : 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: glassTint.withValues(alpha: context.isDark ? 0.08 : 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [glassBase, glassEnd],
-              ),
-              borderRadius: borderRadius,
-              border: Border.all(color: edgeColor),
-            ),
-            child: content,
           ),
         ),
       ),

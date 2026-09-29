@@ -34,7 +34,15 @@ class StatusPill extends StatelessWidget {
         ? _Dot(color: color, pulse: pulse)
         : null;
 
-    return Container(
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppDuration.medium;
+
+    // A status flip (Pending → Picked Up) tints the pill to its new colour
+    // while the label cross-fades and the width eases to fit.
+    return AnimatedContainer(
+      duration: duration,
+      curve: AppCurves.easeOut,
       padding: EdgeInsets.symmetric(
         horizontal: dense ? AppSpacing.xs : AppSpacing.sm,
         vertical: dense ? 4 : 6,
@@ -43,19 +51,35 @@ class StatusPill extends StatelessWidget {
         color: color.withValues(alpha: 0.14),
         borderRadius: AppRadius.brPill,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (leading != null) ...[leading, const SizedBox(width: 6)],
-          Text(
-            label,
-            style: context.text.labelMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: dense ? 11 : 12,
+      child: AnimatedSize(
+        duration: duration,
+        curve: AppCurves.easeOut,
+        child: AnimatedSwitcher(
+          duration: duration,
+          switchInCurve: AppCurves.easeOut,
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.85, end: 1).animate(anim),
+              child: child,
             ),
           ),
-        ],
+          child: Row(
+            key: ValueKey('$label${color.toARGB32()}'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (leading != null) ...[leading, const SizedBox(width: 6)],
+              Text(
+                label,
+                style: context.text.labelMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: dense ? 11 : 12,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
