@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shule_drive/utils/student_trip_logic.dart';
 import 'package:shule_drive/widgets/next_student_trip_action_card.dart';
@@ -44,6 +44,7 @@ void main() {
       find.widgetWithText(FilledButton, 'Dropped off'),
     );
     expect(dropButton.onPressed, isNull);
+    await tester.pump(const Duration(seconds: 1)); // let entrance animations start (flutter_animate)
   });
 
   testWidgets('shows next drop-off student with only drop-off enabled', (
@@ -85,6 +86,7 @@ void main() {
 
     expect(pickButton.onPressed, isNull);
     expect(absentButton.onPressed, isNull);
+    await tester.pump(const Duration(seconds: 1)); // let entrance animations start (flutter_animate)
   });
 
   testWidgets('student proximity popup shows trip roster and quick actions', (

@@ -6,19 +6,27 @@ import 'app_spacing.dart';
 /// flutter_animate, tuned with [AppCurves]/[AppDuration], and skipped entirely
 /// when the platform asks for reduced motion (flutter_animate doesn't check).
 ///
+/// Widget tests: flutter_animate starts every effect through a (zero-length)
+/// timer, so a test must pump through the entrance (`pumpAndSettle()` or
+/// `pump(const Duration(seconds: 1))`) before it ends, or it fails with
+/// "A Timer is still pending".
+///
 /// ```dart
 /// SectionCard().enter();
 /// ListView.builder(itemBuilder: (_, i) => Row(...).enterList(i));
 /// Icon(Icons.check).pop();
 /// ```
 extension AppMotion on Widget {
-  /// Fade in while rising 8px. For sections and cards appearing.
-  Widget enter({Duration delay = Duration.zero}) => _MotionGate(
+  /// Fade in while rising [offsetY] px (default 8). For sections and cards
+  /// appearing. Use a larger value for panels docked to a screen edge (e.g.
+  /// 80 for a bottom sheet-like panel, -40 for a bar dropping in from the top).
+  Widget enter({Duration delay = Duration.zero, double offsetY = 8}) =>
+      _MotionGate(
     plain: this,
     animated: animate(delay: delay)
         .fadeIn(duration: AppDuration.medium, curve: AppCurves.easeOut)
         .moveY(
-          begin: 8,
+          begin: offsetY,
           end: 0,
           duration: AppDuration.slow,
           curve: AppCurves.easeOut,

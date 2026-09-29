@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_spacing.dart';
+import '../theme/app_theme_extension.dart';
 import '../utils/student_trip_logic.dart';
+import 'ui/ui.dart';
 
-import '../theme/app_colors.dart';
-typedef NextStudentTripTargetCallback = void Function(
-  NextStudentTripTarget student,
-);
-typedef NextStudentTripModeResolver = StudentTripActionMode Function(
-  NextStudentTripTarget student,
-);
-typedef NextStudentTripDistanceResolver = double? Function(
-  NextStudentTripTarget student,
-);
+typedef NextStudentTripTargetCallback =
+    void Function(NextStudentTripTarget student);
+typedef NextStudentTripModeResolver =
+    StudentTripActionMode Function(NextStudentTripTarget student);
+typedef NextStudentTripDistanceResolver =
+    double? Function(NextStudentTripTarget student);
 
 class NextStudentTripTarget {
   final String id;
@@ -77,7 +76,7 @@ class NextStudentTripActionCard extends StatelessWidget {
     this.onChat,
     this.onStudents,
     this.onNotify,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(AppSpacing.md),
     this.maxRosterHeight = 260,
     this.compact = false,
     this.embedded = false,
@@ -85,33 +84,23 @@ class NextStudentTripActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final target = student;
     final roster = _buildRoster();
     final child = roster.isEmpty
         ? _buildEmptyState(context)
         : compact
-            ? _buildCompactStudentState(context, target, roster)
-            : _buildStudentState(context, target, roster);
+        ? _buildCompactStudentState(context, target, roster)
+        : _buildStudentState(context, target, roster);
 
     if (embedded) {
       return Padding(padding: padding, child: child);
     }
 
-    return Container(
+    return AppCard(
       padding: padding,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(compact ? 16 : 12),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: compact ? 8 : 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      borderRadius: compact ? AppRadius.brMd : AppRadius.brSm,
+      border: Border.all(color: context.colors.outline),
+      shadow: context.colors.shadowMd,
       child: child,
     );
   }
@@ -132,19 +121,51 @@ class NextStudentTripActionCard extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Row(
       children: [
-        Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
-        const SizedBox(width: 12),
+        Icon(Icons.check_circle_outline, color: context.colors.brand).pop(),
+        AppSpacing.hSm,
         Expanded(
           child: Text(
             'No students in this trip',
-            style: theme.textTheme.titleSmall,
+            style: context.text.titleSmall,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildError(BuildContext context) {
+    final show = errorMessage != null && errorMessage!.isNotEmpty;
+    // Errors slide open under the header instead of shoving the roster down.
+    return AnimatedSize(
+      duration: AppDuration.medium,
+      curve: AppCurves.easeOut,
+      alignment: Alignment.topCenter,
+      child: show
+          ? Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: AppIconSize.sm,
+                    color: context.colors.error,
+                  ),
+                  AppSpacing.hXs,
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: context.text.bodySmall?.copyWith(
+                        color: context.colors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const SizedBox(width: double.infinity),
     );
   }
 
@@ -153,7 +174,6 @@ class NextStudentTripActionCard extends StatelessWidget {
     NextStudentTripTarget? target,
     List<NextStudentTripTarget> roster,
   ) {
-    final theme = Theme.of(context);
     final pendingCount = roster.where((s) => s.status == 'pending').length;
     final pickedCount = roster.where((s) => s.status == 'picked').length;
     final droppedCount = roster.where((s) => s.status == 'dropped').length;
@@ -162,37 +182,26 @@ class NextStudentTripActionCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildRosterHeader(
-          context,
-          roster.length,
-          pendingCount,
-          pickedCount,
-          droppedCount,
+        _RosterHeader(
+          total: roster.length,
+          pending: pendingCount,
+          picked: pickedCount,
+          dropped: droppedCount,
+          compact: false,
         ),
-        if (_hasTripActions) ...[
-          const SizedBox(height: 12),
-          _buildTripActions(),
-        ],
-        if (errorMessage != null && errorMessage!.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            errorMessage!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.error,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
+        if (_hasTripActions) ...[AppSpacing.vSm, _buildTripActions()],
+        _buildError(context),
+        AppSpacing.vSm,
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxRosterHeight),
           child: ListView.separated(
             shrinkWrap: true,
             itemCount: roster.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final item = roster[index];
               return _StudentTripActionRow(
+                key: ValueKey(item.id),
                 student: item,
                 isHighlighted: target?.id == item.id,
                 mode: _modeForTarget(item),
@@ -204,7 +213,7 @@ class NextStudentTripActionCard extends StatelessWidget {
                 statusLabel: _statusLabel(item.status),
                 formatDistance: _formatDistance,
                 compact: false,
-              );
+              ).enterList(index);
             },
           ),
         ),
@@ -217,164 +226,72 @@ class NextStudentTripActionCard extends StatelessWidget {
     NextStudentTripTarget? target,
     List<NextStudentTripTarget> roster,
   ) {
-    final theme = Theme.of(context);
     final pendingCount = roster.where((s) => s.status == 'pending').length;
     final pickedCount = roster.where((s) => s.status == 'picked').length;
     final droppedCount = roster.where((s) => s.status == 'dropped').length;
     final absentCount = roster.where((s) => s.status == 'absent').length;
     final handledCount = pickedCount + droppedCount + absentCount;
-    final progress = roster.isEmpty ? 0.0 : handledCount / roster.length;
     final primaryTarget = target ?? roster.first;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCompactRosterHeader(
-          context,
-          roster.length,
-          pendingCount,
-          pickedCount,
-          droppedCount,
+        _RosterHeader(
+          total: roster.length,
+          pending: pendingCount,
+          picked: pickedCount,
+          dropped: droppedCount,
+          compact: true,
         ),
         const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            value: progress.clamp(0.0, 1.0).toDouble(),
-            minHeight: 5,
-            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-            valueColor: AlwaysStoppedAnimation<Color>(
-              theme.colorScheme.primary,
-            ),
-          ),
+        TripProgress.bar(
+          done: handledCount,
+          total: roster.length,
+          thickness: 6,
         ),
         if (_hasTripActions) ...[
           const SizedBox(height: 10),
           _buildTripActions(compact: true),
         ],
-        if (errorMessage != null && errorMessage!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            errorMessage!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.error,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        _buildError(context),
         const SizedBox(height: 10),
-        _StudentTripActionRow(
-          student: primaryTarget,
-          isHighlighted: target?.id == primaryTarget.id,
-          mode: _modeForTarget(primaryTarget),
-          distanceMeters: _distanceForTarget(primaryTarget),
-          isSubmitting: isSubmitting,
-          onPickedUp: _pickActionFor(primaryTarget),
-          onDroppedOff: _dropActionFor(primaryTarget),
-          onAbsent: _absentActionFor(primaryTarget),
-          statusLabel: _statusLabel(primaryTarget.status),
-          formatDistance: _formatDistance,
-          compact: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRosterHeader(
-    BuildContext context,
-    int total,
-    int pending,
-    int picked,
-    int dropped,
-  ) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+        // When the next student changes, the old card slides out left and the
+        // new one slides in from the right, like turning to the next stop.
+        AnimatedSwitcher(
+          duration: AppDuration.slow,
+          switchInCurve: AppCurves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.topCenter,
+            children: [...previous, ?current],
           ),
-          child: Icon(Icons.groups_outlined, color: theme.colorScheme.primary),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Trip students',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+          transitionBuilder: (child, anim) {
+            final incoming = child.key == ValueKey(primaryTarget.id);
+            return FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: Offset(incoming ? 0.15 : -0.15, 0),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
               ),
-              const SizedBox(height: 2),
-              Text(
-                '$total total - $pending waiting - $picked picked - '
-                '$dropped dropped',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactRosterHeader(
-    BuildContext context,
-    int total,
-    int pending,
-    int picked,
-    int dropped,
-  ) {
-    final theme = Theme.of(context);
-
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.groups_outlined,
-            color: theme.colorScheme.primary,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Trip students',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$total total - $pending waiting - $picked picked - '
-                '$dropped dropped',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+            );
+          },
+          child: _StudentTripActionRow(
+            key: ValueKey(primaryTarget.id),
+            student: primaryTarget,
+            isHighlighted: target?.id == primaryTarget.id,
+            mode: _modeForTarget(primaryTarget),
+            distanceMeters: _distanceForTarget(primaryTarget),
+            isSubmitting: isSubmitting,
+            onPickedUp: _pickActionFor(primaryTarget),
+            onDroppedOff: _dropActionFor(primaryTarget),
+            onAbsent: _absentActionFor(primaryTarget),
+            statusLabel: _statusLabel(primaryTarget.status),
+            formatDistance: _formatDistance,
+            compact: true,
           ),
         ),
       ],
@@ -395,7 +312,7 @@ class NextStudentTripActionCard extends StatelessWidget {
             compact: compact,
           ),
         ),
-        const SizedBox(width: 8),
+        AppSpacing.hXs,
         Expanded(
           child: _TripActionButton(
             icon: Icons.people_outline,
@@ -404,7 +321,7 @@ class NextStudentTripActionCard extends StatelessWidget {
             compact: compact,
           ),
         ),
-        const SizedBox(width: 8),
+        AppSpacing.hXs,
         Expanded(
           child: _TripActionButton(
             icon: Icons.notifications_none,
@@ -477,6 +394,79 @@ class NextStudentTripActionCard extends StatelessWidget {
   }
 }
 
+class _RosterHeader extends StatelessWidget {
+  const _RosterHeader({
+    required this.total,
+    required this.pending,
+    required this.picked,
+    required this.dropped,
+    required this.compact,
+  });
+
+  final int total;
+  final int pending;
+  final int picked;
+  final int dropped;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final size = compact ? 34.0 : 42.0;
+    return Row(
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                c.brand.withValues(alpha: 0.22),
+                c.brand.withValues(alpha: 0.08),
+              ],
+            ),
+            borderRadius: compact ? AppRadius.brSm : AppRadius.brSm,
+          ),
+          child: Icon(
+            Icons.groups_rounded,
+            color: c.brand,
+            size: compact ? AppIconSize.md : AppIconSize.lg,
+          ),
+        ),
+        SizedBox(width: compact ? 10 : AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Trip students',
+                style:
+                    (compact
+                            ? context.text.titleSmall
+                            : context.text.titleMedium)
+                        ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$total total - $pending waiting - $picked picked - '
+                '$dropped dropped',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodySmall?.copyWith(
+                  color: c.textSecondary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TripActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -492,29 +482,31 @@ class _TripActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final brand = context.colors.brand;
 
-    return SizedBox(
-      height: compact ? 38 : 46,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: compact ? 16 : 18),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: compact ? 12 : 14,
-            fontWeight: FontWeight.w700,
+    return PressScale(
+      enabled: onPressed != null,
+      child: SizedBox(
+        height: compact ? 38 : 46,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: compact ? 16 : 18),
+          label: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: compact ? 12 : 14,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: theme.colorScheme.primary,
-          side: BorderSide(
-            color: theme.colorScheme.primary.withValues(alpha: 0.28),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: brand,
+            backgroundColor: brand.withValues(alpha: 0.06),
+            side: BorderSide(color: brand.withValues(alpha: 0.28)),
+            padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
+            shape: const RoundedRectangleBorder(borderRadius: AppRadius.brSm),
           ),
-          padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -535,6 +527,7 @@ class _StudentTripActionRow extends StatelessWidget {
   final bool compact;
 
   const _StudentTripActionRow({
+    super.key,
     required this.student,
     required this.isHighlighted,
     required this.mode,
@@ -550,120 +543,99 @@ class _StudentTripActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isPickup = mode == StudentTripActionMode.pickup;
     final status = student.status;
     final canPick = isPickup && status == 'pending' && !isSubmitting;
     final canDrop =
-        mode == StudentTripActionMode.dropoff && status == 'picked' &&
+        mode == StudentTripActionMode.dropoff &&
+        status == 'picked' &&
         !isSubmitting;
     final canMarkAbsent = isPickup && status == 'pending' && !isSubmitting;
     final destination = student.destinationLabel?.trim();
+    final c = context.colors;
+    final statusStyle = StudentStatusStyle.of(context, status);
 
-    if (compact) {
-      return _buildCompact(
-        context,
-        isPickup: isPickup,
-        canPick: canPick,
-        canDrop: canDrop,
-        canMarkAbsent: canMarkAbsent,
-        destination: destination,
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isHighlighted
-            ? theme.colorScheme.primary.withValues(alpha: 0.08)
-            : theme.colorScheme.surfaceVariant.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isHighlighted
-              ? theme.colorScheme.primary.withValues(alpha: 0.35)
-              : theme.dividerColor.withValues(alpha: 0.25),
+    final header = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        StatusAvatar(
+          name: student.name,
+          photoUrl: student.photoUrl,
+          color: statusStyle.color,
+          size: compact ? 38 : 46,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        SizedBox(width: compact ? 10 : AppSpacing.sm),
+        Expanded(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.1,
+              if (isHighlighted) ...[
+                Text(
+                  isPickup ? 'Next pickup' : 'Next drop-off',
+                  style:
+                      (compact
+                              ? context.text.labelSmall
+                              : context.text.labelMedium)
+                          ?.copyWith(
+                            color: c.brand,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
                 ),
-                backgroundImage:
-                    student.photoUrl != null && student.photoUrl!.isNotEmpty
-                    ? NetworkImage(student.photoUrl!)
-                    : null,
-                child: student.photoUrl == null || student.photoUrl!.isEmpty
-                    ? Icon(Icons.person, color: theme.colorScheme.primary)
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isHighlighted) ...[
-                      Text(
-                        isPickup ? 'Next pickup' : 'Next drop-off',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                    Text(
-                      student.name,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      destination == null || destination.isEmpty
-                          ? 'Location unavailable'
-                          : destination,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _StatusChip(label: statusLabel, status: status),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(
-                Icons.near_me_outlined,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
+                const SizedBox(height: 2),
+              ],
               Text(
-                formatDistance(distanceMeters),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                student.name,
+                maxLines: compact ? 1 : null,
+                overflow: compact ? TextOverflow.ellipsis : null,
+                style: context.text.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
+              ),
+              SizedBox(height: compact ? 2 : AppSpacing.xxs),
+              Text(
+                destination == null || destination.isEmpty
+                    ? 'Location unavailable'
+                    : destination,
+                maxLines: compact ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodySmall?.copyWith(color: c.textSecondary),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+        ),
+        AppSpacing.hXs,
+        StatusPill(label: statusLabel, color: statusStyle.color, dense: true),
+      ],
+    );
+
+    final distance = Row(
+      children: [
+        Icon(
+          Icons.near_me_rounded,
+          size: compact ? 15 : AppIconSize.sm,
+          color: c.accent,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            formatDistance(distanceMeters),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.bodySmall?.copyWith(
+              color: c.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final actions = compact
+        ? _compactActions(isPickup, canPick, canDrop, canMarkAbsent)
+        : Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
             children: [
               FilledButton.icon(
                 onPressed: canPick ? onPickedUp : null,
@@ -681,21 +653,44 @@ class _StudentTripActionRow extends StatelessWidget {
                 label: const Text('Absent'),
               ),
             ],
-          ),
+          );
+
+    // The highlight (tint + brand edge) eases between rows as the "next"
+    // student moves down the roster.
+    return AnimatedContainer(
+      duration: AppDuration.slow,
+      curve: AppCurves.easeOut,
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 10 : AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: isHighlighted
+            ? c.brand.withValues(alpha: 0.08)
+            : c.surfaceSubtle.withValues(alpha: 0.6),
+        borderRadius: AppRadius.brSm,
+        border: Border.all(
+          color: isHighlighted ? c.brand.withValues(alpha: 0.4) : c.outline,
+          width: isHighlighted ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          header,
+          SizedBox(height: compact ? AppSpacing.xs : 10),
+          distance,
+          SizedBox(height: compact ? 10 : AppSpacing.sm),
+          actions,
         ],
       ),
     );
   }
 
-  Widget _buildCompact(
-    BuildContext context, {
-    required bool isPickup,
-    required bool canPick,
-    required bool canDrop,
-    required bool canMarkAbsent,
-    required String? destination,
-  }) {
-    final theme = Theme.of(context);
+  Widget _compactActions(
+    bool isPickup,
+    bool canPick,
+    bool canDrop,
+    bool canMarkAbsent,
+  ) {
     final primaryLabel = isPickup ? 'Picked up' : 'Dropped off';
     final primaryIcon = isPickup
         ? Icons.check_circle_outline
@@ -703,189 +698,56 @@ class _StudentTripActionRow extends StatelessWidget {
     final primaryAction = isPickup
         ? (canPick ? onPickedUp : null)
         : (canDrop ? onDroppedOff : null);
+    const shape = RoundedRectangleBorder(borderRadius: AppRadius.brSm);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isHighlighted
-            ? theme.colorScheme.primary.withValues(alpha: 0.07)
-            : theme.colorScheme.surfaceVariant.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isHighlighted
-              ? theme.colorScheme.primary.withValues(alpha: 0.28)
-              : theme.dividerColor.withValues(alpha: 0.22),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.1,
-                ),
-                backgroundImage:
-                    student.photoUrl != null && student.photoUrl!.isNotEmpty
-                    ? NetworkImage(student.photoUrl!)
-                    : null,
-                child: student.photoUrl == null || student.photoUrl!.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        color: theme.colorScheme.primary,
-                        size: 20,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isHighlighted) ...[
-                      Text(
-                        isPickup ? 'Next pickup' : 'Next drop-off',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                    ],
-                    Text(
-                      student.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      destination == null || destination.isEmpty
-                          ? 'Location unavailable'
-                          : destination,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _StatusChip(label: statusLabel, status: student.status),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                Icons.near_me_outlined,
-                size: 15,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  formatDistance(distanceMeters),
+    return Row(
+      children: [
+        Expanded(
+          child: PressScale(
+            enabled: primaryAction != null,
+            child: SizedBox(
+              height: 44,
+              child: FilledButton.icon(
+                onPressed: primaryAction,
+                icon: Icon(primaryIcon, size: 18),
+                label: Text(
+                  primaryLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: shape,
                 ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: FilledButton.icon(
-                    onPressed: primaryAction,
-                    icon: Icon(primaryIcon, size: 18),
-                    label: Text(
-                      primaryLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+        ),
+        if (isPickup) ...[
+          AppSpacing.hXs,
+          Expanded(
+            child: PressScale(
+              enabled: canMarkAbsent,
+              child: SizedBox(
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: canMarkAbsent ? onAbsent : null,
+                  icon: const Icon(Icons.person_off_outlined, size: 18),
+                  label: const Text(
+                    'Absent',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: shape,
                   ),
                 ),
               ),
-              if (isPickup) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SizedBox(
-                    height: 40,
-                    child: OutlinedButton.icon(
-                      onPressed: canMarkAbsent ? onAbsent : null,
-                      icon: const Icon(Icons.person_off_outlined, size: 18),
-                      label: const Text(
-                        'Absent',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final String status;
-
-  const _StatusChip({required this.label, required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      'picked' => AppPalette.success,
-      'dropped' => AppPalette.info,
-      'absent' => AppPalette.warning,
-      _ => AppPalette.textMutedLight,
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      ],
     );
   }
 }

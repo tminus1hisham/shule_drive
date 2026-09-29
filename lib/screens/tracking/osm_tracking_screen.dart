@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
@@ -20,7 +20,6 @@ import '../../theme/app_theme_extension.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 
 /// Mapbox Tracking Screen - Real-time trip tracking with Mapbox native SDK
 ///
@@ -1124,7 +1123,6 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     });
 
     final tripProvider = context.read<TripProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       // The provider calls the API, updates every screen and alerts the
       // guardian (MQTT + push, queued if offline).
@@ -1150,14 +1148,13 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       await _calculateRoute();
       await _updateMarkers();
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('${student.fullname} ${_statusMessage(status)}'),
-          backgroundColor: status == 'absent'
-              ? AppPalette.warning
-              : AppPalette.emerald,
-        ),
-      );
+      if (!mounted) return;
+      final message = '${student.fullname} ${_statusMessage(status)}';
+      if (status == 'absent') {
+        AppSnackbar.info(context, message);
+      } else {
+        AppSnackbar.success(context, message);
+      }
     } finally {
       if (mounted) {
         setState(() => _isUpdatingStudentStatus = false);
@@ -1189,7 +1186,6 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       _statusErrorMessage = null;
     });
     final tripProvider = context.read<TripProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final lat = _currentPosition?.latitude ?? 0;
       final lng = _currentPosition?.longitude ?? 0;
@@ -1220,13 +1216,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       });
       await _calculateRoute();
       await _updateMarkers();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            pick ? '$count students picked up' : '$count students dropped off',
-          ),
-          backgroundColor: AppPalette.emerald,
-        ),
+      if (!mounted) return;
+      AppSnackbar.success(
+        context,
+        pick ? '$count students picked up' : '$count students dropped off',
       );
     } finally {
       if (mounted) setState(() => _isUpdatingStudentStatus = false);
@@ -1235,9 +1228,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   void _showStatusError(String message) {
     setState(() => _statusErrorMessage = message);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppPalette.error),
-    );
+    AppSnackbar.error(context, message);
   }
 
   /// Add a student who isn't on this trip yet. Their spot is saved as the
@@ -1361,50 +1352,37 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   void _showNotifyOptions() {
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Notify guardians',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.schedule, color: AppPalette.emerald),
-                title: const Text('Running Late'),
+      builder: (context) {
+        final c = context.colors;
+        final options = [
+          (Icons.schedule_rounded, 'Running Late', 'Running late', c.warning),
+          (Icons.traffic_rounded, 'Traffic Delay', 'Traffic delay', c.accent),
+          (Icons.check_circle_rounded, 'On Schedule', 'On schedule', c.brand),
+        ];
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              title: 'Notify guardians',
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            ),
+            AppSpacing.vSm,
+            for (final (i, o) in options.indexed)
+              AppListTile(
+                icon: o.$1,
+                title: o.$2,
+                iconColor: o.$4,
                 onTap: () {
                   Navigator.pop(context);
-                  _showNotificationSent('Running late');
+                  _showNotificationSent(o.$3);
                 },
-              ),
-              ListTile(
-                leading: const Icon(Icons.traffic, color: AppPalette.emerald),
-                title: const Text('Traffic Delay'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showNotificationSent('Traffic delay');
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.check_circle,
-                  color: AppPalette.emerald,
-                ),
-                title: const Text('On Schedule'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showNotificationSent('On schedule');
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+              ).enterList(i),
+          ],
+        );
+      },
     );
   }
 
@@ -1415,22 +1393,15 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         .toSet()
         .length;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label notification sent to $guardians guardians'),
-        backgroundColor: AppPalette.emerald,
-      ),
+    AppSnackbar.success(
+      context,
+      '$label notification sent to $guardians guardians',
     );
   }
 
   void _showTripCompletionError(String? message) {
     final errorMessage = message ?? 'Unknown error';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Failed to complete trip: $errorMessage'),
-        backgroundColor: AppPalette.error,
-      ),
-    );
+    AppSnackbar.error(context, 'Failed to complete trip: $errorMessage');
   }
 
   Future<void> _completeTrip() async {
@@ -1438,9 +1409,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
     final tripId = _activeTripId;
     if (tripId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to complete this trip')),
-      );
+      AppSnackbar.error(context, 'Unable to complete this trip');
+
       return;
     }
 
@@ -1448,28 +1418,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       final status = _getStudentStatus(student);
       return status == 'pending' || status == 'picked';
     }).length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Complete Trip?'),
-        content: Text(
-          remaining == 0
-              ? 'This will end live tracking and show the trip details.'
-              : '$remaining students still have actions remaining. Complete the trip anyway?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Complete Trip'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Complete Trip?',
+      message: remaining == 0
+          ? 'This will end live tracking and show the trip details.'
+          : '$remaining students still have actions remaining. '
+                'Complete the trip anyway?',
+      confirmLabel: 'Complete Trip',
+      icon: Icons.flag_rounded,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _isEndingTrip = true);
     final authProvider = context.read<AuthProvider>();
@@ -1490,12 +1449,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Trip completed successfully'),
-          backgroundColor: AppPalette.emerald,
-        ),
-      );
+      AppSnackbar.success(context, 'Trip completed successfully');
+
       // Show the finished trip; Back from there lands on the dashboard.
       Navigator.of(context)
         ..pushNamedAndRemoveUntil(
@@ -1513,14 +1468,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final isDriver = context.select<AuthProvider, bool>((a) => a.isDriver);
+    final proximity = _activeProximityStudent;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_routeName),
-        backgroundColor: AppPalette.emerald,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Recalculate route',
             onPressed: _calculateRoute,
           ),
         ],
@@ -1544,117 +1502,157 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
             ),
           ),
 
-          // Loading
-          if (_isLoading)
-            Container(
-              color: Colors.black26,
-              child: const Center(
-                child: CircularProgressIndicator(color: AppPalette.emerald),
+          // Loading scrim fades out once the trip is ready.
+          IgnorePointer(
+            ignoring: !_isLoading,
+            child: AnimatedOpacity(
+              opacity: _isLoading ? 1 : 0,
+              duration: AppDuration.slow,
+              child: ColoredBox(
+                color: Colors.black.withValues(
+                  alpha: context.isDark ? 0.5 : 0.25,
+                ),
+                child: Center(
+                  child: GlassPanel(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.lg,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: c.brand),
+                        AppSpacing.vMd,
+                        Text('Loading trip…', style: context.text.titleSmall),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
+          ),
 
           // Error
           if (_errorMessage != null)
             Center(
-              child: Container(
-                margin: const EdgeInsets.all(32),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: GlassPanel(
+                  tint: c.error,
+                  child: EmptyState.error(
+                    message: _errorMessage,
+                    onRetry: _loadTripData,
+                  ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: AppPalette.error,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(_errorMessage!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _loadTripData,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
+              ).enter(),
             ),
 
-          // Loading route
-          if (_isLoadingRoute)
-            const Positioned(
-              top: 80,
-              left: 0,
-              right: 0,
+          // Route recalculating indicator drops in under the app bar.
+          Positioned(
+            top: AppSpacing.md,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
               child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppPalette.emerald,
+                child: AnimatedScale(
+                  scale: _isLoadingRoute ? 1 : 0,
+                  duration: AppDuration.medium,
+                  curve: _isLoadingRoute
+                      ? Curves.easeOutBack
+                      : AppCurves.easeOut,
+                  child: GlassPanel(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: c.brand,
+                          ),
+                        ),
+                        AppSpacing.hXs,
+                        Text('Updating route', style: context.text.labelLarge),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
+          ),
 
-          // Proximity prompt ("Pick Amani in 150 m"), leaves room for the FABs.
-          if (_activeProximityStudent case final student?)
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 72,
-              child: _buildProximityBanner(student),
+          // Proximity prompt ("Pick Amani in 150 m") slides down when the
+          // bus nears a student; leaves room for the map buttons.
+          Positioned(
+            top: AppSpacing.md,
+            left: AppSpacing.md,
+            right: 72,
+            child: AnimatedSwitcher(
+              duration: AppDuration.slow,
+              switchInCurve: Curves.easeOutBack,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, -0.4),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: proximity == null
+                  ? const SizedBox.shrink()
+                  : KeyedSubtree(
+                      key: ValueKey(proximity.studentId),
+                      child: _buildProximityBanner(proximity),
+                    ),
             ),
+          ),
 
           // Map controls
           Positioned(
-            top: 16,
-            right: 16,
+            top: AppSpacing.md,
+            right: AppSpacing.md,
             child: Column(
               children: [
-                if (context.select<AuthProvider, bool>((a) => a.isDriver)) ...[
-                  FloatingActionButton.small(
-                    heroTag: 'add-student',
+                if (isDriver) ...[
+                  _MapFab(
+                    icon: Icons.person_add_alt_1_rounded,
                     tooltip: 'Add student',
+                    highlighted: true,
                     onPressed: _isUpdatingStudentStatus ? null : _addStudent,
-                    backgroundColor: AppPalette.emerald,
-                    child: const Icon(
-                      Icons.person_add_alt_1_rounded,
-                      color: Colors.white,
-                    ),
                   ),
-                  const SizedBox(height: 8),
+                  AppSpacing.vXs,
                 ],
-                FloatingActionButton.small(
-                  heroTag: 'center',
+                _MapFab(
+                  icon: _followBus
+                      ? Icons.navigation_rounded
+                      : Icons.my_location_rounded,
                   tooltip: 'Follow bus',
                   onPressed: () {
                     setState(() => _followBus = true);
                     final position = _currentPosition;
                     if (position != null) _followBusCamera(position);
                   },
-                  backgroundColor: Colors.white,
-                  child: Icon(
-                    _followBus ? Icons.navigation_rounded : Icons.my_location,
-                    color: AppPalette.emerald,
-                  ),
                 ),
               ],
-            ),
+            ).enter(delay: const Duration(milliseconds: 150)),
           ),
 
-          // Info panel
+          // Info panel rises in once the trip has loaded.
           if (!_isLoading && _errorMessage == null)
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: _buildInfoPanel(),
+              left: AppSpacing.md,
+              right: AppSpacing.md,
+              bottom: AppSpacing.md,
+              child: RepaintBoundary(
+                child: _buildInfoPanel().enter(offsetY: 80),
+              ),
             ),
         ],
       ),
@@ -1662,6 +1660,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   Widget _buildInfoPanel() {
+    final c = context.colors;
     final nextStudent = _nextActionableStudent();
     final nextMode = nextStudent == null
         ? StudentTripActionMode.pickup
@@ -1680,26 +1679,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       (authProvider) => authProvider.isDriver,
     );
     final maxPanelHeight = MediaQuery.sizeOf(context).height * 0.45;
+    final showBulk =
+        canCompleteTrip && (waitingStudents > 0 || pickedStudents > 0);
 
     return SafeArea(
       top: false,
-      child: Container(
+      child: GlassPanel(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.55),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.14),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
+        borderRadius: AppRadius.brXl,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxPanelHeight),
           child: SingleChildScrollView(
@@ -1714,16 +1701,23 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                       height: 44,
                       width: 44,
                       decoration: BoxDecoration(
-                        color: AppPalette.emerald.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
+                        gradient: c.accentGradient,
+                        borderRadius: AppRadius.brSm,
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.accent.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: const Icon(
                         Icons.directions_bus_filled_rounded,
-                        color: Color(0xFF2E6B3D),
+                        color: Colors.white,
                         size: 24,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    AppSpacing.hSm,
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1732,13 +1726,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                             _vehicleLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 17,
+                            style: context.text.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF101828),
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          AppSpacing.vXxs,
                           Wrap(
                             spacing: 10,
                             runSpacing: 4,
@@ -1746,29 +1738,31 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                               if (_currentPosition != null)
                                 _buildVehicleMetric(
                                   icon: Icons.speed_rounded,
-                                  label:
-                                      '${(_currentPosition!.speed * 3.6).toStringAsFixed(0)} km/h',
+                                  value: (_currentPosition!.speed * 3.6)
+                                      .round(),
+                                  unit: ' km/h',
                                 ),
                               if (_currentPosition != null)
                                 _buildVehicleMetric(
                                   icon: Icons.navigation_rounded,
-                                  label:
-                                      '${_currentPosition!.heading.toStringAsFixed(0)} deg',
+                                  value: _currentPosition!.heading.round(),
+                                  unit: ' deg',
                                 ),
                               _buildVehicleMetric(
                                 icon: Icons.route_rounded,
-                                label: '${totalStudents.toString()} students',
+                                value: totalStudents,
+                                unit: ' students',
                               ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    _buildLiveChip(),
+                    AppSpacing.hXs,
+                    StatusPill(label: 'LIVE', color: c.success, pulse: true),
                   ],
                 ),
-                const SizedBox(height: 12),
+                AppSpacing.vSm,
                 NextStudentTripActionCard(
                   student: nextStudent == null
                       ? null
@@ -1811,7 +1805,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                   onStudents: canCompleteTrip ? _openStudentsList : null,
                   onNotify: canCompleteTrip ? _showNotifyOptions : null,
                 ),
-                const SizedBox(height: 12),
+                AppSpacing.vSm,
                 Row(
                   children: [
                     Expanded(
@@ -1819,18 +1813,19 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                         icon: Icons.people_outline_rounded,
                         value: '$totalStudents',
                         label: 'Total',
+                        color: c.brand,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    AppSpacing.hXs,
                     Expanded(
                       child: _buildCompactStat(
                         icon: Icons.pending_actions_rounded,
                         value: '$waitingStudents',
                         label: 'Waiting',
-                        color: AppPalette.warning,
+                        color: c.warning,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    AppSpacing.hXs,
                     Expanded(
                       child: _buildCompactStat(
                         icon: _routeResult == null
@@ -1840,46 +1835,55 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                             _routeResult?.formattedDuration ??
                             '$pickedStudents',
                         label: _routeResult == null ? 'Picked' : 'ETA',
-                        color: _routeResult == null
-                            ? AppPalette.success
-                            : AppPalette.info,
+                        color: _routeResult == null ? c.success : c.info,
                       ),
                     ),
                   ],
                 ),
-                if (canCompleteTrip &&
-                    (waitingStudents > 0 || pickedStudents > 0)) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      if (waitingStudents > 0)
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _isUpdatingStudentStatus
-                                ? null
-                                : () => _updateAllStudents(pick: true),
-                            icon: const Icon(Icons.done_all_rounded),
-                            label: const Text('Pick all'),
+                // Bulk actions slide open/closed as they become relevant.
+                AnimatedSize(
+                  duration: AppDuration.medium,
+                  curve: AppCurves.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: !showBulk
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.sm),
+                          child: Row(
+                            children: [
+                              if (waitingStudents > 0)
+                                Expanded(
+                                  child: AppButton(
+                                    label: 'Pick all',
+                                    icon: Icons.done_all_rounded,
+                                    variant: AppButtonVariant.secondary,
+                                    size: AppButtonSize.medium,
+                                    onPressed: _isUpdatingStudentStatus
+                                        ? null
+                                        : () => _updateAllStudents(pick: true),
+                                  ),
+                                ),
+                              if (waitingStudents > 0 && pickedStudents > 0)
+                                AppSpacing.hXs,
+                              if (pickedStudents > 0)
+                                Expanded(
+                                  child: AppButton(
+                                    label: 'Drop all',
+                                    icon: Icons.home_rounded,
+                                    variant: AppButtonVariant.outline,
+                                    size: AppButtonSize.medium,
+                                    onPressed: _isUpdatingStudentStatus
+                                        ? null
+                                        : () => _updateAllStudents(pick: false),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      if (waitingStudents > 0 && pickedStudents > 0)
-                        const SizedBox(width: 8),
-                      if (pickedStudents > 0)
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _isUpdatingStudentStatus
-                                ? null
-                                : () => _updateAllStudents(pick: false),
-                            icon: const Icon(Icons.home_rounded),
-                            label: const Text('Drop all'),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
+                ),
                 if (canCompleteTrip) ...[
-                  const SizedBox(height: 12),
-                  _buildCompleteTripButton(),
+                  AppSpacing.vSm,
+                  _buildCompleteTripButton(allDone: waitingStudents == 0),
                 ],
               ],
             ),
@@ -1889,91 +1893,40 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     );
   }
 
-  Widget _buildCompleteTripButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton.icon(
-        onPressed: _activeTripId == null || _isEndingTrip
-            ? null
-            : _completeTrip,
-        icon: _isEndingTrip
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.check_circle_outline_rounded),
-        label: Text(
-          _isEndingTrip ? 'Completing...' : 'Complete Trip',
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppPalette.emerald,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: AppPalette.outlineLight,
-          disabledForegroundColor: AppPalette.textSecondaryLight,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
+  Widget _buildCompleteTripButton({required bool allDone}) {
+    final button = AppButton(
+      label: _isEndingTrip ? 'Completing…' : 'Complete Trip',
+      icon: Icons.flag_rounded,
+      loading: _isEndingTrip,
+      onPressed: _activeTripId == null ? null : _completeTrip,
+    );
+    // Once nobody is waiting, a light sweep nudges the driver to finish.
+    return KeyedSubtree(
+      key: ValueKey(allDone),
+      child: allDone ? button.celebrate() : button,
     );
   }
 
-  Widget _buildVehicleMetric({required IconData icon, required String label}) {
+  Widget _buildVehicleMetric({
+    required IconData icon,
+    required int value,
+    required String unit,
+  }) {
+    final c = context.colors;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: AppPalette.textSecondaryLight),
+        Icon(icon, size: 14, color: c.accent),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
+        AnimatedCount(
+          value,
+          suffix: unit,
+          style: context.text.labelMedium?.copyWith(
             fontWeight: FontWeight.w600,
-            color: AppPalette.textSecondaryLight,
+            color: c.textSecondary,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildLiveChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppPalette.success.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppPalette.success.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: AppPalette.success,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: AppPalette.success, blurRadius: 4)],
-            ),
-          ),
-          const SizedBox(width: 6),
-          const Text(
-            'LIVE',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppPalette.success,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1981,15 +1934,23 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     required IconData icon,
     required String value,
     required String label,
-    Color color = AppPalette.emerald,
+    required Color color,
   }) {
+    final c = context.colors;
+    final valueStyle = context.text.titleSmall?.copyWith(
+      fontWeight: FontWeight.w900,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return Container(
       height: 54,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: 7,
+      ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.12)),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: AppRadius.brSm,
+        border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -2001,30 +1962,89 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    color: Color(0xFF101828),
+                if (int.tryParse(value) case final n?)
+                  AnimatedCount(n, style: valueStyle)
+                else
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: valueStyle,
                   ),
-                ),
                 Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
+                  style: context.text.labelSmall?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: AppPalette.textSecondaryLight,
+                    color: c.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Round floating map control; [highlighted] gets the brand fill.
+class _MapFab extends StatelessWidget {
+  const _MapFab({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: PressScale(
+        scale: 0.9,
+        enabled: onPressed != null,
+        child: Material(
+          color: highlighted ? c.brand : context.scheme.surface,
+          shape: const CircleBorder(),
+          child: Ink(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: c.shadowMd,
+              border: highlighted ? null : Border.all(color: c.outline),
+            ),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onPressed == null
+                  ? null
+                  : () {
+                      HapticFeedback.selectionClick();
+                      onPressed!();
+                    },
+              child: SizedBox.square(
+                dimension: 44,
+                child: AnimatedSwitcher(
+                  duration: AppDuration.medium,
+                  transitionBuilder: (child, anim) =>
+                      ScaleTransition(scale: anim, child: child),
+                  child: Icon(
+                    icon,
+                    key: ValueKey(icon),
+                    size: AppIconSize.md,
+                    color: highlighted ? context.scheme.onPrimary : c.brand,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
