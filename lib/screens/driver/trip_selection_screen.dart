@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/ui/staggered_entrance.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
-import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
 /// Trip Selection Screen
 /// Displays available master trips for the driver to select from
 class TripSelectionScreen extends StatefulWidget {
@@ -21,8 +20,7 @@ class TripSelectionScreen extends StatefulWidget {
   State<TripSelectionScreen> createState() => _TripSelectionScreenState();
 }
 
-class _TripSelectionScreenState extends State<TripSelectionScreen>
-    with SingleTickerProviderStateMixin {
+class _TripSelectionScreenState extends State<TripSelectionScreen> {
   final TripService _tripService = TripService();
 
   bool _isLoading = true;
@@ -34,22 +32,10 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
   PreloadedTripData? _preloadedData;
   bool _isPreloading = false;
 
-  late AnimationController _animationController;
-
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.slow,
-    );
     _loadMasterTrips();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadMasterTrips() async {
@@ -84,14 +70,7 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
               _masterTrips = freshTrips;
             });
             // Show subtle indicator that data was updated
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Trips updated'),
-                duration: Duration(seconds: 1),
-                behavior: SnackBarBehavior.floating,
-                width: 120,
-              ),
-            );
+            AppSnackbar.info(context, 'Trips updated');
           }
         },
       );
@@ -105,7 +84,6 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
           _masterTrips = trips;
           _isLoading = false;
         });
-        _animationController.forward();
 
         // Dashboard's "trip starting soon" prompt names the trip to open;
         // otherwise auto-advance when there's only one.
@@ -210,144 +188,211 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final appProvider = context.watch<AppProvider>();
-    final isDarkMode = appProvider.isDarkMode;
+    final ready = !_isLoading && _error == null && _masterTrips.isNotEmpty;
 
     return MainScaffold(
       title: 'Select Trip',
       showBackButton: false,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(isDarkMode),
-
-            // Content
-            Expanded(
-              child: _isLoading
-                  ? _buildLoadingState(isDarkMode)
-                  : _error != null
-                  ? _buildErrorState(isDarkMode)
-                  : _masterTrips.isEmpty
-                  ? _buildEmptyState(isDarkMode)
-                  : _buildTripsList(isDarkMode),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: AsyncBody(
+                    loading: _isLoading,
+                    error: _error,
+                    onRetry: _loadMasterTrips,
+                    isEmpty: _masterTrips.isEmpty,
+                    skeleton: ListView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                      ),
+                      itemCount: 4,
+                      itemBuilder: (_, _) => const Padding(
+                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: AppSkeleton(
+                          height: 104,
+                          borderRadius: AppRadius.brLg,
+                        ),
+                      ),
+                    ),
+                    empty: EmptyState(
+                      icon: Icons.calendar_today_rounded,
+                      title: 'No Scheduled Trips',
+                      message:
+                          'You don\'t have any master trips assigned. '
+                          'Start a new trip instead.',
+                      actionLabel: 'Start New Trip',
+                      onAction: _skipToStartTrip,
+                    ),
+                    onRefresh: _loadMasterTrips,
+                    child: _buildTripsList(),
+                  ),
+                ),
+                if (_error != null)
+                  TextButton(
+                    onPressed: _skipToStartTrip,
+                    child: const Text('Skip to Start Trip'),
+                  ),
+              ],
             ),
-
-            // Bottom button
-            if (!_isLoading && _error == null && _masterTrips.isNotEmpty)
-              _buildBottomButton(isDarkMode),
-          ],
-        ),
+          ),
+        ],
       ),
+      bottomBar: ready ? _buildBottomButton() : null,
     );
   }
 
-  Widget _buildHeader(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(24),
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         children: [
-          // Icon
           Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-              ),
-              borderRadius: BorderRadius.circular(24),
+              gradient: context.colors.brandGradient,
+              borderRadius: AppRadius.brXl,
               boxShadow: [
                 BoxShadow(
-                  color: AppPalette.emerald.withValues(alpha: 0.3),
+                  color: context.colors.brand.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: const Icon(
-              Icons.calendar_today,
+              Icons.calendar_today_rounded,
               color: Colors.white,
               size: 36,
             ),
-          ),
-          const SizedBox(height: 20),
+          ).pop(),
+          AppSpacing.vLg,
           Text(
             'Your Scheduled Trips',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-            ),
-          ),
-          const SizedBox(height: 8),
+            style: context.text.headlineSmall,
+          ).enter(delay: const Duration(milliseconds: 80)),
+          AppSpacing.vXs,
           Text(
             'Select a trip to get started',
-            style: TextStyle(
-              fontSize: 15,
-              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+            style: context.text.bodyMedium?.copyWith(
+              color: context.colors.textSecondary,
             ),
-          ),
+          ).enter(delay: const Duration(milliseconds: 120)),
         ],
       ),
     );
   }
 
-  Widget _buildLoadingState(bool isDarkMode) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: 4,
-      itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
+  Widget _buildTripsList() {
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      itemCount: _masterTrips.length,
+      separatorBuilder: (_, _) => AppSpacing.vSm,
+      itemBuilder: (context, index) {
+        final trip = _masterTrips[index];
+        final isSelected = _selectedTrip?.id == trip.id;
+        return _buildTripCard(
+          trip,
+          isSelected,
+          isSelected && _isPreloading,
+        ).enterList(index);
+      },
     );
   }
 
-  Widget _buildSkeletonItem(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-        ),
-      ),
+  Widget _buildTripCard(MasterTrip trip, bool isSelected, bool isPreloading) {
+    final c = context.colors;
+    final dateFormat = DateFormat('EEE, MMM d');
+    final meta = context.text.bodySmall?.copyWith(color: c.textSecondary);
+
+    Widget metaRow(IconData icon, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: c.textMuted),
+        const SizedBox(width: 4),
+        Text(text, style: meta),
+      ],
+    );
+
+    return SelectableCard(
+      selected: isSelected,
+      onTap: () => _onTripSelected(trip),
       child: Row(
         children: [
+          // The bus tile turns into a spinner while this trip preloads.
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isDarkMode
-                  ? AppPalette.surfaceSubtleDark
-                  : AppPalette.outlineLight,
-              borderRadius: BorderRadius.circular(12),
+              gradient: isSelected ? c.brandGradient : null,
+              color: isSelected ? null : c.brandSoft,
+              borderRadius: AppRadius.brSm,
+            ),
+            child: AnimatedSwitcher(
+              duration: AppDuration.medium,
+              child: isPreloading
+                  ? const Padding(
+                      key: ValueKey('loading'),
+                      padding: EdgeInsets.all(14),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      Icons.directions_bus_rounded,
+                      key: ValueKey(isSelected),
+                      color: isSelected ? Colors.white : c.brand,
+                    ),
             ),
           ),
-          const SizedBox(width: 16),
+          AppSpacing.hMd,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 150,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
+                Text(
+                  trip.tripName,
+                  style: context.text.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 100,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
+                const SizedBox(height: 2),
+                Text(
+                  trip.route,
+                  style: context.text.bodyMedium?.copyWith(
+                    color: c.textSecondary,
                   ),
+                ),
+                AppSpacing.vXs,
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xxs,
+                  children: [
+                    metaRow(Icons.access_time_rounded, trip.tripTime),
+                    metaRow(
+                      Icons.calendar_today_rounded,
+                      dateFormat.format(trip.createdAt),
+                    ),
+                    if (trip.numberPlate != null &&
+                        trip.numberPlate!.isNotEmpty)
+                      metaRow(
+                        Icons.confirmation_number_outlined,
+                        trip.numberPlate!,
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -357,393 +402,21 @@ class _TripSelectionScreenState extends State<TripSelectionScreen>
     );
   }
 
-  Widget _buildErrorState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _loadMasterTrips,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _skipToStartTrip,
-              child: const Text('Skip to Start Trip'),
-            ),
-          ],
-        ),
+  Widget _buildBottomButton() {
+    return BottomActionBar(
+      primary: AppButton(
+        label: 'Continue',
+        icon: Icons.arrow_forward_rounded,
+        iconTrailing: true,
+        loading: _isPreloading,
+        onPressed: _selectedTrip != null ? _onContinue : null,
       ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : AppPalette.emerald.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.calendar_today,
-                size: 48,
-                color: isDarkMode ? Colors.white30 : AppPalette.emerald,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Scheduled Trips',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'You don\'t have any master trips assigned. Start a new trip instead.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _skipToStartTrip,
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Start New Trip'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-          ],
-        ),
+      secondary: AppButton(
+        label: 'Start a Different Trip',
+        variant: AppButtonVariant.tertiary,
+        size: AppButtonSize.medium,
+        onPressed: _skipToStartTrip,
       ),
-    );
-  }
-
-  Widget _buildTripsList(bool isDarkMode) {
-    return RefreshIndicator(
-      onRefresh: _loadMasterTrips,
-      color: AppPalette.emerald,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _masterTrips.length,
-        itemBuilder: (context, index) {
-          final trip = _masterTrips[index];
-          final isSelected = _selectedTrip?.id == trip.id;
-
-          final isPreloadingThisTrip = isSelected && _isPreloading;
-
-          return StaggeredEntrance(
-            animation: _animationController,
-            index: index,
-            child: _buildTripCard(
-              trip,
-              isSelected,
-              isPreloadingThisTrip,
-              isDarkMode,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildTripCard(
-    MasterTrip trip,
-    bool isSelected,
-    bool isPreloading,
-    bool isDarkMode,
-  ) {
-    final dateFormat = DateFormat('EEE, MMM d');
-
-    return GestureDetector(
-      onTap: () => _onTripSelected(trip),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? AppPalette.emerald
-                : isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.outlineLight,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppPalette.emerald.withValues(alpha: 0.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Selection indicator
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected
-                      ? AppPalette.emerald
-                      : isDarkMode
-                      ? AppPalette.surfaceSubtleDark
-                      : AppPalette.outlineLight,
-                  border: Border.all(
-                    color: isSelected
-                        ? AppPalette.emerald
-                        : isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : const Color(0xFFD1D1D6),
-                    width: 2,
-                  ),
-                ),
-                child: isSelected
-                    ? isPreloading
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 16,
-                            )
-                    : null,
-              ),
-              const SizedBox(width: 16),
-
-              // Trip icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppPalette.emerald.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.directions_bus,
-                  color: AppPalette.emerald,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Trip details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      trip.tripName,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: isDarkMode
-                            ? AppPalette.textPrimaryDark
-                            : AppPalette.textPrimaryLight,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      trip.route,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDarkMode
-                            ? AppPalette.textSecondaryDark
-                            : AppPalette.textSecondaryLight,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: isDarkMode
-                              ? Colors.white.withValues(alpha: 0.4)
-                              : AppPalette.textMutedLight,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          trip.tripTime,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDarkMode
-                                ? AppPalette.textSecondaryDark
-                                : AppPalette.textSecondaryLight,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Icon(
-                          Icons.calendar_today,
-                          size: 14,
-                          color: isDarkMode
-                              ? Colors.white.withValues(alpha: 0.4)
-                              : AppPalette.textMutedLight,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          dateFormat.format(trip.createdAt),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDarkMode
-                                ? AppPalette.textSecondaryDark
-                                : AppPalette.textSecondaryLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (trip.numberPlate != null &&
-                        trip.numberPlate!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.confirmation_number,
-                            size: 14,
-                            color: isDarkMode
-                                ? Colors.white.withValues(alpha: 0.4)
-                                : AppPalette.textMutedLight,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            trip.numberPlate!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDarkMode
-                                  ? AppPalette.textSecondaryDark
-                                  : AppPalette.textSecondaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomButton(bool isDarkMode) {
-    final canContinue = _selectedTrip != null;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.outlineLight,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: canContinue ? _onContinue : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.emerald,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: isDarkMode
-                      ? AppPalette.surfaceSubtleDark
-                      : AppPalette.outlineLight,
-                  disabledForegroundColor: isDarkMode
-                      ? Colors.white30
-                      : AppPalette.textMutedLight,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Continue',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _skipToStartTrip,
-              child: Text(
-                'Start a Different Trip',
-                style: TextStyle(
-                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    ).enter(offsetY: 40);
   }
 }

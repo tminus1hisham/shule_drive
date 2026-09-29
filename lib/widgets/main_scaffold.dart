@@ -22,6 +22,9 @@ class MainScaffold extends StatefulWidget {
   final bool showBackButton;
   final bool showMenuButton;
 
+  /// Sticky footer (e.g. a [BottomActionBar]); takes the place of the tab bar.
+  final Widget? bottomBar;
+
   const MainScaffold({
     super.key,
     required this.body,
@@ -37,6 +40,7 @@ class MainScaffold extends StatefulWidget {
     this.leading,
     this.showBackButton = false,
     this.showMenuButton = false,
+    this.bottomBar,
   });
 
   @override
@@ -63,21 +67,23 @@ class _MainScaffoldState extends State<MainScaffold> {
             )
           : null,
       body: widget.body,
-      bottomNavigationBar: widget.showBottomNav
-          ? BottomNavigation(
-              currentIndex: widget.bottomNavIndex,
-              onTap: (index) {
-                if (index == 4) {
-                  // Center action button - navigate to start trip
-                  Navigator.pushNamed(context, '/start-trip');
-                } else if (widget.onBottomNavTap != null) {
-                  widget.onBottomNavTap!(index);
-                } else {
-                  _goToTab(index);
-                }
-              },
-            )
-          : null,
+      bottomNavigationBar:
+          widget.bottomBar ??
+          (widget.showBottomNav
+              ? BottomNavigation(
+                  currentIndex: widget.bottomNavIndex,
+                  onTap: (index) {
+                    if (index == 4) {
+                      // Center action button - navigate to start trip
+                      Navigator.pushNamed(context, '/start-trip');
+                    } else if (widget.onBottomNavTap != null) {
+                      widget.onBottomNavTap!(index);
+                    } else {
+                      _goToTab(index);
+                    }
+                  },
+                )
+              : null),
       floatingActionButton: widget.floatingActionButton,
       floatingActionButtonLocation: widget.floatingActionButtonLocation,
     );
