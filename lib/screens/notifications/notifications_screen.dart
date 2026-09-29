@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../api/services/user_service.dart';
-import '../../providers/app_provider.dart';
-import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
+import '../../api/services/user_service.dart';
+
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
+
 class NotificationItem {
   final String id;
   final String title;
@@ -41,14 +43,7 @@ class NotificationItem {
   }
 }
 
-enum NotificationType {
-  trip,
-  message,
-  alert,
-  general,
-  payment,
-  child,
-}
+enum NotificationType { trip, message, alert, general, payment, child }
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -57,35 +52,28 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  /// 0 All, 1 Unread, 2 Trips.
+  int _tab = 0;
   bool _isLoading = true;
+  String? _error;
   List<NotificationItem> _notifications = [];
   final UserService _userService = UserService();
-  
+
   List<NotificationItem> get filteredNotifications {
-    if (_tabController.index == 0) return _notifications;
-    if (_tabController.index == 1) {
+    if (_tab == 0) return _notifications;
+    if (_tab == 1) {
       return _notifications.where((n) => !n.isRead).toList();
     }
-    return _notifications.where((n) => n.type == NotificationType.trip).toList();
+    return _notifications
+        .where((n) => n.type == NotificationType.trip)
+        .toList();
   }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      setState(() {});
-    });
     _loadNotifications();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadNotifications() async {
@@ -94,30 +82,35 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     if (!hasExistingData) {
       setState(() => _isLoading = true);
     }
-    
+
     try {
       // Fetch real notifications from API
       final apiNotifications = await _userService.getNotifications(
         page: 1,
         limit: 50,
       );
-      
+
       // Convert API notifications to UI notification items
-      final notifications = apiNotifications.map((n) => NotificationItem(
-        id: n.id,
-        title: n.title,
-        message: n.body,
-        timestamp: n.createdAt,
-        type: _mapNotificationType(n.type),
-        isRead: n.isRead,
-        actionRoute: n.tripId != null ? '/trips' : null,
-        actionData: n.tripId != null ? {'tripId': n.tripId} : null,
-      )).toList();
-      
+      final notifications = apiNotifications
+          .map(
+            (n) => NotificationItem(
+              id: n.id,
+              title: n.title,
+              message: n.body,
+              timestamp: n.createdAt,
+              type: _mapNotificationType(n.type),
+              isRead: n.isRead,
+              actionRoute: n.tripId != null ? '/trips' : null,
+              actionData: n.tripId != null ? {'tripId': n.tripId} : null,
+            ),
+          )
+          .toList();
+
       if (mounted) {
         setState(() {
           _notifications = notifications;
           _isLoading = false;
+          _error = null;
         });
       }
     } catch (e) {
@@ -125,17 +118,18 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         print('❌ Error loading notifications: $e');
       }
       if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load notifications: $e'),
-            backgroundColor: AppPalette.error,
-          ),
-        );
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to load notifications';
+        });
+        // With cached items on screen, keep them and just flag the failure.
+        if (_notifications.isNotEmpty) {
+          AppSnackbar.error(context, 'Failed to load notifications: $e');
+        }
       }
     }
   }
-  
+
   /// Map API notification type to UI notification type
   NotificationType _mapNotificationType(String? type) {
     switch (type?.toLowerCase()) {
@@ -176,7 +170,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         );
       }
     });
-    
+
     // Call API to mark as read
     try {
       await _userService.markNotificationRead(id);
@@ -190,18 +184,22 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   Future<void> _markAllAsRead() async {
     // Optimistically update UI
     setState(() {
-      _notifications = _notifications.map((n) => NotificationItem(
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        timestamp: n.timestamp,
-        type: n.type,
-        isRead: true,
-        actionRoute: n.actionRoute,
-        actionData: n.actionData,
-      )).toList();
+      _notifications = _notifications
+          .map(
+            (n) => NotificationItem(
+              id: n.id,
+              title: n.title,
+              message: n.message,
+              timestamp: n.timestamp,
+              type: n.type,
+              isRead: true,
+              actionRoute: n.actionRoute,
+              actionData: n.actionData,
+            ),
+          )
+          .toList();
     });
-    
+
     // Call API to mark all as read
     try {
       await _userService.markAllNotificationsRead();
@@ -220,7 +218,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   void _handleNotificationTap(NotificationItem notification) {
     _markAsRead(notification.id);
-    
+
     if (notification.actionRoute != null) {
       Navigator.pushNamed(context, notification.actionRoute!);
     }
@@ -230,308 +228,181 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-    final isDarkMode = provider.isDarkMode;
+    final c = context.colors;
+    final items = filteredNotifications;
 
     return MainScaffold(
       title: 'Notifications',
       showBackButton: true,
       showBottomNav: true,
       bottomNavIndex: 2,
-      onBottomNavTap: (index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/dashboard');
-            break;
-          case 1:
-            Navigator.pushNamed(context, '/chat');
-            break;
-          case 2:
-            // Already on notifications/alerts
-            break;
-          case 3:
-            Navigator.pushNamed(context, '/profile');
-            break;
-          case 4:
-            Navigator.pushNamed(context, '/start-trip');
-            break;
-        }
-      },
       actions: [
-        if (_unreadCount > 0)
-          TextButton(
-            onPressed: _markAllAsRead,
-            child: const Text(
-              'Mark all read',
-              style: TextStyle(
-                color: AppPalette.emerald,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-      ],
-      body: Column(
-        children: [
-          // Tab Bar
-          Container(
-            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: AppPalette.emerald,
-              unselectedLabelColor: isDarkMode ? Colors.white60 : AppPalette.textMutedLight,
-              indicatorColor: AppPalette.emerald,
-              tabs: [
-                const Tab(text: 'All'),
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Unread'),
-                      if (_unreadCount > 0) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppPalette.emerald,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            _unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const Tab(text: 'Trips'),
-              ],
-            ),
-          ),
-          
-          // Content
-          Expanded(
-            child: _isLoading
-                ? _buildLoadingState(isDarkMode)
-                : filteredNotifications.isEmpty
-                    ? _buildEmptyState(isDarkMode)
-                    : RefreshIndicator(
-                        onRefresh: _loadNotifications,
-                        color: AppPalette.emerald,
-                        backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount: filteredNotifications.length,
-                          itemBuilder: (context, index) {
-                            final notification = filteredNotifications[index];
-                            return _buildNotificationTile(notification, isDarkMode);
-                          },
-                        ),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingState(bool isDarkMode) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 6,
-      itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
-    );
-  }
-
-  Widget _buildSkeletonItem(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 150,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.white.withAlpha(10) : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? Colors.white.withAlpha(10)
-                    : AppPalette.emerald.withAlpha(30),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.notifications_none,
-                size: 48,
-                color: isDarkMode ? Colors.white38 : AppPalette.emerald,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              _tabController.index == 1
-                  ? 'No unread notifications'
-                  : 'No notifications yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _tabController.index == 1
-                  ? 'You\'re all caught up!'
-                  : 'When you receive notifications, they will appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-          ],
+        AnimatedSwitcher(
+          duration: AppDuration.medium,
+          child: _unreadCount > 0
+              ? TextButton(
+                  key: const ValueKey('mark'),
+                  onPressed: _markAllAsRead,
+                  child: const Text('Mark all read'),
+                )
+              : const SizedBox.shrink(),
         ),
+      ],
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                ),
+                child: SegmentedFilter(
+                  selected: _tab,
+                  onChanged: (i) => setState(() => _tab = i),
+                  segments: [
+                    FilterSegment('All', count: _notifications.length),
+                    FilterSegment('Unread', count: _unreadCount),
+                    const FilterSegment('Trips'),
+                  ],
+                ).enter(),
+              ),
+              Expanded(
+                child: AsyncBody(
+                  loading: _isLoading,
+                  error: _notifications.isEmpty ? _error : null,
+                  onRetry: _loadNotifications,
+                  isEmpty: items.isEmpty,
+                  empty: EmptyState(
+                    icon: _tab == 1
+                        ? Icons.done_all_rounded
+                        : Icons.notifications_none_rounded,
+                    iconColor: _tab == 1 ? c.success : null,
+                    title: _tab == 1
+                        ? 'No unread notifications'
+                        : 'No notifications yet',
+                    message: _tab == 1
+                        ? 'You\'re all caught up!'
+                        : 'When you receive notifications, they will appear here.',
+                  ),
+                  onRefresh: _loadNotifications,
+                  // Keyed by tab so switching tabs cross-fades the lists.
+                  child: KeyedSubtree(
+                    key: ValueKey(_tab),
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        AppSpacing.xs,
+                        AppSpacing.md,
+                        AppSpacing.xl,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        child: _buildNotificationTile(
+                          items[index],
+                        ).enterList(index),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildNotificationTile(NotificationItem notification, bool isDarkMode) {
+  Widget _buildNotificationTile(NotificationItem notification) {
+    final c = context.colors;
     final icon = _getIconForType(notification.type);
     final color = _getColorForType(notification.type);
+    final unread = !notification.isRead;
 
-    return Dismissible(
-      key: Key(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.red.shade400,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: const Icon(
-          Icons.delete_outline,
-          color: Colors.white,
-          size: 28,
-        ),
+    return SwipeAction(
+      key: ValueKey('notif-${notification.id}'),
+      end: SwipeSpec(
+        label: 'Delete',
+        icon: Icons.delete_outline_rounded,
+        color: c.error,
+        onTrigger: () async => true,
       ),
-      onDismissed: (_) => _deleteNotification(notification.id),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(isDarkMode ? 30 : 10),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: notification.isRead
-              ? null
-              : Border.all(
-                  color: AppPalette.emerald.withAlpha(50),
-                  width: 1,
-                ),
-        ),
+      onDismissed: () => _deleteNotification(notification.id),
+      child: PressScale(
+        scale: 0.985,
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
           child: InkWell(
             onTap: () => _handleNotificationTap(notification),
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            borderRadius: AppRadius.brLg,
+            // Unread cards carry a brand tint + edge that fade out when read.
+            child: AnimatedContainer(
+              duration: AppDuration.slow,
+              curve: AppCurves.easeOut,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: unread
+                    ? Color.alphaBlend(
+                        c.brand.withValues(alpha: 0.06),
+                        context.scheme.surface,
+                      )
+                    : context.scheme.surface,
+                borderRadius: AppRadius.brLg,
+                border: Border.all(
+                  color: unread ? c.brand.withValues(alpha: 0.3) : c.outline,
+                ),
+                boxShadow: unread ? c.shadowSm : const [],
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon
                   Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpacing.sm),
                         decoration: BoxDecoration(
-                          color: color.withAlpha(30),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              color.withValues(alpha: 0.22),
+                              color.withValues(alpha: 0.08),
+                            ],
+                          ),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          icon,
-                          color: color,
-                          size: 24,
-                        ),
+                        child: Icon(icon, color: color, size: AppIconSize.lg),
                       ),
-                      if (!notification.isRead)
-                        Positioned(
-                          right: 0,
-                          top: 0,
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: AnimatedScale(
+                          scale: unread ? 1 : 0,
+                          duration: AppDuration.medium,
+                          curve: unread ? Curves.easeOutBack : Curves.easeIn,
                           child: Container(
                             width: 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: AppPalette.emerald,
+                              color: c.brand,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
+                                color: context.scheme.surface,
                                 width: 2,
                               ),
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
-                  const SizedBox(width: 16),
-                  
-                  // Content
+                  AppSpacing.hMd,
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,36 +410,33 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                notification.title,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: notification.isRead
-                                      ? FontWeight.w500
-                                      : FontWeight.w700,
-                                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
+                              child: AnimatedDefaultTextStyle(
+                                duration: AppDuration.medium,
+                                style: context.text.titleSmall!.copyWith(
+                                  fontWeight: unread
+                                      ? FontWeight.w800
+                                      : FontWeight.w500,
                                 ),
+                                child: Text(notification.title),
                               ),
                             ),
                             Text(
                               notification.timeAgo,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
+                              style: context.text.labelSmall?.copyWith(
+                                color: unread ? c.brand : c.textMuted,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        AppSpacing.vXxs,
                         Text(
                           notification.message,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                            height: 1.4,
-                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+                          style: context.text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                            height: 1.4,
+                          ),
                         ),
                       ],
                     ),
@@ -585,34 +453,35 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   IconData _getIconForType(NotificationType type) {
     switch (type) {
       case NotificationType.trip:
-        return Icons.directions_bus;
+        return Icons.directions_bus_rounded;
       case NotificationType.message:
-        return Icons.chat_bubble_outline;
+        return Icons.chat_bubble_outline_rounded;
       case NotificationType.alert:
         return Icons.warning_amber_rounded;
       case NotificationType.payment:
-        return Icons.payment;
+        return Icons.payment_rounded;
       case NotificationType.child:
-        return Icons.child_care;
+        return Icons.child_care_rounded;
       case NotificationType.general:
-        return Icons.notifications_none;
+        return Icons.notifications_none_rounded;
     }
   }
 
   Color _getColorForType(NotificationType type) {
+    final c = context.colors;
     switch (type) {
       case NotificationType.trip:
-        return AppPalette.emerald;
+        return c.accent;
       case NotificationType.message:
-        return AppPalette.info;
+        return c.info;
       case NotificationType.alert:
-        return AppPalette.warning;
+        return c.warning;
       case NotificationType.payment:
-        return const Color(0xFF9C27B0);
+        return c.success;
       case NotificationType.child:
-        return const Color(0xFFE91E63);
+        return c.brand;
       case NotificationType.general:
-        return const Color(0xFF607D8B);
+        return c.textSecondary;
     }
   }
 }

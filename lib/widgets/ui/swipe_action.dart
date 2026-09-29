@@ -28,12 +28,17 @@ class SwipeAction extends StatelessWidget {
     required this.child,
     this.start,
     this.end,
+    this.onDismissed,
     this.borderRadius = AppRadius.brLg,
   });
 
   final Widget child;
   final SwipeSpec? start;
   final SwipeSpec? end;
+
+  /// Called after a row whose [SwipeSpec.onTrigger] returned true slides away.
+  /// Remove the item from the list here.
+  final VoidCallback? onDismissed;
   final BorderRadius borderRadius;
 
   @override
@@ -58,6 +63,7 @@ class SwipeAction extends StatelessWidget {
         final spec = dir == DismissDirection.startToEnd ? start! : end!;
         return spec.onTrigger();
       },
+      onDismissed: onDismissed == null ? null : (_) => onDismissed!(),
       background: start == null
           ? const SizedBox.shrink()
           : _Surface(spec: start!, alignStart: true, radius: borderRadius),
