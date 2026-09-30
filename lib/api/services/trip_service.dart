@@ -183,6 +183,7 @@ class TripService {
     int? masterTripId,
     String? route,
     String? tripName,
+    String? tripDirection,
     String? driverName,
     String? numberPlate,
     String? driverPhoneNumber,
@@ -203,6 +204,7 @@ class TripService {
         throw ApiException(message: 'Select a route before starting the trip');
       }
 
+      final startedAt = DateTime.now();
       final response = await _apiClient.post(
         Endpoints.startTrip,
         body: {
@@ -215,7 +217,7 @@ class TripService {
           'attendantName': attendantName ?? '',
           'attendantPhoneNumber': attendantPhoneNumber ?? '',
           'attendantProfileImage': attendantProfileImage ?? '',
-          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'createdAt': startedAt.toUtc().toIso8601String(),
         },
       );
 
@@ -228,8 +230,8 @@ class TripService {
               : resolvedMasterTripId.toString(),
           routeName: tripName ?? route ?? 'Trip',
           routeId: routeId,
-          tripDirection: response['tripDirection']?.toString(),
-          startTime: DateTime.now(),
+          tripDirection: tripDirection,
+          startTime: startedAt,
           status: 'active',
           vehicleId: vehicleId,
           vehicleNumber: numberPlate,
@@ -247,7 +249,7 @@ class TripService {
               '',
           routeName: tripName ?? route ?? 'Trip',
           routeId: routeId,
-          startTime: DateTime.now(),
+          startTime: startedAt,
           status: 'active',
           vehicleId: vehicleId,
           vehicleNumber: numberPlate,
@@ -267,6 +269,12 @@ class TripService {
         trip = Trip.fromJson(Map<String, dynamic>.from(response));
       }
 
+      trip = trip.copyWith(
+        routeName: tripName,
+        tripDirection: trip.tripDirection ?? tripDirection,
+        startTime: startedAt,
+      );
+
       // Keep the master trip id on the trip - it is the join key for the
       // driver-readable server endpoints (master trip students, unique trips).
       if (trip.masterTripId == null) {
@@ -284,7 +292,23 @@ class TripService {
       await _buffer.clearCategory('trips');
 
       return trip;
-    } on ApiException {
+    } on ApiException catch (e) {
+      // The server answers a start on a trip with no students with a bare
+      // 400 "Invalid request", so explain the real cause to the driver.
+      if (e.statusCode == 400 && masterTripId != null && masterTripId > 0) {
+        final students = await getMasterTripStudents(
+          masterTripId,
+          forceRefresh: true,
+        ).catchError((_) => <TripStudent>[]);
+        if (students.isEmpty) {
+          throw ApiException(
+            message:
+                'This trip has no students yet. Add at least one student '
+                'to the trip before starting it.',
+            statusCode: e.statusCode,
+          );
+        }
+      }
       rethrow;
     } catch (e) {
       throw ApiException(message: e.toString());
@@ -1192,7 +1216,8 @@ class TripService {
 
   /// Body for POST /api/trips/pick/drop/student ([PickSingleStudentModel]).
   ///
-  /// `action` is `picked` / `dropped`.
+  /// `action` must be exactly `Pick` or `Drop`: the server matches `Pick`
+  /// case-sensitively and records anything else (e.g. `picked`) as a drop.
   @visibleForTesting
   static Map<String, dynamic> buildPickSingleStudentBody({
     required String uniqueTripIdentity,
@@ -1208,7 +1233,7 @@ class TripService {
       'studentReg': studentReg,
       'guardianPhoneNumber': guardianPhoneNumber,
       'numberPlate': numberPlate,
-      'action': isDropping ? 'dropped' : 'picked',
+      'action': isDropping ? 'Drop' : 'Pick',
       'latitude': latitude,
       'longitude': longitude,
     };

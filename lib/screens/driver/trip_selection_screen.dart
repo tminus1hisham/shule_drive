@@ -168,6 +168,20 @@ class _TripSelectionScreenState extends State<TripSelectionScreen> {
   void _onContinue() {
     if (_selectedTrip == null) return;
 
+    // The server refuses to start a trip with no students, so stop here
+    // rather than after the driver has picked a vehicle.
+    final preloaded = _preloadedData;
+    if (preloaded != null &&
+        preloaded.masterTrip.id == _selectedTrip!.id &&
+        preloaded.students.isEmpty) {
+      AppSnackbar.error(
+        context,
+        '${_selectedTrip!.tripName} has no students yet. Add students to it '
+        'in Manage Trips before starting.',
+      );
+      return;
+    }
+
     HapticFeedback.mediumImpact();
 
     // Navigate to vehicle selection with pre-loaded data (as Map for serialization)

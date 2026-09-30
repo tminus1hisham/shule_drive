@@ -220,7 +220,10 @@ class _StartTripScreenState extends State<StartTripScreen> {
   bool _isStartingTrip = false;
 
   String get _selectedNumberPlate {
-    for (final bus in _driverBuses) {
+    final buses = _driverBuses.isNotEmpty
+        ? _driverBuses
+        : context.read<AppProvider>().buses;
+    for (final bus in buses) {
       if (bus.id == _selectedVehicle) return bus.registrationNumber;
     }
     return _preSelectedMasterTrip?.numberPlate ?? _selectedVehicle ?? '';
@@ -272,6 +275,7 @@ class _StartTripScreenState extends State<StartTripScreen> {
         masterTripId: masterTrip?.id,
         route: routeName,
         tripName: masterTrip?.tripName ?? 'Trip',
+        tripDirection: masterTrip?.tripDirection,
         driverName: authProvider.userName ?? 'Unknown Driver',
         driverPhoneNumber: authProvider.userPhone ?? '',
         numberPlate: plate,
