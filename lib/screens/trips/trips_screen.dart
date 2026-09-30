@@ -50,9 +50,18 @@ class _TripsScreenState extends State<TripsScreen> {
         return;
       }
 
-      // Load from local storage
-      final trips = await _historyService.getTripHistory(driverId);
-      final stats = await _historyService.getDriverStats(driverId);
+      // Show the saved copy straight away, then refresh from the server.
+      final cached = await _historyService.getCachedDriverTripHistory(driverId);
+      if (mounted && cached.isNotEmpty) {
+        setState(() {
+          _trips = cached;
+          _stats = DriverStats.fromHistory(cached);
+          _isLoading = false;
+        });
+      }
+
+      final trips = await _historyService.getDriverTripHistory(driverId);
+      final stats = DriverStats.fromHistory(trips);
 
       if (mounted) {
         setState(() {
@@ -362,14 +371,14 @@ class _TripsScreenState extends State<TripsScreen> {
             children: [
               Expanded(
                 child: TripProgress.bar(
-                  done: trip.pickedCount,
+                  done: trip.pickedUpCount,
                   total: trip.students.length,
                   thickness: 6,
                 ),
               ),
               AppSpacing.hSm,
               Text(
-                '${trip.pickedCount}/${trip.students.length} students',
+                '${trip.pickedUpCount}/${trip.students.length} students',
                 style: context.text.labelMedium?.copyWith(
                   color: c.brand,
                   fontWeight: FontWeight.w700,

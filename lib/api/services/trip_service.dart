@@ -717,6 +717,96 @@ class TripService {
     );
   }
 
+  /// Every run of a master trip: one row per student per run. Fold them into
+  /// trips with [tripsFromRunRows]. Not buffered - callers cache the result.
+  /// GET /api/trips/get/unique/trips?masterTripId={id}
+  Future<List<Map<String, dynamic>>> getTripRunRows(int masterTripId) async {
+    final response = await _apiClient.get(
+      Endpoints.getUniqueTrips,
+      queryParams: {'masterTripId': masterTripId.toString()},
+    );
+    return ApiClient.unwrapList(
+      response,
+    ).whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// The server keeps one row per student per run, keyed by
+  /// `tripUniqueIdentity`; fold each run's rows back into a single [Trip].
+  static List<Trip> tripsFromRunRows(
+    Iterable<Map<String, dynamic>> rows, {
+    MasterTrip? masterTrip,
+  }) {
+    final runs = <String, List<Map<String, dynamic>>>{};
+    for (final row in rows) {
+      final id = row['tripUniqueIdentity']?.toString() ?? '';
+      if (id.isNotEmpty) runs.putIfAbsent(id, () => []).add(row);
+    }
+
+    final trips = runs.entries.map((run) {
+      final rows = run.value;
+      final first = rows.first;
+      DateTime? parse(Object? value) =>
+          value == null ? null : DateTime.tryParse(value.toString());
+
+      final starts = rows.map((r) => parse(r['createdAt'])).nonNulls.toList()
+        ..sort();
+      final isCancelled = rows.any((r) => r['isTripCancelled'] == true);
+      final isCompleted = rows.every(
+        (r) => r['isTripCompleted'] == true || r['isTripActive'] == false,
+      );
+      // tripCompletedAt holds a placeholder until the run is really ended.
+      final ends = isCompleted
+          ? (rows.map((r) => parse(r['tripCompletedAt'])).nonNulls.toList()
+              ..sort())
+          : const <DateTime>[];
+      final direction = first['tripDirection']?.toString() ?? '';
+      final plate = first['numberPlate']?.toString() ?? '';
+
+      return Trip(
+        id: run.key,
+        routeName:
+            first['masterTripName']?.toString() ??
+            masterTrip?.tripName ??
+            first['route']?.toString() ??
+            'Trip',
+        routeId: first['route']?.toString() ?? '',
+        masterTripId: Trip._parseInt(first['masterTripId']) ?? masterTrip?.id,
+        tripDirection: direction.isNotEmpty
+            ? direction
+            : masterTrip?.tripDirection,
+        startTime: starts.isNotEmpty ? starts.first : DateTime.now(),
+        endTime: ends.isNotEmpty ? ends.last : null,
+        status: isCancelled
+            ? 'cancelled'
+            : (isCompleted ? 'completed' : 'active'),
+        vehicleId: plate,
+        vehicleNumber: plate.isEmpty ? null : plate,
+        students: rows.map(_studentFromRunRow).toList(),
+        stops: [],
+      );
+    }).toList();
+
+    trips.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return trips;
+  }
+
+  /// Run rows carry placeholder pick/drop times even when the event never
+  /// happened, and mark a skipped student with `isStudentNotPicked`.
+  static StudentPickup _studentFromRunRow(Map<String, dynamic> row) {
+    final json = Map<String, dynamic>.from(row);
+    if (json['isStudentPicked'] != true) json.remove('pickedTime');
+    if (json['isStudentDropped'] != true) json.remove('dropTime');
+    final student = StudentPickup.fromJson(json);
+    if (row['isStudentNotPicked'] == true && student.status == 'pending') {
+      final reason = row['notPickedReason']?.toString() ?? '';
+      return student.copyWith(
+        status: 'absent',
+        notes: reason.isEmpty ? null : reason,
+      );
+    }
+    return student;
+  }
+
   /// Get guardians of students in a master trip (for drivers)
   /// GET /api/trips/get/students/guardians/in/mastertrips?masterTripId={id}
   Future<List<TripGuardian>> getStudentsGuardiansInMasterTrips(
@@ -1407,6 +1497,12 @@ class Trip {
   bool get isCompleted => status == 'completed';
 
   int get pickedCount => students.where((s) => s.status == 'picked').length;
+
+  /// Students who got on the bus at some point, including those since
+  /// dropped off. Use this for finished trips, where [pickedCount] is 0.
+  int get pickedUpCount => students
+      .where((s) => s.status == 'picked' || s.status == 'dropped')
+      .length;
   int get absentCount => students.where((s) => s.status == 'absent').length;
   int get pendingCount => students.where((s) => s.status == 'pending').length;
 
@@ -1668,6 +1764,20 @@ class StudentPickup {
       _hasValidCoordinate(pickedLatitude, pickedLongitude)
       ? pickedLongitude
       : longitude;
+
+  /// How far along a trip a status is, so merges keep the later one.
+  static int statusRank(String status) {
+    switch (normalizeStatus(status)) {
+      case 'absent':
+        return 1;
+      case 'picked':
+        return 2;
+      case 'dropped':
+        return 3;
+      default:
+        return 0; // pending
+    }
+  }
 
   static String normalizeStatus(String value) {
     switch (value.trim().toLowerCase()) {

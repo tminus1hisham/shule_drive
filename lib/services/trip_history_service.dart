@@ -2,15 +2,224 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/services/trip_service.dart';
+import '../models/master_trip.dart';
 
-/// Trip History Service - Stores completed trips locally for drivers
-/// This allows drivers to see their trip history even offline
+/// Trip History Service - a driver's trips, from the server plus the trips
+/// recorded on this device, so history survives reinstalls and other phones
+/// and still works offline.
 class TripHistoryService {
   static final TripHistoryService _instance = TripHistoryService._internal();
   factory TripHistoryService() => _instance;
   TripHistoryService._internal();
 
+  /// Trips recorded on this device. Other code scans keys with this prefix,
+  /// so the server copy must not share it.
   static const String _tripsKey = 'driver_trip_history';
+
+  /// Last server copy of the driver's trips, for offline viewing.
+  static const String _serverTripsKey = 'server_trip_history';
+
+  // ==========================================================================
+  // DRIVER HISTORY (SERVER + DEVICE)
+  // ==========================================================================
+
+  /// Every trip the server recorded for [driverId], merged with trips only
+  /// this device knows about (e.g. started while offline). Any part that
+  /// can't be fetched falls back to the last server copy.
+  Future<List<TripHistory>> getDriverTripHistory(
+    String driverId, {
+    TripService? tripService,
+  }) async {
+    final local = await getTripHistory(driverId);
+    final server = await _fetchServerHistory(
+      driverId,
+      tripService ?? TripService(),
+    );
+    return mergeHistories(server: server, local: local);
+  }
+
+  /// [getDriverTripHistory] without the network: the last server copy merged
+  /// with this device's trips.
+  Future<List<TripHistory>> getCachedDriverTripHistory(String driverId) async {
+    return mergeHistories(
+      server: await _readServerHistory(driverId),
+      local: await getTripHistory(driverId),
+    );
+  }
+
+  Future<List<TripHistory>> _fetchServerHistory(
+    String driverId,
+    TripService service,
+  ) async {
+    final cached = await _readServerHistory(driverId);
+    try {
+      final masterTrips = await service.getAllMasterTrips();
+      // getAllMasterTrips answers [] when offline with nothing cached; don't
+      // let that wipe the saved copy.
+      if (masterTrips.isEmpty) return cached;
+
+      final perMasterTrip = await Future.wait(
+        masterTrips.map((masterTrip) async {
+          try {
+            final rows = await service.getTripRunRows(masterTrip.id);
+            return _historyFromRunRows(
+              rows.where((row) => row['driverId']?.toString() == driverId),
+              masterTrip,
+              driverId,
+            );
+          } catch (e) {
+            debugPrint('⚠️ Trip runs for master trip ${masterTrip.id}: $e');
+            return cached
+                .where((h) => h.trip.masterTripId == masterTrip.id)
+                .toList();
+          }
+        }),
+      );
+
+      final history = perMasterTrip.expand((runs) => runs).toList()
+        ..sort((a, b) => b.trip.startTime.compareTo(a.trip.startTime));
+      await _writeServerHistory(driverId, history);
+      return history;
+    } catch (e) {
+      debugPrint('⚠️ Failed to load trip history from server: $e');
+      return cached;
+    }
+  }
+
+  List<TripHistory> _historyFromRunRows(
+    Iterable<Map<String, dynamic>> rows,
+    MasterTrip masterTrip,
+    String driverId,
+  ) {
+    final firstRowByRun = <String, Map<String, dynamic>>{};
+    for (final row in rows) {
+      firstRowByRun.putIfAbsent(
+        row['tripUniqueIdentity']?.toString() ?? '',
+        () => row,
+      );
+    }
+    return [
+      for (final trip in TripService.tripsFromRunRows(
+        rows,
+        masterTrip: masterTrip,
+      ))
+        TripHistory(
+          trip: trip,
+          driverId: driverId,
+          driverName: firstRowByRun[trip.id]?['driverName']?.toString() ?? '',
+          attendantName: _nonBlank(firstRowByRun[trip.id]?['attendantName']),
+          loggedAt: trip.startTime,
+        ),
+    ];
+  }
+
+  /// Server trips are the record; device-only trips are kept alongside.
+  /// Where both have a trip, device details the server lacks (distance,
+  /// notes) survive, and a status the device recorded further along (a pick
+  /// or an ended trip not yet synced) is not rolled back.
+  @visibleForTesting
+  static List<TripHistory> mergeHistories({
+    required List<TripHistory> server,
+    required List<TripHistory> local,
+  }) {
+    final localById = <String, TripHistory>{};
+    for (final entry in local) {
+      localById.putIfAbsent(entry.trip.id, () => entry);
+    }
+    final serverIds = {for (final entry in server) entry.trip.id};
+
+    return [
+      for (final entry in server) _mergeEntry(entry, localById[entry.trip.id]),
+      ...local.where((entry) => !serverIds.contains(entry.trip.id)),
+    ]..sort((a, b) => b.trip.startTime.compareTo(a.trip.startTime));
+  }
+
+  static TripHistory _mergeEntry(TripHistory server, TripHistory? local) {
+    if (local == null) return server;
+    final s = server.trip;
+    final l = local.trip;
+
+    final localStudents = {
+      for (final student in l.students) student.id: student,
+    };
+    final students = s.students.isEmpty
+        ? l.students
+        : [
+            for (final student in s.students)
+              _furtherAlong(student, localStudents[student.id]),
+          ];
+    final endedLocally = l.isCompleted && s.isActive;
+
+    return TripHistory(
+      trip: s.copyWith(
+        routeName: l.routeName.isNotEmpty ? l.routeName : null,
+        tripDirection: s.tripDirection ?? l.tripDirection,
+        status: endedLocally ? l.status : null,
+        endTime: s.endTime ?? l.endTime,
+        students: students,
+        stops: l.stops,
+        distance: l.distance,
+        fare: l.fare,
+        notes: l.notes,
+      ),
+      driverId: server.driverId,
+      driverName: server.driverName.isNotEmpty
+          ? server.driverName
+          : local.driverName,
+      attendantName: server.attendantName ?? local.attendantName,
+      loggedAt: local.loggedAt,
+    );
+  }
+
+  static StudentPickup _furtherAlong(
+    StudentPickup server,
+    StudentPickup? local,
+  ) {
+    if (local == null) return server;
+    return StudentPickup.statusRank(local.status) >
+            StudentPickup.statusRank(server.status)
+        ? local
+        : server;
+  }
+
+  static String? _nonBlank(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  Future<List<TripHistory>> _readServerHistory(String driverId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('${_serverTripsKey}_$driverId');
+      if (json == null || json.isEmpty) return [];
+      return [
+        for (final entry in jsonDecode(json) as List)
+          TripHistory.fromJson(Map<String, dynamic>.from(entry as Map)),
+      ];
+    } catch (e) {
+      debugPrint('⚠️ Failed to read saved server trip history: $e');
+      return [];
+    }
+  }
+
+  Future<void> _writeServerHistory(
+    String driverId,
+    List<TripHistory> history,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_serverTripsKey}_$driverId',
+        jsonEncode([for (final entry in history) entry.toJson()]),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Failed to save server trip history: $e');
+    }
+  }
+
+  // ==========================================================================
+  // DEVICE HISTORY
+  // ==========================================================================
 
   /// Save a completed trip to local history
   Future<void> saveTripToHistory({
@@ -166,46 +375,9 @@ class TripHistoryService {
     }
   }
 
-  /// Get driver statistics
-  /// Always recomputed from trip history so picked counts stay accurate
-  /// even when trips are updated after the initial save.
+  /// Driver statistics over the full (server + device) history.
   Future<DriverStats> getDriverStats(String driverId) async {
-    try {
-      final history = await getTripHistory(driverId);
-      if (history.isNotEmpty) {
-        int totalStudents = 0;
-        int totalPicked = 0;
-        int totalAbsent = 0;
-        double totalDistance = 0;
-        DateTime? lastTripDate;
-
-        for (final entry in history) {
-          totalStudents += entry.trip.students.length;
-          totalPicked += entry.trip.pickedCount;
-          totalAbsent += entry.trip.absentCount;
-          totalDistance += entry.trip.distance ?? 0;
-          if (lastTripDate == null ||
-              entry.trip.startTime.isAfter(lastTripDate)) {
-            lastTripDate = entry.trip.startTime;
-          }
-        }
-
-        return DriverStats(
-          totalTrips: history.length,
-          totalStudents: totalStudents,
-          totalPicked: totalPicked,
-          totalAbsent: totalAbsent,
-          totalDistance: totalDistance,
-          lastTripDate: lastTripDate,
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Failed to load driver stats: $e');
-      }
-    }
-
-    return DriverStats.empty();
+    return DriverStats.fromHistory(await getDriverTripHistory(driverId));
   }
 
   /// Clear trip history for a driver
@@ -380,6 +552,36 @@ class DriverStats {
       totalAbsent: 0,
       totalDistance: 0,
       lastTripDate: null,
+    );
+  }
+
+  /// Recomputed from trip history so counts stay accurate even when trips
+  /// are updated after the initial save.
+  factory DriverStats.fromHistory(List<TripHistory> history) {
+    if (history.isEmpty) return DriverStats.empty();
+    var totalStudents = 0;
+    var totalPicked = 0;
+    var totalAbsent = 0;
+    var totalDistance = 0.0;
+    DateTime? lastTripDate;
+
+    for (final entry in history) {
+      totalStudents += entry.trip.students.length;
+      totalPicked += entry.trip.pickedUpCount;
+      totalAbsent += entry.trip.absentCount;
+      totalDistance += entry.trip.distance ?? 0;
+      if (lastTripDate == null || entry.trip.startTime.isAfter(lastTripDate)) {
+        lastTripDate = entry.trip.startTime;
+      }
+    }
+
+    return DriverStats(
+      totalTrips: history.length,
+      totalStudents: totalStudents,
+      totalPicked: totalPicked,
+      totalAbsent: totalAbsent,
+      totalDistance: totalDistance,
+      lastTripDate: lastTripDate,
     );
   }
 

@@ -197,18 +197,7 @@ class TripProvider extends ChangeNotifier {
 
   /// Rank used to decide which student status is further along when merging
   /// fetched trip data with locally recorded statuses.
-  static int _statusRank(String status) {
-    switch (api.StudentPickup.normalizeStatus(status)) {
-      case 'absent':
-        return 1;
-      case 'picked':
-        return 2;
-      case 'dropped':
-        return 3;
-      default:
-        return 0; // pending
-    }
-  }
+  static int _statusRank(String status) => api.StudentPickup.statusRank(status);
 
   /// The driver has no working server read for the active trip (the endpoint
   /// requires guardianPhone) and there is no per-student pick API, so fetched

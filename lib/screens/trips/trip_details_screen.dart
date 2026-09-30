@@ -50,9 +50,11 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
       // Load from history service
       final authProvider = context.read<AuthProvider>();
       final driverId = authProvider.userData['id'] ?? '';
-      final history = await TripHistoryService().getTripHistory(driverId);
+      final history = await TripHistoryService().getCachedDriverTripHistory(
+        driverId,
+      );
 
-      // Not in local history -> show the empty state, don't spin forever.
+      // Not in saved history -> show the empty state, don't spin forever.
       final tripHistory = history
           .where((h) => h.trip.id == args['tripId'])
           .firstOrNull;
@@ -258,7 +260,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
             children: [
               const Expanded(child: SectionHeader(title: 'Trip Statistics')),
               TripProgress.ring(
-                done: trip.pickedCount,
+                done: trip.pickedUpCount,
                 total: trip.students.length,
                 size: 48,
                 thickness: 5,
@@ -276,7 +278,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               ),
               AppSpacing.hSm,
               _buildStatBox(
-                trip.pickedCount.toString(),
+                trip.pickedUpCount.toString(),
                 'Picked Up',
                 Icons.check_circle_rounded,
                 c.success,
@@ -333,7 +335,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
               child: SectionHeader(title: 'Students (${trip.students.length})'),
             ),
             StatusPill(
-              label: '${trip.pickedCount}/${trip.students.length}',
+              label: '${trip.pickedUpCount}/${trip.students.length}',
               color: c.brand,
               icon: Icons.check_circle_rounded,
               dense: true,
