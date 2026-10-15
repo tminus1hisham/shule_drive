@@ -1,3 +1,7 @@
+// Flutter 3.47+ no longer re-exports CupertinoPageTransitionsBuilder from
+// material.dart; older SDKs flag this as redundant.
+// ignore: unnecessary_import
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_spacing.dart';
