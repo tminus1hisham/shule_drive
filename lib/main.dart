@@ -52,6 +52,7 @@ import 'services/local_database_service.dart';
 import 'services/notification_service.dart';
 import 'services/offline_sync_manager.dart';
 import 'services/app_config.dart';
+import 'services/remote_log.dart';
 import 'widgets/route_guard.dart';
 import 'theme/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -63,17 +64,53 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // Plain print() is in 300+ places and, like debugPrint, survives release
 // builds; running the app in a zone that drops it keeps those logs off the
 // device log (iOS Console / logcat) without touching every call site.
-Future<void> main() => kReleaseMode
-    ? runZoned(
-        _main,
-        zoneSpecification: ZoneSpecification(print: (_, _, _, _) {}),
-      )
-    : _main();
+//
+// Test builds made with --dart-define=REMOTE_LOG_URL instead send every
+// print, debugPrint (it prints through the zone) and uncaught error to the
+// log server, since there is no debugger on TestFlight phones.
+Future<void> main() async {
+  if (RemoteLog.enabled) {
+    await runZonedGuarded(
+      _main,
+      (error, stack) {
+        RemoteLog.add('Uncaught: $error\n$stack', level: 'E');
+        if (kDebugMode) print('$error\n$stack');
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (_, parent, zone, line) {
+          RemoteLog.add(line);
+          if (!kReleaseMode) parent.print(zone, line);
+        },
+      ),
+    );
+  } else if (kReleaseMode) {
+    await runZoned(
+      _main,
+      zoneSpecification: ZoneSpecification(print: (_, _, _, _) {}),
+    );
+  } else {
+    await _main();
+  }
+}
 
 Future<void> _main() async {
-  // debugPrint isn't stripped from release builds and logs carry phone
-  // numbers, ids and server bodies; keep them off production logcat.
-  if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
+  if (RemoteLog.enabled) {
+    // Debug already dumps framework errors with stacks through print.
+    if (kReleaseMode) {
+      FlutterError.onError = (details) => RemoteLog.add(
+        'FlutterError: ${details.exceptionAsString()}\n${details.stack}',
+        level: 'E',
+      );
+    }
+    PlatformDispatcher.instance.onError = (error, stack) {
+      RemoteLog.add('PlatformError: $error\n$stack', level: 'E');
+      return false;
+    };
+  } else if (kReleaseMode) {
+    // debugPrint isn't stripped from release builds and logs carry phone
+    // numbers, ids and server bodies; keep them off production logcat.
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
 
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
