@@ -19,6 +19,7 @@ class RemoteLog {
   // lost; persist to disk if crash-adjacent lines go missing.
   static const _maxBuffered = 2000;
   static final _session = const Uuid().v4().substring(0, 8);
+  static final _start = DateTime.now(); // set on the first add()
   static final _buffer = <String>[];
   static Timer? _timer;
   static bool _sending = false;
@@ -31,6 +32,11 @@ class RemoteLog {
     );
     _trim();
     _timer ??= Timer.periodic(const Duration(seconds: 2), (_) => _flush());
+    // Errors and launch lines go out at once: a native crash right after
+    // launch would otherwise kill the app before the first 2s tick.
+    if (level == 'E' || DateTime.now().difference(_start).inSeconds < 10) {
+      unawaited(_flush());
+    }
   }
 
   static void _trim() {
