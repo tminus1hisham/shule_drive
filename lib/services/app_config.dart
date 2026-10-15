@@ -38,17 +38,17 @@ class AppConfig {
     if (_initialized) return;
 
     try {
-      // isOptional: a missing or empty .env (iOS/release builds) still marks
-      // dotenv initialized, otherwise every dotenv.env read below throws
-      // NotInitializedError and kills startup.
-      await dotenv.load(fileName: ".env", isOptional: true);
+      await dotenv.load(fileName: ".env");
       if (kDebugMode) {
         print('[AppConfig] .env file loaded successfully');
       }
     } catch (e) {
-      // .env file might not exist in production builds
+      // CI builds ship a missing or empty .env (load throws on both). Init
+      // dotenv empty, or every dotenv.env read throws NotInitializedError and
+      // kills startup; values then come from dart-define or defaults.
+      dotenv.testLoad();
       if (kDebugMode) {
-        print('[AppConfig] No .env file found (expected in production)');
+        print('[AppConfig] No usable .env ($e), using dart-define/defaults');
       }
     }
 
