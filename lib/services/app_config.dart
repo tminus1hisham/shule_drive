@@ -38,8 +38,10 @@ class AppConfig {
     if (_initialized) return;
 
     try {
-      // Load .env file (safe to call even if file doesn't exist in production)
-      await dotenv.load(fileName: ".env");
+      // isOptional: a missing or empty .env (iOS/release builds) still marks
+      // dotenv initialized, otherwise every dotenv.env read below throws
+      // NotInitializedError and kills startup.
+      await dotenv.load(fileName: ".env", isOptional: true);
       if (kDebugMode) {
         print('[AppConfig] .env file loaded successfully');
       }
