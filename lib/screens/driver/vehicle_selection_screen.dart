@@ -1,15 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/ui/staggered_entrance.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
+import 'package:provider/provider.dart';
 import '../../api/services/bus_service.dart';
-import '../../providers/app_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
 /// Vehicle Selection Screen
 /// Allows driver to select which vehicle they're using for the trip
 class VehicleSelectionScreen extends StatefulWidget {
@@ -21,15 +23,12 @@ class VehicleSelectionScreen extends StatefulWidget {
   State<VehicleSelectionScreen> createState() => _VehicleSelectionScreenState();
 }
 
-class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
-    with SingleTickerProviderStateMixin {
+class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
   bool _isLoading = true;
   String? _error;
   List<Bus> _vehicles = [];
   Bus? _selectedVehicle;
   PreloadedTripData? _preloadedData;
-
-  late AnimationController _animationController;
 
   @override
   void didChangeDependencies() {
@@ -46,17 +45,23 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.slow,
-    );
     _loadVehicles();
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+  /// Plate of the most recent run of this master trip in the driver's history.
+  Future<String?> _lastRunPlate() async {
+    final tripId = widget.masterTrip?.id;
+    final driverId = context.read<AuthProvider>().currentUser?.id;
+    if (tripId == null || driverId == null) return null;
+    final runs = (await TripHistoryService().getCachedDriverTripHistory(
+      driverId,
+    )).map((h) => h.trip).where(
+      (t) => t.masterTripId == tripId && (t.vehicleNumber ?? '').isNotEmpty,
+    );
+    if (runs.isEmpty) return null;
+    return runs
+        .reduce((a, b) => a.startTime.isAfter(b.startTime) ? a : b)
+        .vehicleNumber;
   }
 
   Future<void> _loadVehicles() async {
@@ -70,6 +75,11 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
       debugPrint('🚗 VehicleSelection: Fetching driver assigned vehicles');
 
       final buses = await busService.getBusesByUser();
+      // The server's master-trip record has no plate; fall back to the bus
+      // this trip last ran with. That's only a guess, so the driver confirms.
+      final assignedPlate = widget.masterTrip?.numberPlate;
+      final plate = assignedPlate ?? await _lastRunPlate();
+      final guessed = assignedPlate == null && plate != null;
 
       if (mounted) {
         debugPrint('🚗 VehicleSelection: Final vehicle count: ${buses.length}');
@@ -77,24 +87,18 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
           _vehicles = buses;
           _isLoading = false;
 
-          // Pre-select if master trip has a vehicle assigned
-          if (widget.masterTrip?.numberPlate != null && buses.isNotEmpty) {
-            try {
-              _selectedVehicle = buses.firstWhere(
-                (v) =>
-                    v.registrationNumber.toLowerCase() ==
-                    widget.masterTrip!.numberPlate!.toLowerCase(),
-              );
-              debugPrint(
-                '🚗 Pre-selected vehicle: ${_selectedVehicle?.registrationNumber}',
-              );
-            } catch (e) {
-              // No matching vehicle found
-              _selectedVehicle = null;
-              debugPrint(
-                '🚗 No matching vehicle found for: ${widget.masterTrip?.numberPlate}',
-              );
-            }
+          if (plate != null) {
+            _selectedVehicle = buses
+                .where(
+                  (v) =>
+                      v.registrationNumber.toLowerCase() ==
+                      plate.toLowerCase(),
+                )
+                .firstOrNull;
+            debugPrint(
+              '🚗 Pre-selected vehicle for $plate: '
+              '${_selectedVehicle?.registrationNumber ?? 'none matched'}',
+            );
           }
 
           // If there is only one vehicle and none was selected by master trip, select it
@@ -105,10 +109,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
             );
           }
         });
-        _animationController.forward();
 
-        // Auto-advance if a vehicle is already selected
-        if (_selectedVehicle != null) {
+        // Auto-advance if a vehicle is already selected (not on a guess)
+        if (_selectedVehicle != null && !(guessed && buses.length > 1)) {
           // Add a small delay for visualization
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) _onConfirm();
@@ -166,497 +169,229 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final appProvider = context.watch<AppProvider>();
-    final isDarkMode = appProvider.isDarkMode;
+    final ready = !_isLoading && _error == null && _vehicles.isNotEmpty;
 
     return MainScaffold(
       title: 'Select Vehicle',
       showBackButton: true,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header with trip info
-            _buildHeader(isDarkMode),
-
-            // Content
-            Expanded(
-              child: _isLoading
-                  ? _buildLoadingState(isDarkMode)
-                  : _error != null
-                  ? _buildErrorState(isDarkMode)
-                  : _vehicles.isEmpty
-                  ? _buildEmptyState(isDarkMode)
-                  : _buildVehiclesList(isDarkMode),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: AsyncBody(
+                    loading: _isLoading,
+                    error: _error,
+                    onRetry: _loadVehicles,
+                    isEmpty: _vehicles.isEmpty,
+                    skeleton: ListView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                      ),
+                      itemCount: 4,
+                      itemBuilder: (_, _) => const Padding(
+                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: AppSkeleton(
+                          height: 96,
+                          borderRadius: AppRadius.brLg,
+                        ),
+                      ),
+                    ),
+                    empty: _buildEmptyState(),
+                    onRefresh: _loadVehicles,
+                    child: _buildVehiclesList(),
+                  ),
+                ),
+              ],
             ),
-
-            // Bottom button
-            if (!_isLoading && _error == null && _vehicles.isNotEmpty)
-              _buildBottomButton(isDarkMode),
-          ],
-        ),
+          ),
+        ],
       ),
+      bottomBar: ready ? _buildBottomButton() : null,
     );
   }
 
-  Widget _buildHeader(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(24),
+  Widget _buildHeader() {
+    final c = context.colors;
+    final sub = context.text.bodyMedium?.copyWith(color: c.textSecondary);
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         children: [
-          // Icon
           Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppPalette.info, AppPalette.info],
-              ),
-              borderRadius: BorderRadius.circular(24),
+              gradient: c.accentGradient,
+              borderRadius: AppRadius.brXl,
               boxShadow: [
                 BoxShadow(
-                  color: AppPalette.info.withValues(alpha: 0.3),
+                  color: c.accent.withValues(alpha: 0.35),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: const Icon(
-              Icons.directions_bus,
+              Icons.directions_bus_rounded,
               color: Colors.white,
               size: 36,
             ),
-          ),
-          const SizedBox(height: 20),
+          ).pop(),
+          AppSpacing.vLg,
           Text(
             'Select Your Vehicle',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-            ),
-          ),
-          const SizedBox(height: 8),
+            style: context.text.headlineSmall,
+          ).enter(delay: const Duration(milliseconds: 80)),
+          AppSpacing.vXs,
           if (widget.masterTrip != null) ...[
-            Text(
-              'Trip: ${widget.masterTrip!.tripName}',
-              style: TextStyle(
-                fontSize: 15,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Route: ${widget.masterTrip!.route}',
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-          ] else ...[
+            Text('Trip: ${widget.masterTrip!.tripName}', style: sub),
+            AppSpacing.vXxs,
+            Text('Route: ${widget.masterTrip!.route}', style: sub),
+          ] else
             Text(
               'Choose the vehicle you\'ll be using for this trip',
-              style: TextStyle(
-                fontSize: 15,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
+              textAlign: TextAlign.center,
+              style: sub,
             ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildLoadingState(bool isDarkMode) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: 4,
-      itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
+  Widget _buildEmptyState() {
+    final empty = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        EmptyState(
+          icon: Icons.directions_bus_rounded,
+          iconColor: context.colors.accent,
+          title: 'No Vehicles Available',
+          message:
+              'No vehicles are assigned to you. Please contact your '
+              'administrator.',
+          actionLabel: 'Retry',
+          onAction: _loadVehicles,
+        ),
+        TextButton.icon(
+          onPressed: _goBack,
+          icon: const Icon(Icons.arrow_back_rounded),
+          label: const Text('Go Back'),
+        ),
+      ],
+    );
+    if (!kDebugMode) return empty;
+
+    // Debug builds only: long-press to add a mock vehicle for testing.
+    return GestureDetector(
+      onLongPress: () {
+        debugPrint('🚗 Adding mock vehicle for testing...');
+        setState(() {
+          _vehicles = [
+            Bus(
+              id: 'mock-bus-001',
+              registrationNumber: 'KXX 123X',
+              model: 'Toyota Coaster',
+              capacity: '30',
+              schoolId: 'test-school',
+              isActive: true,
+              createdAt: DateTime.now(),
+            ),
+          ];
+        });
+        AppSnackbar.info(context, 'Mock vehicle added for testing');
+      },
+      child: empty,
     );
   }
 
-  Widget _buildSkeletonItem(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.outlineLight,
-        ),
+  Widget _buildVehiclesList() {
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.lg,
       ),
+      itemCount: _vehicles.length,
+      separatorBuilder: (_, _) => AppSpacing.vSm,
+      itemBuilder: (context, index) {
+        final vehicle = _vehicles[index];
+        return _buildVehicleCard(
+          vehicle,
+          _selectedVehicle?.id == vehicle.id,
+        ).enterList(index);
+      },
+    );
+  }
+
+  Widget _buildVehicleCard(Bus vehicle, bool isSelected) {
+    final c = context.colors;
+    return SelectableCard(
+      selected: isSelected,
+      onTap: () => _onVehicleSelected(vehicle),
       child: Row(
         children: [
-          Container(
+          AnimatedContainer(
+            duration: AppDuration.medium,
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: isDarkMode
-                  ? AppPalette.surfaceSubtleDark
-                  : AppPalette.outlineLight,
-              borderRadius: BorderRadius.circular(12),
+              gradient: isSelected ? c.accentGradient : null,
+              color: isSelected ? null : c.accentSoft,
+              borderRadius: AppRadius.brSm,
+            ),
+            child: Icon(
+              Icons.directions_bus_filled_rounded,
+              color: isSelected ? Colors.white : c.accent,
+              size: 28,
             ),
           ),
-          const SizedBox(width: 16),
+          AppSpacing.hMd,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 150,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
+                Text(
+                  vehicle.registrationNumber,
+                  style: context.text.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 100,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
-            const SizedBox(height: 16),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _loadVehicles,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDarkMode
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : AppPalette.info.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.directions_bus,
-                size: 48,
-                color: isDarkMode ? Colors.white30 : AppPalette.info,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Vehicles Available',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No vehicles are assigned to you. Please contact your administrator.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _loadVehicles,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                if (vehicle.model != null && vehicle.model!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    vehicle.model!,
+                    style: context.text.bodyMedium?.copyWith(
+                      color: c.textSecondary,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                TextButton.icon(
-                  onPressed: _goBack,
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Go Back'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: isDarkMode
-                        ? AppPalette.textSecondaryDark
-                        : AppPalette.textSecondaryLight,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'If the problem persists, please contact your administrator.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDarkMode
-                    ? const Color(0x66FFFFFF)
-                    : AppPalette.textMutedLight,
-              ),
-            ),
-            // Hidden button for development/testing - long press to add mock vehicle
-            GestureDetector(
-              onLongPress: () {
-                debugPrint('🚗 Adding mock vehicle for testing...');
-                setState(() {
-                  _vehicles = [
-                    Bus(
-                      id: 'mock-bus-001',
-                      registrationNumber: 'KXX 123X',
-                      model: 'Toyota Coaster',
-                      capacity: '30',
-                      schoolId: 'test-school',
-                      isActive: true,
-                      createdAt: DateTime.now(),
-                    ),
-                  ];
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Mock vehicle added for testing'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              child: Container(
-                width: 100,
-                height: 50,
-                color: Colors.transparent,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVehiclesList(bool isDarkMode) {
-    return RefreshIndicator(
-      onRefresh: _loadVehicles,
-      color: AppPalette.emerald,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _vehicles.length,
-        itemBuilder: (context, index) {
-          final vehicle = _vehicles[index];
-          final isSelected = _selectedVehicle?.id == vehicle.id;
-
-          return StaggeredEntrance(
-            animation: _animationController,
-            index: index,
-            child: _buildVehicleCard(vehicle, isSelected, isDarkMode),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildVehicleCard(Bus vehicle, bool isSelected, bool isDarkMode) {
-    return GestureDetector(
-      onTap: () => _onVehicleSelected(vehicle),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? AppPalette.info
-                : isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.outlineLight,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppPalette.info.withValues(alpha: 0.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Selection indicator
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected
-                      ? AppPalette.info
-                      : isDarkMode
-                      ? AppPalette.surfaceSubtleDark
-                      : AppPalette.outlineLight,
-                  border: Border.all(
-                    color: isSelected
-                        ? AppPalette.info
-                        : isDarkMode
-                        ? AppPalette.surfaceSubtleDark
-                        : const Color(0xFFD1D1D6),
-                    width: 2,
-                  ),
-                ),
-                child: isSelected
-                    ? const Icon(Icons.check, color: Colors.white, size: 16)
-                    : null,
-              ),
-              const SizedBox(width: 16),
-
-              // Vehicle icon
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppPalette.info.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.directions_bus_filled,
-                  color: AppPalette.info,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-
-              // Vehicle details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                ],
+                AppSpacing.vXs,
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xxs,
                   children: [
-                    Text(
-                      vehicle.registrationNumber,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: isDarkMode
-                            ? AppPalette.textPrimaryDark
-                            : AppPalette.textPrimaryLight,
-                      ),
+                    StatusPill(
+                      label: '${vehicle.capacity} seats',
+                      color: c.textSecondary,
+                      icon: Icons.event_seat_rounded,
+                      dense: true,
                     ),
-                    const SizedBox(height: 4),
-                    if (vehicle.model != null && vehicle.model!.isNotEmpty)
-                      Text(
-                        vehicle.model!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDarkMode
-                              ? AppPalette.textSecondaryDark
-                              : AppPalette.textSecondaryLight,
-                        ),
-                      ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _buildInfoChip(
-                          Icons.event_seat,
-                          '${vehicle.capacity} seats',
-                          isDarkMode,
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStatusChip(vehicle.isActive, isDarkMode),
-                      ],
+                    StatusPill(
+                      label: vehicle.isActive ? 'Active' : 'Inactive',
+                      color: vehicle.isActive ? c.success : c.warning,
+                      dense: true,
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(IconData icon, String label, bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+              ],
             ),
           ),
         ],
@@ -664,105 +399,19 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen>
     );
   }
 
-  Widget _buildStatusChip(bool isActive, bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isActive
-            ? AppPalette.success.withValues(alpha: 0.1)
-            : isDarkMode
-            ? AppPalette.surfaceSubtleDark
-            : AppPalette.surfaceSubtleLight,
-        borderRadius: BorderRadius.circular(8),
+  Widget _buildBottomButton() {
+    return BottomActionBar(
+      primary: AppButton(
+        label: 'Confirm Vehicle',
+        icon: Icons.check_rounded,
+        onPressed: _selectedVehicle != null ? _onConfirm : null,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: isActive
-                  ? AppPalette.success
-                  : AppPalette.warning,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            isActive ? 'Active' : 'Inactive',
-            style: TextStyle(
-              fontSize: 12,
-              color: isActive
-                  ? AppPalette.success
-                  : isDarkMode
-                  ? AppPalette.textSecondaryDark
-                  : AppPalette.textSecondaryLight,
-              fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
-            ),
-          ),
-        ],
+      secondary: AppButton(
+        label: 'Back to Trip Selection',
+        variant: AppButtonVariant.tertiary,
+        size: AppButtonSize.medium,
+        onPressed: _goBack,
       ),
-    );
-  }
-
-  Widget _buildBottomButton(bool isDarkMode) {
-    final canConfirm = _selectedVehicle != null;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        border: Border(
-          top: BorderSide(
-            color: isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.outlineLight,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: canConfirm ? _onConfirm : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.info,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: isDarkMode
-                      ? AppPalette.surfaceSubtleDark
-                      : AppPalette.outlineLight,
-                  disabledForegroundColor: isDarkMode
-                      ? Colors.white30
-                      : AppPalette.textMutedLight,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Confirm Vehicle',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _goBack,
-              child: Text(
-                'Back to Trip Selection',
-                style: TextStyle(
-                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    ).enter(offsetY: 40);
   }
 }

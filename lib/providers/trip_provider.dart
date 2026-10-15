@@ -197,18 +197,7 @@ class TripProvider extends ChangeNotifier {
 
   /// Rank used to decide which student status is further along when merging
   /// fetched trip data with locally recorded statuses.
-  static int _statusRank(String status) {
-    switch (api.StudentPickup.normalizeStatus(status)) {
-      case 'absent':
-        return 1;
-      case 'picked':
-        return 2;
-      case 'dropped':
-        return 3;
-      default:
-        return 0; // pending
-    }
-  }
+  static int _statusRank(String status) => api.StudentPickup.statusRank(status);
 
   /// The driver has no working server read for the active trip (the endpoint
   /// requires guardianPhone) and there is no per-student pick API, so fetched
@@ -224,13 +213,19 @@ class TripProvider extends ChangeNotifier {
     }
 
     final localById = {for (final s in local.students) s.id: s};
-    final students = fetched.students.map((student) {
-      final localStudent = localById[student.id];
-      if (localStudent == null) return student;
-      return _statusRank(localStudent.status) > _statusRank(student.status)
-          ? localStudent
-          : student;
-    }).toList();
+    final fetchedIds = {for (final s in fetched.students) s.id};
+    final students = [
+      ...fetched.students.map((student) {
+        final localStudent = localById[student.id];
+        if (localStudent == null) return student;
+        return _statusRank(localStudent.status) > _statusRank(student.status)
+            ? localStudent
+            : student;
+      }),
+      // Students added mid-trip exist only on this device; the server's run
+      // roster was fixed at start, so never let it drop them.
+      ...local.students.where((s) => !fetchedIds.contains(s.id)),
+    ];
 
     return fetched.copyWith(students: students);
   }
@@ -312,9 +307,12 @@ class TripProvider extends ChangeNotifier {
 
   /// Notify each guardian whose student's status changed between [before] and
   /// [after], over MQTT, so the guardian app raises a live notification.
+  /// [backendPushed]: the server already pushed these guardians (single
+  /// pick/drop), so only MQTT goes out.
   void _broadcastStatusChanges({
     required api.Trip before,
     required api.Trip after,
+    bool backendPushed = false,
   }) {
     final beforeById = {for (final s in before.students) s.id: s.status};
     final vehicleNumber = after.vehicleNumber ?? after.vehicleId;
@@ -331,6 +329,7 @@ class TripProvider extends ChangeNotifier {
           status: now,
           tripId: after.id,
           vehicleNumber: vehicleNumber,
+          backendPushed: backendPushed,
         );
       }
     }
@@ -341,6 +340,7 @@ class TripProvider extends ChangeNotifier {
     required String status,
     required String tripId,
     String? vehicleNumber,
+    bool backendPushed = false,
   }) {
     final phone = student.parentPhone;
     if (phone == null || phone.trim().isEmpty) return;
@@ -365,6 +365,7 @@ class TripProvider extends ChangeNotifier {
         'title': text.title,
         'message': text.body,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
+        if (backendPushed) 'pushSent': true,
       }),
     );
   }
@@ -403,6 +404,41 @@ class TripProvider extends ChangeNotifier {
         return <Map<String, dynamic>>[];
       }
     }();
+  }
+
+  /// Send one alert (e.g. traffic delay) to every guardian in [phones]: MQTT
+  /// on each guardian's own topic plus a push, via the outbox. Returns how
+  /// many guardians it went to; delivery carries on in the background.
+  // ponytail: one push request per guardian; move to
+  // POST /api/auth/send/bulk/notification if trips get large.
+  Future<int> alertGuardians({
+    required Iterable<String> phones,
+    required String title,
+    required String message,
+    String? tripId,
+  }) async {
+    final unique = {
+      for (final p in phones)
+        if (normalizeGuardianPhone(p).isNotEmpty) normalizeGuardianPhone(p),
+    };
+    final createdAt = DateTime.now().toUtc().toIso8601String();
+    final outbox = await _guardianOutbox();
+    for (final phone in unique) {
+      outbox.add({
+        'topic': GuardianTripNotificationService.topicForPhone(phone),
+        'payload': GuardianTripNotificationService.buildAlertPayload(
+          title: title,
+          message: message,
+          tripId: tripId,
+        ),
+        'phone': phone,
+        'title': title,
+        'message': message,
+        'createdAt': createdAt,
+      });
+    }
+    unawaited(flushGuardianAlerts());
+    return unique.length;
   }
 
   Future<void> _queueGuardianAlert(Map<String, dynamic> alert) async {
@@ -479,8 +515,17 @@ class TripProvider extends ChangeNotifier {
           await push(alert);
           alert['pushSent'] = true;
         } catch (e) {
-          pushDown = true;
-          if (kDebugMode) print('⚠️ Guardian push alert failed: $e');
+          // Logged in release too: "SenderId mismatch" here means the
+          // guardian's token is from another Firebase project.
+          debugPrint('⚠️ Guardian push alert failed: $e');
+          if (_isServerRejection(e)) {
+            // The server answered and refused (e.g. the guardian has no FCM
+            // token). A retry gets the same answer and would block every
+            // later alert's push, so give up on push; MQTT still delivers.
+            alert['pushSent'] = true;
+          } else {
+            pushDown = true;
+          }
         }
       }
       if (alert['mqttSent'] == true && alert['pushSent'] == true) {
@@ -488,6 +533,13 @@ class TripProvider extends ChangeNotifier {
       }
     }
   }
+
+  /// Offline, timed out and 503 are worth retrying; any other HTTP error means
+  /// the server rejected this alert for good.
+  static bool _isServerRejection(Object e) =>
+      e is api.ApiException &&
+      e.statusCode != null &&
+      !const {0, 408, 503}.contains(e.statusCode);
 
   /// Fetch all trips (driver view)
   Future<void> fetchTrips({int page = 1, int limit = 20}) async {
@@ -527,7 +579,14 @@ class TripProvider extends ChangeNotifier {
           guardianPhone.isNotEmpty) {
         fetched = _filterTripForGuardian(fetched, guardianPhone);
       }
-      if (fetched == null && driverId != null && driverId.isNotEmpty) {
+      final isDriverCall = driverId != null && driverId.isNotEmpty;
+      final isGuardianCall = guardianPhone != null && guardianPhone.isNotEmpty;
+      // Callers without an identity (chat, MQTT roster events) can't read the
+      // driver's trip back; keep the one we have rather than wiping it.
+      if (fetched == null && !isDriverCall && !isGuardianCall) {
+        fetched = previousTrip;
+      }
+      if (fetched == null && isDriverCall) {
         fetched = await _restoreActiveTripFromHistory(driverId);
         if (fetched != null) {
           _activeTripUniqueId = fetched.id;
@@ -537,11 +596,12 @@ class TripProvider extends ChangeNotifier {
         fetched = mergeWithLocalStatuses(fetched, previousTrip);
       }
       _activeTrip = fetched;
+      if (fetched != null && isDriverCall) _replaceTrip(fetched);
       notifyListeners();
 
-      // Drivers have no active-trip endpoint, but the master trip roster is
-      // readable without a guardian phone and carries server pick state.
-      if (fetched != null && driverId != null && driverId.isNotEmpty) {
+      // Drivers have no active-trip endpoint, but the run's own rows are
+      // readable without a guardian phone and carry server pick state.
+      if (fetched != null && isDriverCall) {
         await syncActiveTripStudentsFromServer();
       }
     } on api.ApiException catch (e) {
@@ -555,35 +615,29 @@ class TripProvider extends ChangeNotifier {
 
   /// Reconcile the active trip's students with the server.
   ///
-  /// `GET /api/trips/get/master/trip/students` needs only a masterTripId, so
-  /// unlike the active-trip endpoint a driver can call it. Its rows carry
-  /// `isStudentPicked` / `isStudentDropped`, which is the closest thing to a
-  /// server-side read of pick state the driver has.
+  /// `GET /api/trips/get/unique/trips/from/trip` lists the running trip's
+  /// own rows with real `isStudentPicked` / `isStudentDropped`. (The master
+  /// trip roster never carries picks.)
   ///
   /// Statuses are merged further-along-wins, so a server row that has not
   /// caught up yet can never downgrade a pick this device just recorded.
   Future<void> syncActiveTripStudentsFromServer() async {
     final trip = _activeTrip;
-    final masterTripId = trip?.masterTripId;
-    if (trip == null || masterTripId == null) return;
+    if (trip == null || trip.id.isEmpty) return;
 
     try {
-      final rows = await _tripService.getMasterTripStudents(
-        masterTripId,
-        forceRefresh: true,
-      );
+      final rows = await _tripService.getRunRows(trip.id);
       if (rows.isEmpty) return;
 
       final serverTrip = trip.copyWith(
-        students: rows
-            .map((row) => api.StudentPickup.fromJson(row.toJson()))
-            .toList(),
+        students: rows.map(api.TripService.studentFromRunRow).toList(),
       );
 
       final merged = mergeWithLocalStatuses(serverTrip, trip);
       if (_activeTrip?.id != trip.id) return; // trip changed while awaiting
 
       _activeTrip = merged;
+      _replaceTrip(merged);
       _persistTripState(merged);
       notifyListeners();
     } catch (e) {
@@ -596,12 +650,29 @@ class TripProvider extends ChangeNotifier {
   /// Guards against resurrecting stale trips that were never ended cleanly.
   static const Duration _maxRestorableTripAge = Duration(hours: 12);
 
-  /// Restore the driver's running trip from local trip history.
+  /// Make [trip], an unfinished run the driver picked from history, the
+  /// active trip again, for when the app lost track of it.
+  Future<void> resumeTrip(api.Trip trip) async {
+    if (_activeTrip?.id != trip.id) {
+      _activeTrip = trip;
+      _activeTripUniqueId = trip.id;
+      _replaceTrip(trip);
+      _persistTripState(trip);
+      notifyListeners();
+    }
+    await syncActiveTripStudentsFromServer();
+  }
+
+  /// Restore the driver's running trip from trip history.
   /// History entries are saved as 'active' when a trip starts and updated to
   /// 'completed' when it ends, so the newest active entry is the running trip.
+  /// Includes the saved server copy: a trip started on another device, or
+  /// whose local entry was lost, is otherwise unreachable.
   Future<api.Trip?> _restoreActiveTripFromHistory(String driverId) async {
     try {
-      final history = await TripHistoryService().getTripHistory(driverId);
+      final history = await TripHistoryService().getCachedDriverTripHistory(
+        driverId,
+      );
       for (final entry in history) {
         final trip = entry.trip;
         if (!trip.isActive) continue;
@@ -625,6 +696,7 @@ class TripProvider extends ChangeNotifier {
     int? masterTripId,
     String? route,
     String? tripName,
+    String? tripDirection,
     String? driverName,
     String? numberPlate,
     String? driverPhoneNumber,
@@ -651,6 +723,7 @@ class TripProvider extends ChangeNotifier {
         masterTripId: masterTripId,
         route: route,
         tripName: tripName,
+        tripDirection: tripDirection,
         driverName: driverName,
         numberPlate: numberPlate,
         driverPhoneNumber: driverPhoneNumber,
@@ -824,6 +897,16 @@ class TripProvider extends ChangeNotifier {
     bool apiSuccess = false;
 
     final originalTrip = _findTrip(tripId);
+    // Ending a trip is a server-side drop/all: mirror it locally so students
+    // still on the bus (including ones added mid-trip, which have no server
+    // row) end as dropped, and their guardians get the drop-off alert.
+    final sweptTrip = originalTrip == null
+        ? null
+        : _withBulkStudentStatus(
+            trip: originalTrip,
+            fromStatus: 'picked',
+            toStatus: 'dropped',
+          );
 
     try {
       final responseTrip = await _tripService.endTrip(
@@ -834,8 +917,10 @@ class TripProvider extends ChangeNotifier {
       apiSuccess = true;
       endedTrip = completeTripFromResponse(
         tripId: tripId,
-        originalTrip: originalTrip,
-        responseTrip: responseTrip,
+        originalTrip: sweptTrip,
+        responseTrip: responseTrip == null || sweptTrip == null
+            ? responseTrip
+            : mergeWithLocalStatuses(responseTrip, sweptTrip),
       );
 
       // Update local state - always clear active trip
@@ -855,7 +940,7 @@ class TripProvider extends ChangeNotifier {
         apiSuccess = true;
         endedTrip = completeTripFromResponse(
           tripId: tripId,
-          originalTrip: originalTrip,
+          originalTrip: sweptTrip,
           responseTrip: null,
         );
       } else {
@@ -867,6 +952,10 @@ class TripProvider extends ChangeNotifier {
       _setError('Failed to end trip');
       _setLoading(false);
       return false;
+    }
+
+    if (originalTrip != null && sweptTrip != null) {
+      _broadcastStatusChanges(before: originalTrip, after: sweptTrip);
     }
 
     // Update trip history with completed status (runs for both success and empty response cases)
@@ -942,7 +1031,7 @@ class TripProvider extends ChangeNotifier {
 
     // Show notification (wrap in try-catch in case of minimal trip object)
     try {
-      final pickedCount = endedTrip.pickedCount;
+      final pickedCount = endedTrip.pickedUpCount;
       final totalStudents = endedTrip.students.length;
       await NotificationHelper.showTripCompleted(
         tripId: tripId,
@@ -969,6 +1058,7 @@ class TripProvider extends ChangeNotifier {
     String? notes,
     double? latitude,
     double? longitude,
+    bool backendPushed = false,
   }) {
     final existingTrip = _findTrip(tripId);
     if (existingTrip == null) return;
@@ -984,7 +1074,11 @@ class TripProvider extends ChangeNotifier {
     _replaceTrip(updatedTrip);
     notifyListeners();
     _persistTripState(updatedTrip);
-    _broadcastStatusChanges(before: existingTrip, after: updatedTrip);
+    _broadcastStatusChanges(
+      before: existingTrip,
+      after: updatedTrip,
+      backendPushed: backendPushed,
+    );
   }
 
   /// Update student pickup status
@@ -1017,23 +1111,36 @@ class TripProvider extends ChangeNotifier {
         }
       }
       studentName = existingStudent?.name;
+      statusNotice = null;
 
-      await _tripService.updateStudentStatus(
-        tripId: tripId,
-        studentId: studentId,
-        status: normalizedStatus,
-        notes: notes,
-        latitude: latitude,
-        longitude: longitude,
-        // Required by the single-student pick/drop endpoint.
-        studentReg: _nonBlank(studentReg) ?? existingStudent?.studentRegNumber,
-        guardianPhoneNumber:
-            _nonBlank(guardianPhoneNumber) ?? existingStudent?.parentPhone,
-        numberPlate:
-            _nonBlank(numberPlate) ??
-            existingTrip?.vehicleNumber ??
-            existingTrip?.vehicleId,
-      );
+      var backendPushed = false;
+      try {
+        backendPushed = await _tripService.updateStudentStatus(
+          tripId: tripId,
+          studentId: studentId,
+          status: normalizedStatus,
+          notes: notes,
+          latitude: latitude,
+          longitude: longitude,
+          // Required by the single-student pick/drop endpoint.
+          studentReg:
+              _nonBlank(studentReg) ?? existingStudent?.studentRegNumber,
+          guardianPhoneNumber:
+              _nonBlank(guardianPhoneNumber) ?? existingStudent?.parentPhone,
+          numberPlate:
+              _nonBlank(numberPlate) ??
+              existingTrip?.vehicleNumber ??
+              existingTrip?.vehicleId,
+        );
+      } on api.ApiException catch (e) {
+        // The server snapshots the roster when the trip starts, so a student
+        // added mid-trip has no row to update. Keep the status on this phone
+        // (and still alert the guardian) instead of refusing the tap forever.
+        if (!isStudentNotOnRun(e.message)) rethrow;
+        statusNotice =
+            '${studentName ?? 'This student'} joined after the trip started, '
+            'so the status is saved on this phone only.';
+      }
 
       _reflectStudentStatus(
         tripId: tripId,
@@ -1042,6 +1149,7 @@ class TripProvider extends ChangeNotifier {
         notes: notes,
         latitude: latitude,
         longitude: longitude,
+        backendPushed: backendPushed,
       );
 
       // Show notification based on status
@@ -1069,6 +1177,13 @@ class TripProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Set when the last [updateStudentStatus] was kept on the device only.
+  String? statusNotice;
+
+  @visibleForTesting
+  static bool isStudentNotOnRun(String message) =>
+      message.toLowerCase().contains('student not found');
 
   static String? _nonBlank(String? v) =>
       v == null || v.trim().isEmpty ? null : v;
@@ -1294,9 +1409,18 @@ class TripProvider extends ChangeNotifier {
         driverName: driverName,
       );
 
-      _masterTrips.insert(0, trip);
+      // The create response doesn't reliably echo the new row (id 0, blank
+      // route), so read the trip back from the server list.
+      _masterTrips = await _tripService.getAllMasterTrips();
+      final created = _masterTrips
+          .where((t) => t.tripName == tripName)
+          .fold<api.MasterTrip?>(
+            null,
+            (best, t) => best == null || t.id > best.id ? t : best,
+          );
+      if (created == null) _masterTrips.insert(0, trip);
       notifyListeners();
-      return trip;
+      return created ?? trip;
     } on api.ApiException catch (e) {
       _setError(e.message);
       return null;
@@ -1401,8 +1525,9 @@ class TripProvider extends ChangeNotifier {
     _setLoading(true);
     _clearError();
 
+    String? failure;
     try {
-      final student = await _tripService.addStudentToMasterTrip(
+      await _tripService.addStudentToMasterTrip(
         masterTripId: masterTripId,
         fullname: fullname,
         studentRegNumber: studentRegNumber,
@@ -1414,21 +1539,27 @@ class TripProvider extends ChangeNotifier {
         latitude: latitude,
         longitude: longitude,
       );
-
-      // Add to local state unconditionally since UI fetches it immediately prior
-      _tripStudents.add(student);
-
-      notifyListeners();
-      return student;
     } on api.ApiException catch (e) {
-      _setError(e.message);
-      return null;
+      failure = e.message;
     } catch (e) {
-      _setError('Failed to add student to trip');
-      return null;
-    } finally {
-      _setLoading(false);
+      failure = 'Failed to add student to trip';
     }
+
+    // The server can save the student yet answer with an error ("Student not
+    // found") or a bare message, so the roster it returns is the verdict.
+    try {
+      _tripStudents = await _tripService.getMasterTripStudents(
+        masterTripId,
+        forceRefresh: true,
+      );
+    } catch (_) {}
+    final added = _tripStudents
+        .where((s) => s.studentId == studentId)
+        .firstOrNull;
+    if (added == null) _setError(failure ?? 'Failed to add student to trip');
+    notifyListeners();
+    _setLoading(false);
+    return added;
   }
 
   /// Delete a student from a master trip

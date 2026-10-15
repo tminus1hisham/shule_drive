@@ -47,6 +47,18 @@ class AppSnackbar {
 }
 
 /// Themed confirmation dialog. Returns true when confirmed.
+/// Marking a student absent alerts their guardian at once, so both trip
+/// screens ask first.
+Future<bool> confirmAbsent(BuildContext context, String studentName) =>
+    confirmDialog(
+      context,
+      title: 'Mark $studentName absent?',
+      message: 'Their guardian will be notified right away.',
+      confirmLabel: 'Mark absent',
+      icon: Icons.person_off_outlined,
+      destructive: true,
+    );
+
 Future<bool> confirmDialog(
   BuildContext context, {
   required String title,
@@ -122,7 +134,10 @@ Future<T?> showAppBottomSheet<T>({
     isScrollControlled: isScrollControlled,
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: Padding(
+      // Keeps the last action clear of the iPhone home indicator.
+      child: SafeArea(
+        top: false,
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
           AppSpacing.xs,
@@ -130,6 +145,7 @@ Future<T?> showAppBottomSheet<T>({
           AppSpacing.xl,
         ),
         child: builder(ctx),
+        ),
       ),
     ),
   );

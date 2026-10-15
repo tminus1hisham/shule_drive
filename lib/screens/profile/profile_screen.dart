@@ -1,8 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import '../../providers/app_provider.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../services/trip_history_service.dart';
 import '../../theme/app_spacing.dart';
@@ -12,7 +11,6 @@ import '../../widgets/autoload_trips_toggle.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -44,203 +42,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ Failed to load driver stats: $e');
-      }
+      debugPrint('⚠️ Failed to load driver stats: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
     final authProvider = context.watch<AuthProvider>();
     final userData = authProvider.userData;
-    final isDarkMode = provider.isDarkMode;
-    final userRole = authProvider.userRole;
 
     return MainScaffold(
       title: 'Profile',
       showBackButton: true,
       showBottomNav: true,
       bottomNavIndex: 3,
-      onBottomNavTap: (index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/dashboard');
-            break;
-          case 1:
-            Navigator.pushNamed(context, '/chat');
-            break;
-          case 2:
-            Navigator.pushNamed(context, '/notifications');
-            break;
-          case 3:
-            // Already on profile/settings
-            break;
-          case 4:
-            // Center + button
-            Navigator.pushNamed(context, '/start-trip');
-            break;
-        }
-      },
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-
-            // Profile Header with Avatar
-            _buildProfileHeader(userData, isDarkMode, userRole, authProvider),
-
-            const SizedBox(height: 24),
-
-            // Stats Row (driver only)
-            if (authProvider.isDriver) ...[
-              _buildStatsCard(provider, isDarkMode),
-              const SizedBox(height: 24),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.xl,
+            ),
+            children: [
+              _buildProfileHeader(userData, authProvider).enter(),
+              AppSpacing.vXl,
+              if (authProvider.isDriver) ...[
+                _buildStatsCard().enterList(1),
+                AppSpacing.vXl,
+                _buildPreferencesSection(context).enterList(2),
+                AppSpacing.vXl,
+              ],
+              _buildMenuSection(context).enterList(3),
+              AppSpacing.vXl,
+              AppButton(
+                label: 'Logout',
+                icon: Icons.logout_rounded,
+                variant: AppButtonVariant.danger,
+                onPressed: _confirmLogout,
+              ).enterList(4),
             ],
-
-            // Preferences (driver only)
-            if (authProvider.isDriver) ...[
-              _buildPreferencesSection(context),
-              const SizedBox(height: 24),
-            ],
-
-            // Menu Section
-            _buildMenuSection(context, isDarkMode),
-
-            const SizedBox(height: 24),
-
-            // Logout Button
-            _buildLogoutButton(context, isDarkMode),
-
-            const SizedBox(height: 24),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirmed = await confirmDialog(
+      context,
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmLabel: 'Logout',
+      icon: Icons.logout_rounded,
+      destructive: true,
+    );
+    // AuthWrapper handles navigation once logged out.
+    if (confirmed && mounted) await context.read<AuthProvider>().logout();
   }
 
   void _showImagePickerOptions(
     BuildContext parentContext,
     AuthProvider authProvider,
   ) {
-    final isDarkMode = parentContext.read<AppProvider>().isDarkMode;
+    Future<void> pick(BuildContext sheet, ImageSource source) async {
+      Navigator.pop(sheet);
+      // Small delay to ensure bottom sheet is fully closed
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (!parentContext.mounted) return;
+      final bool hasPermission;
+      if (source == ImageSource.camera) {
+        hasPermission = await PermissionHelper.requestCameraPermission(
+          parentContext,
+        );
+      } else {
+        hasPermission = await PermissionHelper.requestPhotoLibraryPermission(
+          parentContext,
+        );
+      }
+      if (hasPermission && parentContext.mounted) {
+        await _pickAndUploadImage(parentContext, authProvider, source);
+      }
+    }
 
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: parentContext,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (bottomSheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Update Profile Photo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.emerald.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
-                ),
-                title: Text(
-                  'Take Photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                subtitle: Text(
-                  'Use camera to take a photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                    fontSize: 13,
-                  ),
-                ),
-                onTap: () async {
-                  // Close bottom sheet first
-                  Navigator.pop(bottomSheetContext);
-                  // Small delay to ensure bottom sheet is fully closed
-                  await Future.delayed(const Duration(milliseconds: 200));
-                  // Check permission and open camera using parent context
-                  if (parentContext.mounted) {
-                    final hasPermission =
-                        await PermissionHelper.requestCameraPermission(
-                          parentContext,
-                        );
-                    if (hasPermission && parentContext.mounted) {
-                      await _pickAndUploadImage(
-                        parentContext,
-                        authProvider,
-                        ImageSource.camera,
-                      );
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.info.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_library,
-                    color: AppPalette.info,
-                  ),
-                ),
-                title: Text(
-                  'Choose from Gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                subtitle: Text(
-                  'Select a photo from your gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                  ),
-                ),
-                onTap: () async {
-                  // Close bottom sheet first
-                  Navigator.pop(bottomSheetContext);
-                  // Small delay to ensure bottom sheet is fully closed
-                  await Future.delayed(const Duration(milliseconds: 200));
-                  // Check permission and open gallery using parent context
-                  if (parentContext.mounted) {
-                    final hasPermission =
-                        await PermissionHelper.requestPhotoLibraryPermission(
-                          parentContext,
-                        );
-                    if (hasPermission && parentContext.mounted) {
-                      await _pickAndUploadImage(
-                        parentContext,
-                        authProvider,
-                        ImageSource.gallery,
-                      );
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+      builder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Update Profile Photo',
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
           ),
-        ),
+          AppSpacing.vSm,
+          AppListTile(
+            icon: Icons.camera_alt_rounded,
+            title: 'Take Photo',
+            subtitle: 'Use camera to take a photo',
+            onTap: () => pick(sheet, ImageSource.camera),
+          ).enterList(0),
+          AppListTile(
+            icon: Icons.photo_library_rounded,
+            title: 'Choose from Gallery',
+            subtitle: 'Select a photo from your gallery',
+            iconColor: sheet.colors.info,
+            onTap: () => pick(sheet, ImageSource.gallery),
+          ).enterList(1),
+        ],
       ),
     );
   }
@@ -250,11 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     AuthProvider authProvider,
     ImageSource source,
   ) async {
-    // Store a reference to the ScaffoldMessenger for later use
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
     try {
-      debugPrint('📸 Starting image picker...');
       final ImagePicker picker = ImagePicker();
       final XFile? pickedFile = await picker.pickImage(
         source: source,
@@ -262,121 +169,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
         maxHeight: 800,
         imageQuality: 85,
       );
+      if (pickedFile == null || !context.mounted) return;
 
-      if (pickedFile == null) {
-        debugPrint('📸 No image selected');
-        return;
-      }
-
-      debugPrint('📸 Image picked: ${pickedFile.path}');
-
-      if (!context.mounted) {
-        debugPrint('📸 Context not mounted after picking image');
-        return;
-      }
-
-      // Show loading indicator using root navigator to avoid context issues
-      debugPrint('📸 Showing loading dialog...');
+      // Loading indicator on the root navigator to avoid context issues
       showDialog(
         context: context,
         barrierDismissible: false,
         useRootNavigator: true,
-        builder: (dialogContext) => const Center(
-          child: CircularProgressIndicator(color: AppPalette.emerald),
+        builder: (dialogContext) => Center(
+          child: GlassPanel(
+            child: CircularProgressIndicator(color: dialogContext.colors.brand),
+          ),
         ),
       );
 
-      debugPrint('📸 Calling updateUserAvatar...');
       final avatarUrl = await authProvider.updateUserAvatar(pickedFile.path);
-      debugPrint('📸 updateUserAvatar returned: $avatarUrl');
 
-      // Close loading dialog using root navigator
-      if (context.mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        debugPrint('📸 Loading dialog closed');
-      } else {
-        debugPrint('📸 Context not mounted, skipping dialog close');
-      }
-
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       if (avatarUrl != null) {
-        debugPrint('📸 Upload successful, showing success message');
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: const Text('Profile photo updated successfully'),
-            backgroundColor: AppPalette.emerald,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        AppSnackbar.success(context, 'Profile photo updated successfully');
       } else {
-        debugPrint('📸 Upload failed (returned null), showing error');
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: const Text('Failed to upload photo. Please try again.'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        AppSnackbar.error(context, 'Failed to upload photo. Please try again.');
       }
     } catch (e, stackTrace) {
-      debugPrint('📸 Error in _pickAndUploadImage: $e');
-      debugPrint('📸 Stack trace: $stackTrace');
-      // Try to close loading dialog if it's still showing
+      debugPrint('📸 Error in _pickAndUploadImage: $e\n$stackTrace');
       if (context.mounted) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {
           // Dialog might already be closed
         }
+        AppSnackbar.error(context, 'Error: $e');
       }
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
     }
   }
 
   Widget _buildProfileHeader(
     Map<String, dynamic> userData,
-    bool isDarkMode,
-    UserRole userRole,
     AuthProvider authProvider,
   ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppPalette.emerald.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+    final c = context.colors;
+    final avatar = userData['avatar'];
+    final meta = context.text.bodySmall?.copyWith(
+      color: Colors.white.withValues(alpha: 0.9),
+    );
+
+    Widget line(IconData icon, String text) => Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.8)),
+        const SizedBox(width: 6),
+        Text(text, style: meta),
+      ],
+    );
+
+    return GradientHeroCard(
       child: Column(
         children: [
-          // Avatar with border and edit button
           GestureDetector(
             onTap: () => _showImagePickerOptions(context, authProvider),
             child: Stack(
@@ -390,199 +240,123 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: 3,
                     ),
                   ),
-                  child: _buildAvatar(userData['avatar']),
+                  child: AppAvatar(
+                    imageUrl:
+                        avatar is String &&
+                            (avatar.startsWith('http://') ||
+                                avatar.startsWith('https://'))
+                        ? avatar
+                        : null,
+                    name: userData['name']?.toString(),
+                    size: 90,
+                  ),
                 ),
-                // Edit icon overlay
                 Positioned(
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(AppSpacing.xs),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: c.accent,
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppPalette.emerald,
-                        width: 2,
-                      ),
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: const Icon(
-                      Icons.camera_alt,
-                      color: AppPalette.emerald,
+                      Icons.camera_alt_rounded,
+                      color: Colors.white,
                       size: 18,
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // Name
+          ).pop(),
+          AppSpacing.vMd,
           Text(
             userData['name'],
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
+            textAlign: TextAlign.center,
+            style: context.text.headlineSmall?.copyWith(
               color: Colors.white,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
-
-          // Role Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              userData['role'],
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
+          AppSpacing.vXs,
+          StatusPill(
+            label: userData['role'],
+            color: Colors.white,
+            icon: Icons.verified_user_outlined,
+            dense: true,
           ),
-          const SizedBox(height: 16),
-
-          // Contact Info
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.phone_outlined,
-                size: 14,
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                userData['phone'],
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white.withValues(alpha: 0.9),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.email_outlined,
-                size: 14,
-                color: Colors.white.withValues(alpha: 0.8),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                userData['email'],
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white.withValues(alpha: 0.9),
-                ),
-              ),
-            ],
-          ),
+          AppSpacing.vMd,
+          line(Icons.phone_outlined, userData['phone']),
+          AppSpacing.vXxs,
+          line(Icons.email_outlined, userData['email']),
         ],
       ),
     );
   }
 
-  Widget _buildStatsCard(AppProvider provider, bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildStatItem(
-              value: _driverStats.totalTrips.toString(),
-              label: 'Trips',
-              icon: Icons.route_outlined,
-              color: AppPalette.emerald,
-              isDarkMode: isDarkMode,
-            ),
-          ),
-          Container(
-            height: 40,
-            width: 1,
-            color: isDarkMode ? Colors.white24 : Colors.black12,
-          ),
-          Expanded(
-            child: _buildStatItem(
-              value: _driverStats.totalStudents.toString(),
-              label: 'Students',
-              icon: Icons.people_outline,
-              color: AppPalette.info,
-              isDarkMode: isDarkMode,
-            ),
-          ),
-          Container(
-            height: 40,
-            width: 1,
-            color: isDarkMode ? Colors.white24 : Colors.black12,
-          ),
-          Expanded(
-            child: _buildStatItem(
-              value: _driverStats.totalPicked.toString(),
-              label: 'Picked Up',
-              icon: Icons.check_circle_outline,
-              color: AppPalette.warning,
-              isDarkMode: isDarkMode,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem({
-    required String value,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool isDarkMode,
-  }) {
-    return Column(
+  Widget _buildStatsCard() {
+    final c = context.colors;
+    // Numbers count up from zero, so the brief "0" before stats load reads
+    // as the start of the roll rather than wrong data.
+    Widget stat(IconData icon, int value, String label, Color color) => Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(AppSpacing.xs),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 18),
         ),
-        const SizedBox(height: 8),
-        Text(
+        AppSpacing.vXs,
+        AnimatedCount(
           value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-          ),
+          countUp: true,
+          style: context.text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
-        const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-          ),
+          style: context.text.labelSmall?.copyWith(color: c.textSecondary),
         ),
       ],
+    );
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: stat(
+                Icons.route_outlined,
+                _driverStats.totalTrips,
+                'Trips',
+                c.brand,
+              ),
+            ),
+            VerticalDivider(color: c.outline, width: 1),
+            Expanded(
+              child: stat(
+                Icons.people_outline_rounded,
+                _driverStats.totalStudents,
+                'Students',
+                c.info,
+              ),
+            ),
+            VerticalDivider(color: c.outline, width: 1),
+            Expanded(
+              child: stat(
+                Icons.check_circle_outline_rounded,
+                _driverStats.totalPicked,
+                'Picked Up',
+                c.accent,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -597,8 +371,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         AppCard(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-          borderRadius: BorderRadius.circular(20),
-          shadow: context.colors.shadowSm,
           child: const AutoloadTripsToggle(
             padding: EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
@@ -610,202 +382,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildMenuSection(BuildContext context, bool isDarkMode) {
-    final menuItems = [
-      {
-        'icon': Icons.person_outline,
-        'title': 'Edit Profile',
-        'subtitle': 'Update your information',
-        'route': '/edit-profile',
-        'color': AppPalette.emerald,
-      },
-      {
-        'icon': Icons.lock_outline,
-        'title': 'Change Password',
-        'subtitle': 'Update your security',
-        'route': '/change-password',
-        'color': AppPalette.info,
-      },
-      {
-        'icon': Icons.phone_outlined,
-        'title': 'Contact',
-        'subtitle': 'Get in touch with us',
-        'route': '/contact',
-        'color': AppPalette.warning,
-      },
-      {
-        'icon': Icons.description_outlined,
-        'title': 'Terms of Service',
-        'subtitle': 'Legal information',
-        'route': '/terms',
-        'color': const Color(0xFF9C27B0),
-      },
-      {
-        'icon': Icons.privacy_tip_outlined,
-        'title': 'Privacy Policy',
-        'subtitle': 'Data protection',
-        'route': '/privacy',
-        'color': const Color(0xFF607D8B),
-      },
-      {
-        'icon': Icons.delete_outline,
-        'title': 'Delete Account',
-        'subtitle': 'Remove your data',
-        'route': null,
-        'color': AppPalette.error,
-        'isDestructive': true,
-      },
+  Widget _buildMenuSection(BuildContext context) {
+    final c = context.colors;
+    final items = [
+      (
+        Icons.person_outline_rounded,
+        'Edit Profile',
+        'Update your information',
+        '/edit-profile',
+        c.brand,
+      ),
+      (
+        Icons.lock_outline_rounded,
+        'Change Password',
+        'Update your security',
+        '/change-password',
+        c.info,
+      ),
+      (
+        Icons.phone_outlined,
+        'Contact',
+        'Get in touch with us',
+        '/contact',
+        c.accent,
+      ),
+      // Terms of Service hidden until real Terms copy exists: the page only
+      // repeats the privacy policy (see terms_service_screen.dart).
+      (
+        Icons.privacy_tip_outlined,
+        'Privacy Policy',
+        'Data protection',
+        '/privacy',
+        c.textSecondary,
+      ),
     ];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return AppCard(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Column(
+        children: [
+          for (final item in items) ...[
+            AppListTile(
+              icon: item.$1,
+              title: item.$2,
+              subtitle: item.$3,
+              iconColor: item.$5,
+              onTap: () => Navigator.pushNamed(context, item.$4),
+            ),
+            Divider(
+              height: 1,
+              indent: 68,
+              endIndent: AppSpacing.md,
+              color: c.outline,
+            ),
+          ],
+          AppListTile(
+            icon: Icons.delete_outline_rounded,
+            title: 'Delete Account',
+            // No delete endpoint exists; support removes accounts on request.
+            subtitle: 'Ask support to remove your data',
+            destructive: true,
+            onTap: () => Navigator.pushNamed(context, '/contact'),
           ),
         ],
       ),
-      child: Column(
-        children: menuItems.asMap().entries.map((entry) {
-          final index = entry.key;
-          final item = entry.value;
-          return Column(
-            children: [
-              _buildMenuTile(
-                icon: item['icon'] as IconData,
-                title: item['title'] as String,
-                subtitle: item['subtitle'] as String,
-                color: item['color'] as Color,
-                isDestructive: item['isDestructive'] as bool? ?? false,
-                isDarkMode: isDarkMode,
-                onTap: item['route'] != null
-                    ? () =>
-                          Navigator.pushNamed(context, item['route'] as String)
-                    : () {},
-              ),
-              if (index < menuItems.length - 1)
-                Divider(
-                  height: 1,
-                  indent: 72,
-                  endIndent: 20,
-                  color: isDarkMode
-                      ? Colors.white12
-                      : Colors.black.withValues(alpha: 0.05),
-                ),
-            ],
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildMenuTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required bool isDestructive,
-    required bool isDarkMode,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isDestructive ? 0.1 : 0.15),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: isDestructive
-              ? color
-              : isDarkMode
-              ? AppPalette.textPrimaryDark
-              : AppPalette.textPrimaryLight,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.5)
-              : AppPalette.textMutedLight,
-        ),
-      ),
-      trailing: Icon(
-        Icons.chevron_right,
-        color: isDarkMode
-            ? Colors.white.withValues(alpha: 0.4)
-            : const Color(0xFFCCCCCC),
-        size: 20,
-      ),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildLogoutButton(BuildContext context, bool isDarkMode) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          // Perform logout - AuthWrapper will handle navigation
-          final authProvider = context.read<AuthProvider>();
-          await authProvider.logout();
-        },
-        icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
-        label: const Text(
-          'Logout',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppPalette.error,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatar(dynamic avatarUrl) {
-    // Check if it's a valid network URL
-    if (avatarUrl != null &&
-        avatarUrl is String &&
-        avatarUrl.isNotEmpty &&
-        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
-      return CircleAvatar(
-        radius: 45,
-        backgroundImage: NetworkImage(avatarUrl),
-        backgroundColor: Colors.white,
-        onBackgroundImageError: (e, s) {
-          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
-        },
-      );
-    }
-
-    // Fallback to default avatar
-    return const CircleAvatar(
-      radius: 45,
-      backgroundColor: Colors.white,
-      child: Icon(Icons.person, size: 45, color: AppPalette.emerald),
     );
   }
 }

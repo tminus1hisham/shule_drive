@@ -4,11 +4,17 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../models/chat_conversation.dart';
 import '../models/chat_message.dart';
+import '../mqtt_client.dart';
 import '../services/chat_service.dart';
 import '../services/secure_token_storage.dart';
 
 class ChatProvider extends ChangeNotifier {
+  ChatProvider() {
+    _incomingSub = _chatService.incoming.listen(_onIncoming);
+  }
+
   final ChatService _chatService = ChatService();
+  StreamSubscription<IncomingChat>? _incomingSub;
   final ApiClient _apiClient = ApiClient();
   final SecureTokenStorage _tokenStorage = SecureTokenStorage();
 
@@ -70,9 +76,27 @@ class ChatProvider extends ChangeNotifier {
         return _conversations;
       }
 
-      _conversations = await _fetchChatContactsFromApi(
-        senderPhone: currentUserPhone,
-      );
+      final unread = {
+        for (final c in _conversations) c.otherUserPhone: c.unreadCount,
+      };
+      final merged = <String, ChatConversation>{
+        for (final c in await _fetchChatContactsFromApi(
+          senderPhone: currentUserPhone,
+        ))
+          c.otherUserPhone: c,
+      };
+      for (final c in await _chatService.recentConversations()) {
+        final fromApi = merged[c.otherUserPhone];
+        if (fromApi == null ||
+            (c.lastActivity?.isAfter(fromApi.lastActivity ?? DateTime(0)) ??
+                false)) {
+          merged[c.otherUserPhone] = c;
+        }
+      }
+      _conversations = merged.values
+          .map((c) => _withUnread(c, unread[c.otherUserPhone] ?? 0))
+          .toList();
+      _sortConversations();
       debugPrint('✅ Loaded ${_conversations.length} conversations');
     } catch (e) {
       _conversationsError = 'Error loading conversations: $e';
@@ -225,37 +249,30 @@ class ChatProvider extends ChangeNotifier {
     return _availableUsers;
   }
 
-  /// Initialize chat with another user
+  /// Open the chat with [otherUserPhone] (or a `trip_…` group delivering to
+  /// [memberPhones]). Incoming messages arrive via the app-wide inbox.
   Future<void> initialize(
     String currentUserPhone,
-    String otherUserPhone,
-  ) async {
+    String otherUserPhone, {
+    List<String>? memberPhones,
+  }) async {
     _isConnecting = true;
     _error = null;
     _currentChatUserId = otherUserPhone;
+    _chatService.activeChatPhone = otherUserPhone;
+    _messages = [];
+    _clearUnread(otherUserPhone);
     notifyListeners();
 
     try {
-      await _chatService.initialize();
-      await _chatService.connect();
+      if (memberPhones != null && memberPhones.isNotEmpty) {
+        await _chatService.setGroupMembers(otherUserPhone, memberPhones);
+      }
+      if (!_mqtt.isConnected) await _mqtt.connect();
       _isConnected = true;
 
       debugPrint('💬 Starting chat with phone: $otherUserPhone');
-
-      // Subscribe to incoming messages
-      await _chatService.startChat(otherUserPhone, (message) {
-        if (!_messages.any((m) => m.id == message.id)) {
-          _messages.add(message);
-          _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-          notifyListeners();
-
-          if (message.senderId == otherUserPhone) {
-            _chatService.markAsDelivered(message.id, message.senderId);
-          }
-        }
-      });
-
-      // Load message history
+      _addMessages(await _chatService.loadHistory(otherUserPhone));
       await _loadMessageHistory(currentUserPhone, otherUserPhone);
 
       _typingSubscription?.cancel();
@@ -298,7 +315,7 @@ class ChatProvider extends ChangeNotifier {
 
       debugPrint('📥 Received ${messagesData.length} messages from API');
 
-      _messages = messagesData
+      _addMessages(messagesData
           .map(
             (json) => ChatMessage(
               id: json['id']?.toString() ?? '',
@@ -309,11 +326,7 @@ class ChatProvider extends ChangeNotifier {
                   DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
               status: MessageStatus.sent,
             ),
-          )
-          .toList();
-
-      // Sort ascending - oldest first
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          ));
 
       debugPrint('📥 Total messages loaded: ${_messages.length}');
       notifyListeners();
@@ -354,19 +367,19 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _chatService.sendMessage(
+      final sent = await _chatService.sendMessage(
         recipientPhone: _currentChatUserId!,
         content: content.trim(),
         senderName: senderName,
         recipientName: recipientName,
       );
-      message.status = MessageStatus.sent;
+      _messages[_messages.indexOf(message)] = sent;
 
       // Update conversation
       await _updateConversationAfterSend(
         recipientPhone: _currentChatUserId!,
         recipientName: recipientName ?? 'Unknown',
-        message: message,
+        message: sent,
       );
 
       notifyListeners();
@@ -412,6 +425,73 @@ class ChatProvider extends ChangeNotifier {
       );
     }
 
+    _sortConversations();
+  }
+
+  // ==========================================================================
+  // INBOX
+  // ==========================================================================
+
+  final MqttService _mqtt = MqttService();
+
+  void _onIncoming(IncomingChat chat) {
+    final message = chat.message;
+    // Replies to a trip group thread under the group, not the sender.
+    final thread = ChatService.threadOf(message);
+    final isOpen = thread == _currentChatUserId;
+    if (isOpen) {
+      _addMessages([message]);
+      unawaited(_chatService.markAsDelivered(message.id, message.senderId));
+    }
+
+    final i = _conversations.indexWhere((c) => c.otherUserPhone == thread);
+    final existing = i >= 0 ? _conversations[i] : null;
+    final updated = ChatConversation(
+      id: existing?.id ?? thread,
+      otherUserPhone: thread,
+      otherUserName: existing?.otherUserName ?? chat.senderName,
+      otherUserAvatar: existing?.otherUserAvatar,
+      otherUserRole: existing?.otherUserRole,
+      lastMessage: message,
+      unreadCount: isOpen ? 0 : (existing?.unreadCount ?? 0) + 1,
+      lastActivity: message.timestamp,
+    );
+    if (i >= 0) {
+      _conversations[i] = updated;
+    } else {
+      _conversations.add(updated);
+    }
+    _sortConversations();
+    notifyListeners();
+  }
+
+  void _addMessages(Iterable<ChatMessage> incoming) {
+    for (final m in incoming) {
+      if (!_messages.any((e) => e.id == m.id)) _messages.add(m);
+    }
+    _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    notifyListeners();
+  }
+
+  void _clearUnread(String phone) {
+    final i = _conversations.indexWhere((c) => c.otherUserPhone == phone);
+    if (i >= 0) _conversations[i] = _withUnread(_conversations[i], 0);
+  }
+
+  static ChatConversation _withUnread(ChatConversation c, int unread) =>
+      ChatConversation(
+        id: c.id,
+        otherUserPhone: c.otherUserPhone,
+        otherUserName: c.otherUserName,
+        otherUserAvatar: c.otherUserAvatar,
+        otherUserRole: c.otherUserRole,
+        lastMessage: c.lastMessage,
+        unreadCount: unread,
+        lastActivity: c.lastActivity,
+        isOnline: c.isOnline,
+      );
+
+  void _sortConversations() {
     _conversations.sort((a, b) {
       if (a.lastActivity == null && b.lastActivity == null) return 0;
       if (a.lastActivity == null) return 1;
@@ -451,20 +531,19 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Clear current chat
-  void clearChat() {
+  /// The chat screen closed: its messages notify again.
+  void leaveChat() {
     _typingSubscription?.cancel();
-    _chatService.disconnect();
-    _messages.clear();
+    if (_chatService.activeChatPhone == _currentChatUserId) {
+      _chatService.activeChatPhone = null;
+    }
     _currentChatUserId = null;
-    _isConnected = false;
-    notifyListeners();
   }
 
   @override
   void dispose() {
     _typingSubscription?.cancel();
-    _chatService.dispose();
+    _incomingSub?.cancel();
     super.dispose();
   }
 }

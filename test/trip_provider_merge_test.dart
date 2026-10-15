@@ -55,6 +55,24 @@ void main() {
       expect(merged.students.single.status, 'absent');
     });
 
+    test('keeps local students the server run never had', () {
+      final local = _trip('t1', [
+        _student('s1', 'pending'),
+        _student('late', 'picked'),
+      ]);
+      final fetched = _trip('t1', [_student('s1', 'picked')]);
+
+      final merged = TripProvider.mergeWithLocalStatuses(fetched, local);
+
+      expect(merged.students.map((s) => s.id), ['s1', 'late']);
+      expect(merged.students.last.status, 'picked');
+    });
+
+    test('recognises the server refusing a student added mid-trip', () {
+      expect(TripProvider.isStudentNotOnRun('Student not found.'), isTrue);
+      expect(TripProvider.isStudentNotOnRun('Invalid request'), isFalse);
+    });
+
     test('returns fetched unchanged for a different trip', () {
       final local = _trip('t1', [_student('s1', 'picked')]);
       final fetched = _trip('t2', [_student('s1', 'pending')]);

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shule_drive/api/api_exceptions.dart';
 import 'package:shule_drive/providers/trip_provider.dart';
 import 'package:shule_drive/services/guardian_trip_notification_service.dart';
 
@@ -60,6 +61,26 @@ void main() {
     );
     expect(published, hasLength(2));
     expect(outbox, isEmpty);
+  });
+
+  test('server rejection gives up on that push, not the next one', () async {
+    final outbox = [_alert('254700000001', now), _alert('254700000002', now)];
+    final pushed = <String>[];
+
+    await TripProvider.deliverGuardianAlerts(
+      outbox,
+      mqttConnected: true,
+      publish: (a) async {},
+      push: (a) async {
+        if (a['phone'] == '254700000001') {
+          throw ApiException(message: 'no FCM token', statusCode: 500);
+        }
+        pushed.add(a['phone']);
+      },
+      now: now,
+    );
+    expect(pushed, ['254700000002']);
+    expect(outbox, isEmpty, reason: 'rejected push must not be retried');
   });
 
   test('drops alerts older than the max age', () async {

@@ -2,13 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/services/trip_service.dart';
-import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/guardian_trip_notification_service.dart';
 import '../../services/trip_history_service.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 /// Model for guardian trip history entry
 /// Groups students by trip so shared trips appear together
 class GuardianTripHistoryEntry {
@@ -38,7 +39,7 @@ class GuardianTripHistoryEntry {
       return endTime!.difference(startTime!);
     }
     return null;
-    }
+  }
 
   String get formattedDuration {
     final d = duration;
@@ -81,7 +82,6 @@ class GuardianTripsScreen extends StatefulWidget {
 
 class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     with SingleTickerProviderStateMixin {
-  int _currentIndex = 3;
   final TripService _tripService = TripService();
   final TripHistoryService _historyService = TripHistoryService();
 
@@ -111,8 +111,9 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     _loadTripHistory();
 
     // Reflect live pick/drop/absent updates pushed by the driver over MQTT.
-    _statusSub =
-        GuardianTripNotificationService().updates.listen(_onStudentStatusEvent);
+    _statusSub = GuardianTripNotificationService().updates.listen(
+      _onStudentStatusEvent,
+    );
   }
 
   @override
@@ -133,9 +134,8 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     setState(() {
       _myStudents = _myStudents
           .map(
-            (s) => s.id == event.studentId
-                ? s.copyWith(status: event.status)
-                : s,
+            (s) =>
+                s.id == event.studentId ? s.copyWith(status: event.status) : s,
           )
           .toList();
 
@@ -155,7 +155,11 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
   }
 
   void _onTabChanged() {
-    if (_tabController.index == 1 && _tripHistory.isEmpty && !_isLoadingHistory) {
+    // Keep the segmented filter in step with swipes between tabs.
+    if (mounted) setState(() {});
+    if (_tabController.index == 1 &&
+        _tripHistory.isEmpty &&
+        !_isLoadingHistory) {
       _loadTripHistory();
     }
   }
@@ -169,7 +173,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     try {
       final authProvider = context.read<AuthProvider>();
       final guardianPhone = authProvider.userPhone;
-      
+
       if (guardianPhone == null || guardianPhone.isEmpty) {
         setState(() {
           _activeTripError = 'Phone number not found. Please log in again.';
@@ -179,7 +183,9 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
       }
 
       // Fetch active trip for this guardian
-      final trip = await _tripService.getActiveTrip(guardianPhone: guardianPhone);
+      final trip = await _tripService.getActiveTrip(
+        guardianPhone: guardianPhone,
+      );
 
       if (mounted) {
         setState(() {
@@ -222,10 +228,25 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
         return;
       }
 
-      // Get all trips from history service
-      // Note: In a real implementation, you might want to add a specific
-      // API endpoint for guardian trip history. For now, we simulate with local data.
-      final allTrips = await _historyService.getAllTripsForGuardian(guardianPhone);
+      // The server keeps a row per child per run; finished runs are the
+      // history. Falls back to this phone's saved trips when offline.
+      List<TripHistory> allTrips;
+      try {
+        final rows = await TripService().getGuardianRunRows(guardianPhone);
+        allTrips = [
+          for (final trip in TripService.tripsFromRunRows(rows))
+            if (!trip.isActive)
+              TripHistory(
+                trip: trip,
+                driverId: '',
+                driverName: '',
+                loggedAt: trip.startTime,
+              ),
+        ];
+      } catch (e) {
+        debugPrint('⚠️ Guardian history from server failed: $e');
+        allTrips = await _historyService.getAllTripsForGuardian(guardianPhone);
+      }
 
       // Group trips by trip ID and filter for this guardian's students
       final Map<String, GuardianTripHistoryEntry> tripMap = {};
@@ -246,14 +267,18 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
         // Group by trip ID - if trip already exists, add students to it
         if (tripMap.containsKey(trip.id)) {
           final existingEntry = tripMap[trip.id]!;
-          final newStudents = myStudentsInTrip.map((s) => StudentTripInfo(
-            studentId: s.id,
-            name: s.name,
-            photo: s.photo,
-            status: s.status,
-            pickupTime: s.pickupTime,
-            dropoffTime: s.dropoffTime,
-          )).toList();
+          final newStudents = myStudentsInTrip
+              .map(
+                (s) => StudentTripInfo(
+                  studentId: s.id,
+                  name: s.name,
+                  photo: s.photo,
+                  status: s.status,
+                  pickupTime: s.pickupTime,
+                  dropoffTime: s.dropoffTime,
+                ),
+              )
+              .toList();
 
           tripMap[trip.id] = GuardianTripHistoryEntry(
             tripId: trip.id,
@@ -275,14 +300,18 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
             endTime: trip.endTime,
             vehicleNumber: trip.vehicleNumber,
             status: trip.status,
-            students: myStudentsInTrip.map((s) => StudentTripInfo(
-              studentId: s.id,
-              name: s.name,
-              photo: s.photo,
-              status: s.status,
-              pickupTime: s.pickupTime,
-              dropoffTime: s.dropoffTime,
-            )).toList(),
+            students: myStudentsInTrip
+                .map(
+                  (s) => StudentTripInfo(
+                    studentId: s.id,
+                    name: s.name,
+                    photo: s.photo,
+                    status: s.status,
+                    pickupTime: s.pickupTime,
+                    dropoffTime: s.dropoffTime,
+                  ),
+                )
+                .toList(),
           );
         }
       }
@@ -309,22 +338,34 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     setState(() {
       _myStudents = trip.students.where((student) {
         return student.parentPhone == guardianPhone ||
-               student.parentPhone?.replaceAll(RegExp(r'[^0-9]'), '') == 
-               guardianPhone.replaceAll(RegExp(r'[^0-9]'), '');
+            student.parentPhone?.replaceAll(RegExp(r'[^0-9]'), '') ==
+                guardianPhone.replaceAll(RegExp(r'[^0-9]'), '');
       }).toList();
     });
   }
 
   String _formatDate(DateTime date) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   String _formatTime(DateTime date) {
-    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : (date.hour == 0 ? 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final period = date.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
@@ -333,7 +374,7 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
   String _getTimeAgo(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {
@@ -347,255 +388,78 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<AppProvider>();
-
     return MainScaffold(
       title: 'My Trips',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: _currentIndex,
-      onBottomNavTap: (index) {
-        setState(() => _currentIndex = index);
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        } else if (index == 1) {
-          Navigator.pushNamed(context, '/chat');
-        } else if (index == 2) {
-          Navigator.pushNamed(context, '/notifications');
-        } else if (index == 3) {
-          Navigator.pushNamed(context, '/profile');
-        }
-      },
-      body: Column(
+      body: Stack(
         children: [
-          // Tab Bar
-          Container(
-            color: provider.isDarkMode ? AppPalette.surfaceDark : Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: AppPalette.emerald,
-              labelColor: AppPalette.emerald,
-              unselectedLabelColor: provider.textMutedColor,
-              tabs: const [
-                Tab(icon: Icon(Icons.local_shipping), text: 'Active'),
-                Tab(icon: Icon(Icons.history), text: 'History'),
-              ],
-            ),
-          ),
-          // Tab Content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Active Tab
-                RefreshIndicator(
-                  onRefresh: _loadActiveTrip,
-                  color: AppPalette.emerald,
-                  backgroundColor: provider.cardColor,
-                  child: _buildActiveTab(provider),
-                ),
-                // History Tab
-                RefreshIndicator(
-                  onRefresh: _loadTripHistory,
-                  color: AppPalette.emerald,
-                  backgroundColor: provider.cardColor,
-                  child: _buildHistoryTab(provider),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveTab(AppProvider provider) {
-    // Show loading
-    if (_isLoadingActive) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppPalette.emerald),
-      );
-    }
-
-    // Show error
-    if (_activeTripError != null) {
-      return _buildErrorState(provider, _activeTripError!, _loadActiveTrip);
-    }
-
-    // No active trip
-    if (_activeTrip == null) {
-      return _buildNoActiveTripState(provider);
-    }
-
-    // Show active trip
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Active Trip Header
-          _buildActiveTripHeader(provider),
-
-          const SizedBox(height: 24),
-
-          // My Students Section
-          _buildMyStudentsSection(provider),
-
-          const SizedBox(height: 24),
-
-          // Trip Progress
-          _buildTripProgress(provider),
-
-          const SizedBox(height: 24),
-
-          // Live Tracking Button
-          _buildLiveTrackingButton(),
-
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryTab(AppProvider provider) {
-    // Show loading
-    if (_isLoadingHistory) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppPalette.emerald),
-      );
-    }
-
-    // Show error
-    if (_historyError != null) {
-      return _buildErrorState(provider, _historyError!, _loadTripHistory);
-    }
-
-    // Empty history
-    if (_tripHistory.isEmpty) {
-      return _buildEmptyHistoryState(provider);
-    }
-
-    // Show trip history
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      itemCount: _tripHistory.length,
-      itemBuilder: (context, index) {
-        return _buildHistoryCard(provider, _tripHistory[index]);
-      },
-    );
-  }
-
-  Widget _buildActiveTripHeader(AppProvider provider) {
-    final trip = _activeTrip!;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppPalette.emerald.withAlpha(100),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Status Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const Positioned.fill(child: AppBackdrop()),
+          Column(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
-                  borderRadius: BorderRadius.circular(20),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.xs,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: SegmentedFilter(
+                  selected: _tabController.index,
+                  onChanged: _tabController.animateTo,
+                  segments: [
+                    FilterSegment('Active', count: _activeTrip == null ? 0 : 1),
+                    FilterSegment('History', count: _tripHistory.length),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                    AsyncBody(
+                      loading: _isLoadingActive,
+                      error: _activeTripError,
+                      onRetry: _loadActiveTrip,
+                      isEmpty: _activeTrip == null,
+                      empty: EmptyState(
+                        icon: Icons.local_shipping_outlined,
+                        title: 'No Active Trips',
+                        message:
+                            'There are no active trips involving your '
+                            'children at the moment.',
+                        actionLabel: 'Check Again',
+                        onAction: _loadActiveTrip,
                       ),
+                      onRefresh: _loadActiveTrip,
+                      child: _buildActiveTab(),
                     ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'TRIP IN PROGRESS',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    AsyncBody(
+                      loading: _isLoadingHistory,
+                      error: _historyError,
+                      onRetry: _loadTripHistory,
+                      isEmpty: _tripHistory.isEmpty,
+                      empty: const EmptyState(
+                        icon: Icons.history_rounded,
+                        title: 'No Trip History',
+                        message:
+                            'Completed trips involving your students will '
+                            'appear here.',
+                      ),
+                      onRefresh: _loadTripHistory,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: _tripHistory.length,
+                        separatorBuilder: (_, _) => AppSpacing.vMd,
+                        itemBuilder: (context, index) => _buildHistoryCard(
+                          _tripHistory[index],
+                        ).enterList(index),
                       ),
                     ),
                   ],
                 ),
               ),
-              Text(
-                _getTimeAgo(trip.startTime),
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Route Name
-          Text(
-            trip.routeName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Vehicle Info
-          Row(
-            children: [
-              const Icon(Icons.directions_bus, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                trip.vehicleNumber ?? 'School Bus',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 8),
-          
-          // Start Time
-          Row(
-            children: [
-              const Icon(Icons.access_time, color: Colors.white70, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Started: ${_formatTime(trip.startTime)}',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(230),
-                  fontSize: 14,
-                ),
-              ),
             ],
           ),
         ],
@@ -603,62 +467,140 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     );
   }
 
-  Widget _buildMyStudentsSection(AppProvider provider) {
+  Widget _buildActiveTab() {
+    if (_activeTrip == null) return const SizedBox.shrink();
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      children: [
+        _buildActiveTripHeader().enter(),
+        AppSpacing.vXl,
+        _buildMyStudentsSection(),
+        AppSpacing.vXl,
+        _buildLiveTrackingButton().enterList(3),
+        AppSpacing.vXxl,
+      ],
+    );
+  }
+
+  Widget _buildActiveTripHeader() {
+    final trip = _activeTrip!;
+    final picked = _myStudents.where((s) => s.status == 'picked').length;
+    final meta = context.text.bodyMedium?.copyWith(
+      color: Colors.white.withValues(alpha: 0.9),
+    );
+
+    return GradientHeroCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const StatusPill(
+                      label: 'TRIP IN PROGRESS',
+                      color: Colors.white,
+                      pulse: true,
+                      dense: true,
+                    ),
+                    AppSpacing.hXs,
+                    Flexible(
+                      child: Text(
+                        _getTimeAgo(trip.startTime),
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.labelMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                AppSpacing.vMd,
+                Text(
+                  trip.routeName,
+                  style: context.text.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                AppSpacing.vSm,
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_bus_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                    AppSpacing.hXs,
+                    Text(trip.vehicleNumber ?? 'School Bus', style: meta),
+                  ],
+                ),
+                AppSpacing.vXxs,
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.access_time_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                    AppSpacing.hXs,
+                    Text(
+                      'Started: ${_formatTime(trip.startTime)}',
+                      style: meta,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (_myStudents.isNotEmpty) ...[
+            AppSpacing.hMd,
+            TripProgress.ring(
+              done: picked,
+              total: _myStudents.length,
+              onBrand: true,
+              size: 72,
+              thickness: 7,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyStudentsSection() {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'My Students',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppPalette.emerald.withAlpha(20),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_myStudents.length} on this trip',
-                style: const TextStyle(
-                  color: AppPalette.emerald,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            const Expanded(child: SectionHeader(title: 'My Students')),
+            StatusPill(
+              label: '${_myStudents.length} on this trip',
+              color: c.brand,
+              showDot: false,
+              dense: true,
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-        
+        ).enterList(1),
+        AppSpacing.vSm,
         if (_myStudents.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: provider.cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
-              ),
-            ),
+          AppCard(
+            color: c.surfaceSubtle,
+            shadow: const [],
             child: Row(
               children: [
-                Icon(
-                  Icons.info_outline,
-                  color: provider.textMutedColor,
-                ),
-                const SizedBox(width: 12),
+                Icon(Icons.info_outline_rounded, color: c.textMuted),
+                AppSpacing.hSm,
                 Expanded(
                   child: Text(
                     'No students from your account on this trip',
-                    style: TextStyle(
-                      color: provider.textMutedColor,
+                    style: context.text.bodyMedium?.copyWith(
+                      color: c.textSecondary,
                     ),
                   ),
                 ),
@@ -666,486 +608,112 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
             ),
           )
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _myStudents.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final student = _myStudents[index];
-              return _buildStudentCard(provider, student);
-            },
-          ),
+          for (final (i, student) in _myStudents.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              // Live MQTT pushes flip the status in place: the ring recolours
+              // and the pill cross-fades, so the parent sees it happen.
+              child: StudentStatusRow(
+                key: ValueKey(student.id),
+                name: student.name,
+                photoUrl: student.photo,
+                status: student.status,
+                subtitle: student.pickupTime == null
+                    ? null
+                    : '${student.status == 'picked' ? 'Picked up at' : 'Status updated'} '
+                          '${_formatTime(student.pickupTime!)}',
+              ).enterList(i + 2),
+            ),
       ],
     );
   }
 
-  Widget _buildStudentCard(AppProvider provider, StudentPickup student) {
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-    
-    switch (student.status) {
-      case 'picked':
-        statusColor = AppPalette.success;
-        statusIcon = Icons.check_circle;
-        statusText = 'Picked Up';
-        break;
-      case 'absent':
-        statusColor = AppPalette.warning;
-        statusIcon = Icons.cancel;
-        statusText = 'Absent';
-        break;
-      case 'dropped':
-        statusColor = AppPalette.info;
-        statusIcon = Icons.logout;
-        statusText = 'Dropped Off';
-        break;
-      default:
-        statusColor = AppPalette.textMutedLight;
-        statusIcon = Icons.schedule;
-        statusText = 'Waiting';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: statusColor.withAlpha(50),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(provider.isDarkMode ? 30 : 10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Student Avatar
-          _buildStudentAvatar(student),
-          const SizedBox(width: 16),
-          
-          // Student Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  student.name,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: provider.textColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                if (student.pickupTime != null)
-                  Text(
-                    '${student.status == 'picked' ? 'Picked up at' : 'Status updated'} ${_formatTime(student.pickupTime!)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: provider.textMutedColor,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          
-          // Status Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: statusColor.withAlpha(20),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(statusIcon, color: statusColor, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStudentAvatar(StudentPickup student) {
-    if (student.photo != null && student.photo!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 28,
-        backgroundImage: NetworkImage(student.photo!),
-        onBackgroundImageError: (_, __) {},
-      );
-    }
-    
-    return CircleAvatar(
-      radius: 28,
-      backgroundColor: AppPalette.emerald.withAlpha(30),
-      child: const Icon(Icons.person, color: AppPalette.emerald),
-    );
-  }
-
-  Widget _buildTripProgress(AppProvider provider) {
-    final totalStudents = _myStudents.length;
-    final pickedCount = _myStudents.where((s) => s.status == 'picked').length;
-    final progress = totalStudents > 0 ? pickedCount / totalStudents : 0.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(provider.isDarkMode ? 30 : 10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Trip Progress',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: provider.textColor,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              backgroundColor: provider.isDarkMode 
-                  ? Colors.white12 
-                  : AppPalette.outlineLight,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppPalette.emerald),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$pickedCount of $totalStudents students picked up',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: provider.textMutedColor,
-                ),
-              ),
-              Text(
-                '${(progress * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.emerald,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildLiveTrackingButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton.icon(
-        onPressed: () {
-          Navigator.pushNamed(
-            context,
-            '/osm-tracking',
-            arguments: {
-              'tripId': _activeTrip?.id ?? 'TRIP_001',
-              'busId': _activeTrip?.vehicleId ?? 'BUS001',
-              'routeId': _activeTrip?.routeId ?? 'ROUTE_001',
-            },
-          );
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppPalette.emerald,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 4,
-          shadowColor: AppPalette.emerald.withAlpha(100),
-        ),
-        icon: const Icon(Icons.location_on, size: 24),
-        label: const Text(
-          'Live Track Bus',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return AppButton(
+      label: 'Live Track Bus',
+      icon: Icons.location_on_rounded,
+      onPressed: () {
+        Navigator.pushNamed(
+          context,
+          '/osm-tracking',
+          arguments: {
+            'tripId': _activeTrip?.id ?? 'TRIP_001',
+            'busId': _activeTrip?.vehicleId ?? 'BUS001',
+            'routeId': _activeTrip?.routeId ?? 'ROUTE_001',
+          },
+        );
+      },
     );
   }
 
-  Widget _buildNoActiveTripState(AppProvider provider) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppPalette.emerald.withAlpha(20),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.local_shipping_outlined,
-                size: 60,
-                color: provider.textMutedColor,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Active Trips',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'There are no active trips involving your children at the moment.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: 200,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _loadActiveTrip,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.emerald,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.refresh),
-                label: const Text(
-                  'Check Again',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(AppProvider provider, String message, VoidCallback onRetry) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: provider.textMutedColor,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Oops!',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyHistoryState(AppProvider provider) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppPalette.emerald.withAlpha(20),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.history,
-                size: 60,
-                color: provider.textMutedColor,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Trip History',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Completed trips involving your students will appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: provider.textMutedColor,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build a history card that groups students by trip
-  /// Shows pick time and drop time for each student
-  Widget _buildHistoryCard(AppProvider provider, GuardianTripHistoryEntry entry) {
+  /// A history card that groups this guardian's students by trip, with each
+  /// student's pick and drop times.
+  Widget _buildHistoryCard(GuardianTripHistoryEntry entry) {
+    final c = context.colors;
     final isCompleted = entry.status == 'completed';
-    final statusText = isCompleted ? 'Completed' : 'In Progress';
+    final tone = isCompleted ? c.brand : c.warning;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: provider.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(provider.isDarkMode ? 30 : 10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      clip: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
-            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: isCompleted
-                    ? [AppPalette.emerald, AppPalette.emeraldPressed]
-                    : [AppPalette.warning, const Color(0xFFF57C00)],
+                colors: [
+                  tone,
+                  Color.alphaBlend(Colors.black.withValues(alpha: 0.22), tone),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(30),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        statusText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    StatusPill(
+                      label: isCompleted ? 'Completed' : 'In Progress',
+                      color: Colors.white,
+                      showDot: !isCompleted,
+                      icon: isCompleted ? Icons.check_circle_rounded : null,
+                      dense: true,
                     ),
+                    const Spacer(),
                     Text(
                       _formatDate(entry.tripDate),
-                      style: TextStyle(
-                        color: Colors.white.withAlpha(230),
-                        fontSize: 13,
+                      style: context.text.labelMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                AppSpacing.vSm,
                 Text(
                   entry.routeName,
-                  style: const TextStyle(
+                  style: context.text.titleMedium?.copyWith(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 8),
+                AppSpacing.vXxs,
                 Row(
                   children: [
-                    const Icon(Icons.directions_bus, color: Colors.white70, size: 16),
+                    const Icon(
+                      Icons.directions_bus_rounded,
+                      color: Colors.white70,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       entry.vehicleNumber ?? 'School Bus',
-                      style: TextStyle(
-                        color: Colors.white.withAlpha(230),
-                        fontSize: 14,
+                      style: context.text.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
@@ -1153,66 +721,62 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
               ],
             ),
           ),
-
-          // Trip Time Info
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildTimeInfo(
-                    provider,
-                    'Start',
-                    entry.startTime != null ? _formatTime(entry.startTime!) : '--:--',
-                    Icons.play_circle_outline,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: StatTile(
+                      icon: Icons.play_circle_outline_rounded,
+                      value: entry.startTime != null
+                          ? _formatTime(entry.startTime!)
+                          : '--:--',
+                      label: 'Start',
+                      color: c.brand,
+                    ),
                   ),
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
-                ),
-                Expanded(
-                  child: _buildTimeInfo(
-                    provider,
-                    'End',
-                    entry.endTime != null ? _formatTime(entry.endTime!) : '--:--',
-                    Icons.stop_circle_outlined,
+                  VerticalDivider(color: c.outline, width: 1),
+                  Expanded(
+                    child: StatTile(
+                      icon: Icons.stop_circle_outlined,
+                      value: entry.endTime != null
+                          ? _formatTime(entry.endTime!)
+                          : '--:--',
+                      label: 'End',
+                      color: c.brand,
+                    ),
                   ),
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: provider.isDarkMode ? Colors.white12 : AppPalette.outlineLight,
-                ),
-                Expanded(
-                  child: _buildTimeInfo(
-                    provider,
-                    'Duration',
-                    entry.formattedDuration,
-                    Icons.timer_outlined,
+                  VerticalDivider(color: c.outline, width: 1),
+                  Expanded(
+                    child: StatTile(
+                      icon: Icons.timer_outlined,
+                      value: entry.formattedDuration,
+                      label: 'Duration',
+                      color: c.accent,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-
-          // Students Section
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              AppSpacing.md,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Students (${entry.students.length})',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: provider.textColor,
-                  ),
+                  style: context.text.labelLarge,
                 ),
-                const SizedBox(height: 12),
-                ...entry.students.map((student) => _buildHistoryStudentItem(provider, student)),
+                AppSpacing.vSm,
+                for (final student in entry.students)
+                  _buildHistoryStudentItem(student),
               ],
             ),
           ),
@@ -1221,156 +785,66 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
     );
   }
 
-  Widget _buildTimeInfo(AppProvider provider, String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, size: 20, color: AppPalette.emerald),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: provider.textColor,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: provider.textMutedColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Build student item with pick time and drop time for history
-  Widget _buildHistoryStudentItem(AppProvider provider, StudentTripInfo student) {
-    Color statusColor;
-    IconData statusIcon;
-    String statusText;
-
-    switch (student.status) {
-      case 'picked':
-      case 'dropped':
-        statusColor = AppPalette.success;
-        statusIcon = Icons.check_circle;
-        statusText = 'Completed';
-        break;
-      case 'absent':
-        statusColor = AppPalette.warning;
-        statusIcon = Icons.cancel;
-        statusText = 'Absent';
-        break;
-      default:
-        statusColor = AppPalette.textMutedLight;
-        statusIcon = Icons.schedule;
-        statusText = 'Pending';
-    }
+  /// Student row with pick and drop times for history.
+  Widget _buildHistoryStudentItem(StudentTripInfo student) {
+    final c = context.colors;
+    final settled = student.status == 'picked' || student.status == 'dropped';
+    final (Color color, IconData icon, String label) = settled
+        ? (c.success, Icons.check_circle_rounded, 'Completed')
+        : student.status == 'absent'
+        ? (c.warning, Icons.cancel_rounded, 'Absent')
+        : (c.textMuted, Icons.schedule_rounded, 'Pending');
+    final time = context.text.labelSmall?.copyWith(color: c.textMuted);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
-        color: provider.isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: statusColor.withAlpha(30),
-          width: 1,
-        ),
+        color: c.surfaceSubtle,
+        borderRadius: AppRadius.brSm,
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          // Student Avatar
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: statusColor.withAlpha(30),
-            backgroundImage: student.photo != null && student.photo!.isNotEmpty
-                ? NetworkImage(student.photo!)
-                : null,
-            child: student.photo == null || student.photo!.isEmpty
-                ? Icon(Icons.person, color: statusColor, size: 20)
-                : null,
+          StatusAvatar(
+            name: student.name,
+            photoUrl: student.photo,
+            color: color,
+            size: 40,
           ),
-          const SizedBox(width: 12),
-
-          // Student Info
+          AppSpacing.hSm,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   student.name,
-                  style: TextStyle(
-                    fontSize: 15,
+                  style: context.text.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: provider.textColor,
                   ),
                 ),
-                const SizedBox(height: 4),
-                // Pick and Drop times
+                AppSpacing.vXxs,
                 Row(
                   children: [
                     if (student.pickupTime != null) ...[
-                      Icon(Icons.login, size: 12, color: provider.textMutedColor),
+                      Icon(Icons.login_rounded, size: 12, color: c.textMuted),
                       const SizedBox(width: 4),
-                      Text(
-                        _formatTime(student.pickupTime!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: provider.textMutedColor,
-                        ),
-                      ),
+                      Text(_formatTime(student.pickupTime!), style: time),
                     ],
-                    if (student.pickupTime != null && student.dropoffTime != null)
-                      Text(
-                        ' → ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: provider.textMutedColor,
-                        ),
-                      ),
+                    if (student.pickupTime != null &&
+                        student.dropoffTime != null)
+                      Text(' → ', style: time),
                     if (student.dropoffTime != null) ...[
-                      Icon(Icons.logout, size: 12, color: provider.textMutedColor),
+                      Icon(Icons.logout_rounded, size: 12, color: c.textMuted),
                       const SizedBox(width: 4),
-                      Text(
-                        _formatTime(student.dropoffTime!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: provider.textMutedColor,
-                        ),
-                      ),
+                      Text(_formatTime(student.dropoffTime!), style: time),
                     ],
                   ],
                 ),
               ],
             ),
           ),
-
-          // Status Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withAlpha(20),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(statusIcon, color: statusColor, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          StatusPill(label: label, color: color, icon: icon, dense: true),
         ],
       ),
     );

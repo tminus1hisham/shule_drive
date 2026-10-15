@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/chat_provider.dart';
+import '../providers/trip_provider.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme_extension.dart';
+import 'ui/ui.dart';
 
 /// Floating glass-style bottom navigation. Colors come entirely from the theme
 /// so it adapts to light/dark automatically.
@@ -21,47 +25,53 @@ class BottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final isDriver = context.watch<AuthProvider>().isDriver;
+    final unreadChats = context.watch<ChatProvider>().totalUnreadCount;
     final scheme = context.scheme;
     final colors = context.colors;
 
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xs,
-          vertical: AppSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: scheme.surface.withValues(alpha: 0.96),
-          borderRadius: AppRadius.brPill,
-          border: Border.all(color: colors.outline, width: 1),
-          boxShadow: colors.shadowMd,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildNavItem(context, Icons.home_rounded, 'Home', 0),
-            _buildNavItem(
-              context,
-              Icons.chat_bubble_outline_rounded,
-              'Chat',
-              1,
-              showBadge: provider.unreadChatCount > 0,
-            ),
-            // Only show center '+' button for drivers (taps index 4)
-            if (isDriver) _buildCenterActionButton(context),
-            _buildNavItem(
-              context,
-              Icons.notifications_none_rounded,
-              'Alerts',
-              2,
-              showBadge: provider.unreadAlertCount > 0,
-            ),
-            _buildNavItem(context, Icons.settings_outlined, 'Settings', 3),
-          ],
+    // Tab routes fade through each other; flying the bar as a shared hero
+    // keeps it planted instead of fading out and back in with the page.
+    return Hero(
+      tag: 'app-bottom-nav',
+      child: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xs,
+            vertical: AppSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: 0.96),
+            borderRadius: AppRadius.brPill,
+            border: Border.all(color: colors.outline, width: 1),
+            boxShadow: colors.shadowMd,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavItem(context, Icons.home_rounded, 'Home', 0),
+              _buildNavItem(
+                context,
+                Icons.chat_bubble_outline_rounded,
+                'Chat',
+                1,
+                badgeCount: unreadChats,
+              ),
+              // Only show center '+' button for drivers (taps index 4)
+              if (isDriver) _buildCenterActionButton(context),
+              _buildNavItem(
+                context,
+                Icons.notifications_none_rounded,
+                'Alerts',
+                2,
+                badgeCount: provider.unreadAlertCount,
+              ),
+              _buildNavItem(context, Icons.settings_outlined, 'Settings', 3),
+            ],
+          ),
         ),
       ),
     );
@@ -75,7 +85,7 @@ class BottomNavigation extends StatelessWidget {
     IconData icon,
     String label,
     int index, {
-    bool showBadge = false,
+    int badgeCount = 0,
   }) {
     final isSelected = currentIndex == index;
     final activeColor = context.scheme.primary;
@@ -88,7 +98,10 @@ class BottomNavigation extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => onTap(index),
+          onTap: () {
+            if (!isSelected) HapticFeedback.selectionClick();
+            onTap(index);
+          },
           borderRadius: AppRadius.brLg,
           splashColor: activeColor.withValues(alpha: 0.1),
           highlightColor: activeColor.withValues(alpha: 0.05),
@@ -100,44 +113,31 @@ class BottomNavigation extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    AnimatedContainer(
-                      duration: AppDuration.fast,
-                      padding: EdgeInsets.all(isSelected ? 8 : 6),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? activeColor.withValues(alpha: 0.15)
-                            : Colors.transparent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        icon,
-                        color: isSelected ? activeColor : inactiveColor,
-                        size: isSelected
-                            ? _iconSizeSelected
-                            : _iconSizeUnselected,
-                      ),
+                CountBadge(
+                  count: badgeCount,
+                  child: AnimatedContainer(
+                    duration: AppDuration.fast,
+                    padding: EdgeInsets.all(isSelected ? 8 : 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? activeColor.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
                     ),
-                    if (showBadge)
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: context.colors.error,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: context.scheme.surface,
-                              width: 1.5,
-                            ),
+                    // Each tab is its own route, so the bar remounts on every
+                    // tab change and the newly selected icon springs in.
+                    child: isSelected
+                        ? Icon(
+                            icon,
+                            color: activeColor,
+                            size: _iconSizeSelected,
+                          ).pop()
+                        : Icon(
+                            icon,
+                            color: inactiveColor,
+                            size: _iconSizeUnselected,
                           ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
@@ -158,9 +158,13 @@ class BottomNavigation extends StatelessWidget {
   static const double _centerButtonSize = 56;
 
   Widget _buildCenterActionButton(BuildContext context) {
+    // Same button, two jobs (openDriverTrip): say which one it does now.
+    final live = context.select<TripProvider, bool>(
+      (p) => p.activeTrip != null,
+    );
     return Semantics(
       button: true,
-      label: 'Start trip',
+      label: live ? 'Open live trip' : 'Start trip',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -180,7 +184,11 @@ class BottomNavigation extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
+            child: Icon(
+              live ? Icons.map_rounded : Icons.add_rounded,
+              color: Colors.white,
+              size: live ? 28 : 32,
+            ),
           ),
         ),
       ),

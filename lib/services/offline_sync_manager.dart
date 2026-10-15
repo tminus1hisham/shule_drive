@@ -279,6 +279,9 @@ class OfflineSyncManager {
           break;
         case 'start':
           await _tripService!.startTrip(
+            masterTripId: int.tryParse(
+              payload['masterTripId']?.toString() ?? '',
+            ),
             routeId: payload['route_id'],
             vehicleId: payload['vehicle_id'],
             studentIds: payload['student_ids']?.cast<String>(),

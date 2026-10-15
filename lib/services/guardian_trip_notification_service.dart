@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../mqtt_client.dart';
 import '../utils/student_trip_logic.dart';
 import 'notification_service.dart';
@@ -47,9 +47,98 @@ class GuardianTripNotificationService {
   /// Live student status updates for the currently-listening guardian.
   Stream<GuardianStudentStatusEvent> get updates => _controller.stream;
 
+  // ==========================================================================
+  // ALERT HISTORY (device-local)
+  // ==========================================================================
+  // ponytail: the server's notifications list 403s for guardians, so the
+  // Alerts screen and badge read this device-side log. Retire it once the
+  // backend serves per-user notifications.
+
+  static const _historyKey = 'guardian_alert_history';
+  static const historyMax = 50;
+
+  /// Unread alerts in the history; drives the Alerts badge.
+  final ValueNotifier<int> unreadAlerts = ValueNotifier(0);
+
+  /// Newest first.
+  Future<List<Map<String, dynamic>>> alertHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      return (jsonDecode(prefs.getString(_historyKey) ?? '[]') as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _saveHistory(List<Map<String, dynamic>> history) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_historyKey, jsonEncode(history));
+    unreadAlerts.value = history.where((a) => a['read'] != true).length;
+  }
+
+  Future<void> markAlertsRead() async {
+    final history = await alertHistory();
+    for (final a in history) {
+      a['read'] = true;
+    }
+    await _saveHistory(history);
+  }
+
+  Future<void> clearAlertHistory() => _saveHistory([]);
+
+  /// [history] with [title]/[body] added on top, unless the same alert is
+  /// already there from the last 10 minutes (MQTT QoS 1 and the outbox can
+  /// redeliver). Capped at [historyMax].
+  @visibleForTesting
+  static List<Map<String, dynamic>> appendAlert(
+    List<Map<String, dynamic>> history, {
+    required String title,
+    required String body,
+    String? tripId,
+    required DateTime now,
+  }) {
+    final duplicate = history.any(
+      (a) =>
+          a['body'] == body &&
+          now
+                  .difference(
+                    DateTime.tryParse(a['at']?.toString() ?? '') ?? DateTime(0),
+                  )
+                  .inMinutes <
+              10,
+    );
+    if (duplicate) return history;
+    return [
+      {
+        'title': title,
+        'body': body,
+        'tripId': tripId,
+        'at': now.toIso8601String(),
+        'read': false,
+      },
+      ...history,
+    ].take(historyMax).toList();
+  }
+
+  Future<void> _record(String title, String body, String? tripId) async {
+    if (body.isEmpty) return;
+    final history = await alertHistory();
+    final updated = appendAlert(
+      history,
+      title: title,
+      body: body,
+      tripId: tripId,
+      now: DateTime.now(),
+    );
+    if (!identical(updated, history)) await _saveHistory(updated);
+  }
+
   String? _subscribedTopic;
 
   static const String _eventType = 'student_status';
+  static const String _alertType = 'trip_alert';
 
   /// MQTT topic a guardian listens on / a driver publishes to for a phone.
   static String topicForPhone(String guardianPhone) {
@@ -76,6 +165,22 @@ class GuardianTripNotificationService {
     };
   }
 
+  /// Payload for a driver's broadcast to every guardian on a trip (traffic
+  /// delay, running late, custom message), sent to each guardian's topic.
+  static Map<String, dynamic> buildAlertPayload({
+    required String title,
+    required String message,
+    String? tripId,
+  }) {
+    return {
+      'event': _alertType,
+      'title': title,
+      'message': message,
+      'tripId': tripId,
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
   /// Start listening for [guardianPhone]'s student updates. Idempotent; when
   /// the phone changes it re-subscribes to the new topic.
   Future<void> start(String guardianPhone) async {
@@ -90,6 +195,9 @@ class GuardianTripNotificationService {
     // MqttService keeps the callback registered even if this first connect
     // fails, and subscribes it once a reconnect succeeds.
     _subscribedTopic = topic;
+    unreadAlerts.value = (await alertHistory())
+        .where((a) => a['read'] != true)
+        .length;
     try {
       await _mqtt.subscribe(topic, _onMessage);
       if (kDebugMode) {
@@ -117,6 +225,17 @@ class GuardianTripNotificationService {
       final decoded = jsonDecode(message);
       if (decoded is! Map) return;
       final data = Map<String, dynamic>.from(decoded);
+      if (data['event'] == _alertType) {
+        unawaited(
+          _record(
+            data['title']?.toString() ?? '',
+            data['message']?.toString() ?? '',
+            data['tripId']?.toString(),
+          ),
+        );
+        _showAlert(data);
+        return;
+      }
       if (data['event'] != _eventType) return;
 
       final status = data['status']?.toString() ?? '';
@@ -135,6 +254,15 @@ class GuardianTripNotificationService {
             DateTime.now(),
       );
 
+      if (kDebugMode) {
+        print('📬 Guardian MQTT: ${event.studentName} ${event.status}');
+      }
+      final text = describe(
+        status: event.status,
+        studentName: event.studentName,
+        vehicleNumber: event.vehicleNumber,
+      );
+      if (text != null) unawaited(_record(text.title, text.body, event.tripId));
       _showNotification(event);
       _controller.add(event);
     } catch (e) {
@@ -199,15 +327,27 @@ class GuardianTripNotificationService {
     return true;
   }
 
-  Future<void> _showNotification(GuardianStudentStatusEvent e) async {
-    // With Firebase active (Android), the OS already shows the push copy
-    // while backgrounded, and a system notification can't be de-duped.
-    final backgrounded =
-        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
-    if (backgrounded &&
+  Future<void> _showAlert(Map<String, dynamic> data) async {
+    final title = data['title']?.toString() ?? '';
+    final body = data['message']?.toString() ?? '';
+    if (kDebugMode) print('📬 Guardian MQTT alert: $title');
+    // Android gets the driver's push copy of this alert.
+    if (body.isEmpty ||
         _notifications.currentBackend == NotificationBackend.firebase) {
       return;
     }
+    await showOnce(
+      title: title,
+      body: body,
+      payload: jsonEncode({'type': 'trip_update', 'trip_id': data['tripId']}),
+    );
+  }
+
+  Future<void> _showNotification(GuardianStudentStatusEvent e) async {
+    // With Firebase active (Android) every alert also arrives as a push —
+    // the backend's own for single pick/drop, the driver app's otherwise —
+    // worded differently from ours, so showing the MQTT copy would double it.
+    if (_notifications.currentBackend == NotificationBackend.firebase) return;
 
     final text = describe(
       status: e.status,

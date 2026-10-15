@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
 import '../api_exceptions.dart';
 import '../endpoints.dart';
 import '../../models/master_trip.dart';
 import '../../utils/buffer_manager.dart';
 import 'bus_service.dart';
+import 'student_service.dart' show StudentService;
 
 /// Trip Service - Handles trip-related API calls with fallback buffers
 class TripService {
@@ -65,12 +67,14 @@ class TripService {
   }
 
   /// Get active trip with buffer fallback
-  /// GET /api/trips/get/student/active/trip?guardianPhone={phone}
+  /// GET /api/trips/get/student/active/trip?studentId={id}&guardianPhone={phone}
   ///
-  /// The endpoint is guardian-only: it rejects any call without
-  /// `guardianPhone` with a 400. Callers that have no phone (drivers) skip the
-  /// request entirely and read the buffer, which is kept current by
-  /// [cacheActiveTrip].
+  /// The endpoint is guardian-only (400 without `guardianPhone`) and answers
+  /// `[]` unless `studentId` is also given; it then lists every run that
+  /// child was on, the running one flagged `isTripActive` and not completed.
+  /// So the guardian's children are queried one by one. Callers that have no
+  /// phone (drivers) skip the request and read the buffer, which is kept
+  /// current by [cacheActiveTrip].
   Future<Trip?> getActiveTrip({String? guardianPhone}) async {
     if (guardianPhone == null || guardianPhone.isEmpty) {
       debugPrint('📡 No guardianPhone - reading active trip from buffer');
@@ -78,90 +82,61 @@ class TripService {
     }
 
     try {
-      final queryParams = <String, String>{'guardianPhone': guardianPhone};
+      final running = (await getGuardianRunRows(guardianPhone))
+          .where(
+            (r) => r['isTripActive'] == true && r['isTripCompleted'] != true,
+          )
+          .toList();
 
-      debugPrint(
-        '📡 Fetching active trip from: ${Endpoints.getStudentActiveTrip}',
-      );
-      debugPrint('📡 Query params: $queryParams');
-
-      final response = await _apiClient.get(
-        Endpoints.getStudentActiveTrip,
-        queryParams: queryParams,
-      );
-
-      debugPrint('📡 Active trip response: $response');
-
-      // Handle case where response is an empty array (no active trip)
-      if (response is List) {
-        if (response.isEmpty) {
-          debugPrint('⚠️ Empty array response - no active trip');
-          return null;
-        }
-        // If array has data, use first element
-        final trip = Trip.fromJson(response.first as Map<String, dynamic>);
-        debugPrint(
-          '✅ Active trip fetched from array: ${trip.id} - ${trip.routeName}',
-        );
-        await _buffer.saveBuffer(
-          key: BufferKeys.activeTrip,
-          data: trip,
-          expiration: const Duration(minutes: 5),
-        );
-        return trip;
+      if (running.isEmpty) {
+        debugPrint("⚠️ No running trip for the guardian's children");
+        return null;
       }
 
-      // Handle map response. The API may return the trip object directly
-      // (no `data` wrapper) or wrapped as {"data": {...}}.
-      final map = Map<String, dynamic>.from(response as Map);
-      final dynamic data = map['data'] ?? map;
-
-      // Treat an empty object or one without any trip identifiers as
-      // "no active trip" and fall back to the buffer.
-      final bool hasTrip =
-          data is Map &&
-          data.isNotEmpty &&
-          (data['tripUniqueId'] != null ||
-              data['uniqueTripIdentity'] != null ||
-              data['id'] != null ||
-              data['masterTripId'] != null ||
-              data['route'] != null ||
-              data['tripName'] != null);
-
-      if (!hasTrip) {
-        debugPrint('⚠️ No active trip data in response');
-        // Try to get from buffer
-        final bufferedTrip = await _buffer.getBuffer<Trip>(
-          key: BufferKeys.activeTrip,
-        );
-        if (bufferedTrip != null) {
-          debugPrint('✅ Returning buffered active trip: ${bufferedTrip.id}');
-        }
-        return bufferedTrip;
-      }
-
-      final trip = Trip.fromJson(Map<String, dynamic>.from(data));
+      // Newest run first; its rows are this guardian's children on it.
+      final trip = tripsFromRunRows(running).first;
       debugPrint('✅ Active trip fetched: ${trip.id} - ${trip.routeName}');
-
-      // Save to buffer
       await _buffer.saveBuffer(
         key: BufferKeys.activeTrip,
         data: trip,
         expiration: const Duration(minutes: 5),
       );
-
       return trip;
     } on ApiException catch (e) {
       debugPrint(
         '❌ ApiException fetching active trip: ${e.message} (status: ${e.statusCode})',
       );
-      // Return from buffer on API error
       return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     } catch (e) {
       debugPrint('❌ Error fetching active trip: $e');
-      // Return from buffer on error
       return await _buffer.getBuffer<Trip>(key: BufferKeys.activeTrip);
     }
+  }
+
+  /// Every run row (one per child per run, running and finished) of the
+  /// guardian's children: the guardian's whole trip record on the server.
+  /// GET /api/trips/get/student/active/trip?studentId={id}&guardianPhone=
+  Future<List<Map<String, dynamic>>> getGuardianRunRows(
+    String guardianPhone,
+  ) async {
+    final children = await StudentService().getGuardianStudents();
+    // ponytail: one request per child (the endpoint takes one studentId);
+    // ask the backend for a per-guardian read if families get large.
+    final perChild = await Future.wait(
+      children
+          .map((s) => s.id)
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .map(
+            (id) async => ApiClient.unwrapList(
+              await _apiClient.get(
+                Endpoints.getStudentActiveTrip,
+                queryParams: {'studentId': id, 'guardianPhone': guardianPhone},
+              ),
+            ).whereType<Map<String, dynamic>>(),
+          ),
+    );
+    return perChild.expand((rows) => rows).toList();
   }
 
   /// Overwrite the buffered active trip with locally-updated data so the
@@ -183,6 +158,7 @@ class TripService {
     int? masterTripId,
     String? route,
     String? tripName,
+    String? tripDirection,
     String? driverName,
     String? numberPlate,
     String? driverPhoneNumber,
@@ -191,26 +167,32 @@ class TripService {
     String? attendantProfileImage,
   }) async {
     try {
-      final resolvedMasterTripId =
-          masterTripId ?? int.tryParse(routeId) ?? int.tryParse(vehicleId);
-
-      if (resolvedMasterTripId == null) {
-        throw ApiException(message: 'Master trip ID is required');
+      // Route and vehicle IDs are unrelated to master trip IDs.
+      final resolvedMasterTripId = masterTripId;
+      if (resolvedMasterTripId == null || resolvedMasterTripId <= 0) {
+        throw ApiException(message: 'Select a scheduled trip before starting');
       }
 
+      final routeName = route?.trim() ?? '';
+      final resolvedRoute = routeName.isNotEmpty ? routeName : routeId.trim();
+      if (resolvedRoute.isEmpty) {
+        throw ApiException(message: 'Select a route before starting the trip');
+      }
+
+      final startedAt = DateTime.now();
       final response = await _apiClient.post(
         Endpoints.startTrip,
         body: {
           'masterTripId': resolvedMasterTripId,
           'tripName': tripName ?? 'Trip',
-          'route': route ?? routeId,
+          'route': resolvedRoute,
           'driverName': driverName ?? '',
           'driverPhoneNumber': driverPhoneNumber ?? '',
           'numberPlate': numberPlate ?? vehicleId,
           'attendantName': attendantName ?? '',
           'attendantPhoneNumber': attendantPhoneNumber ?? '',
           'attendantProfileImage': attendantProfileImage ?? '',
-          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'createdAt': startedAt.toUtc().toIso8601String(),
         },
       );
 
@@ -223,8 +205,8 @@ class TripService {
               : resolvedMasterTripId.toString(),
           routeName: tripName ?? route ?? 'Trip',
           routeId: routeId,
-          tripDirection: response['tripDirection']?.toString(),
-          startTime: DateTime.now(),
+          tripDirection: tripDirection,
+          startTime: startedAt,
           status: 'active',
           vehicleId: vehicleId,
           vehicleNumber: numberPlate,
@@ -242,7 +224,7 @@ class TripService {
               '',
           routeName: tripName ?? route ?? 'Trip',
           routeId: routeId,
-          startTime: DateTime.now(),
+          startTime: startedAt,
           status: 'active',
           vehicleId: vehicleId,
           vehicleNumber: numberPlate,
@@ -262,6 +244,12 @@ class TripService {
         trip = Trip.fromJson(Map<String, dynamic>.from(response));
       }
 
+      trip = trip.copyWith(
+        routeName: tripName,
+        tripDirection: trip.tripDirection ?? tripDirection,
+        startTime: startedAt,
+      );
+
       // Keep the master trip id on the trip - it is the join key for the
       // driver-readable server endpoints (master trip students, unique trips).
       if (trip.masterTripId == null) {
@@ -279,7 +267,23 @@ class TripService {
       await _buffer.clearCategory('trips');
 
       return trip;
-    } on ApiException {
+    } on ApiException catch (e) {
+      // The server answers a start on a trip with no students with a bare
+      // 400 "Invalid request", so explain the real cause to the driver.
+      if (e.statusCode == 400 && masterTripId != null && masterTripId > 0) {
+        final students = await getMasterTripStudents(
+          masterTripId,
+          forceRefresh: true,
+        ).catchError((_) => <TripStudent>[]);
+        if (students.isEmpty) {
+          throw ApiException(
+            message:
+                'This trip has no students yet. Add at least one student '
+                'to the trip before starting it.',
+            statusCode: e.statusCode,
+          );
+        }
+      }
       rethrow;
     } catch (e) {
       throw ApiException(message: e.toString());
@@ -305,7 +309,7 @@ class TripService {
 
       final response = await _apiClient.post(
         Endpoints.dropAllStudents,
-        body: _pickDropAllBody(
+        body: await _pickDropAllBody(
           uniqueTripIdentity: tripId,
           latitude: latitude,
           longitude: longitude,
@@ -406,7 +410,10 @@ class TripService {
   /// The single-student pick/drop endpoint requires the student's registration
   /// number, the guardian's phone number and the vehicle number plate. When any
   /// of those are missing we fall back to updating local state only.
-  Future<void> updateStudentStatus({
+  ///
+  /// Returns true when the pick/drop endpoint was called: the backend then
+  /// pushes the guardian itself, so the app mustn't push a second copy.
+  Future<bool> updateStudentStatus({
     required String tripId,
     required String studentId,
     required String status, // 'picked', 'absent', 'dropped'
@@ -418,6 +425,7 @@ class TripService {
     String? numberPlate,
   }) async {
     try {
+      var backendPushed = false;
       final normalizedStatus = StudentPickup.normalizeStatus(status);
       if (normalizedStatus == 'absent') {
         await _apiClient.post(
@@ -441,6 +449,7 @@ class TripService {
             'updating local state only.',
           );
         } else {
+          final (lat, lng) = await _orLastKnownPosition(latitude, longitude);
           await _apiClient.post(
             Endpoints.pickDropStudent,
             body: buildPickSingleStudentBody(
@@ -449,10 +458,11 @@ class TripService {
               guardianPhoneNumber: phone,
               numberPlate: plate,
               isDropping: normalizedStatus == 'dropped',
-              latitude: latitude ?? 0,
-              longitude: longitude ?? 0,
+              latitude: lat,
+              longitude: lng,
             ),
           );
+          backendPushed = true;
         }
       } else {
         debugPrint(
@@ -462,6 +472,7 @@ class TripService {
 
       // Clear trip details buffer to force refresh
       await _buffer.clearBuffer(BufferKeys.tripDetails(tripId));
+      return backendPushed;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -485,7 +496,7 @@ class TripService {
       );
       await _apiClient.post(
         Endpoints.pickAllStudents,
-        body: _pickDropAllBody(
+        body: await _pickDropAllBody(
           uniqueTripIdentity: tripId,
           latitude: latitude,
           longitude: longitude,
@@ -517,7 +528,7 @@ class TripService {
       );
       await _apiClient.post(
         Endpoints.dropAllStudents,
-        body: _pickDropAllBody(
+        body: await _pickDropAllBody(
           uniqueTripIdentity: tripId,
           latitude: latitude,
           longitude: longitude,
@@ -686,6 +697,125 @@ class TripService {
       fallbackData: [],
       cacheDuration: const Duration(minutes: 5),
     );
+  }
+
+  /// Every run of a master trip, as ONE summary row per run (only one of its
+  /// students). Use [getRunRows] for a run's full roster. Not buffered.
+  /// GET /api/trips/get/unique/trips?masterTripId={id}
+  Future<List<Map<String, dynamic>>> getTripRunRows(int masterTripId) async {
+    final response = await _apiClient.get(
+      Endpoints.getUniqueTrips,
+      queryParams: {'masterTripId': masterTripId.toString()},
+    );
+    return ApiClient.unwrapList(
+      response,
+    ).whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// Every student row of one run, with the real pick/drop state and
+  /// `tripCompletedAt`. The roster is fixed when the run starts.
+  /// GET /api/trips/get/unique/trips/from/trip?tripUniqueIdentity={id}
+  Future<List<Map<String, dynamic>>> getRunRows(
+    String tripUniqueIdentity,
+  ) async {
+    final response = await _apiClient.get(
+      Endpoints.getUniqueTripsFromTrip,
+      queryParams: {'tripUniqueIdentity': tripUniqueIdentity},
+    );
+    return ApiClient.unwrapList(
+      response,
+    ).whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// The server keeps one row per student per run, keyed by
+  /// `tripUniqueIdentity`; fold each run's rows back into a single [Trip].
+  static List<Trip> tripsFromRunRows(
+    Iterable<Map<String, dynamic>> rows, {
+    MasterTrip? masterTrip,
+  }) {
+    final runs = <String, List<Map<String, dynamic>>>{};
+    for (final row in rows) {
+      final id = row['tripUniqueIdentity']?.toString() ?? '';
+      if (id.isNotEmpty) runs.putIfAbsent(id, () => []).add(row);
+    }
+
+    final trips = runs.entries.map((run) {
+      final rows = run.value;
+      final first = rows.first;
+      DateTime? parse(Object? value) =>
+          value == null ? null : DateTime.tryParse(value.toString())?.toLocal();
+
+      final starts = rows.map((r) => parse(r['createdAt'])).nonNulls.toList()
+        ..sort();
+      final isCancelled = rows.any((r) => r['isTripCancelled'] == true);
+      final isCompleted = rows.every(
+        (r) => r['isTripCompleted'] == true || r['isTripActive'] == false,
+      );
+      // tripCompletedAt holds a placeholder until the run is really ended.
+      final ends = isCompleted
+          ? (rows.map((r) => parse(r['tripCompletedAt'])).nonNulls.toList()
+              ..sort())
+          : const <DateTime>[];
+      final direction = first['tripDirection']?.toString() ?? '';
+      final plate = first['numberPlate']?.toString() ?? '';
+
+      return Trip(
+        id: run.key,
+        routeName:
+            first['masterTripName']?.toString() ??
+            masterTrip?.tripName ??
+            first['route']?.toString() ??
+            'Trip',
+        routeId: first['route']?.toString() ?? '',
+        masterTripId: Trip._parseInt(first['masterTripId']) ?? masterTrip?.id,
+        tripDirection: direction.isNotEmpty
+            ? direction
+            : masterTrip?.tripDirection,
+        startTime: starts.isNotEmpty ? starts.first : DateTime.now(),
+        endTime: ends.isNotEmpty ? ends.last : null,
+        status: isCancelled
+            ? 'cancelled'
+            : (isCompleted ? 'completed' : 'active'),
+        vehicleId: plate,
+        vehicleNumber: plate.isEmpty ? null : plate,
+        students: rows.map(studentFromRunRow).toList(),
+        stops: [],
+        driverPhone: Trip._nonEmpty(first['driverPhoneNumber']),
+        driverName: Trip._nonEmpty(first['driverName']),
+      );
+    }).toList();
+
+    trips.sort((a, b) => b.startTime.compareTo(a.startTime));
+    return trips;
+  }
+
+  /// Run rows carry placeholder pick/drop times even when the event never
+  /// happened, and mark a skipped student with `isStudentNotPicked`.
+  /// Drop-all also flags absent students as dropped, so a not-picked
+  /// student stays absent.
+  static StudentPickup studentFromRunRow(Map<String, dynamic> row) {
+    final json = Map<String, dynamic>.from(row);
+    final picked = row['isStudentPicked'] == true;
+    // Ending a trip is drop-all, which flags every row dropped at the end
+    // time, boarded or not. A drop stamped with the end time on a student
+    // never picked is that sweep, not a real drop.
+    if (!picked &&
+        row['isStudentDropped'] == true &&
+        row['dropTime'] != null &&
+        row['dropTime'] == row['tripCompletedAt']) {
+      json['isStudentDropped'] = false;
+    }
+    if (!picked) json.remove('pickedTime');
+    if (json['isStudentDropped'] != true) json.remove('dropTime');
+    final student = StudentPickup.fromJson(json);
+    if (row['isStudentNotPicked'] == true && !picked) {
+      final reason = row['notPickedReason']?.toString() ?? '';
+      return student.copyWith(
+        status: 'absent',
+        notes: reason.isEmpty ? null : reason,
+      );
+    }
+    return student;
   }
 
   /// Get guardians of students in a master trip (for drivers)
@@ -1049,6 +1179,9 @@ class TripService {
     // Try to get cached data first (as List<MasterTrip> since that's what we store)
     final cachedTrips = await _buffer.getBuffer<List<MasterTrip>>(
       key: bufferKey,
+      decode: (json) => (json as List)
+          .map((e) => MasterTrip.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
     );
 
     // Fetch fresh data, joining an in-flight request if one is already running
@@ -1154,18 +1287,41 @@ class TripService {
     };
   }
 
-  Map<String, dynamic> _pickDropAllBody({
+  Future<Map<String, dynamic>> _pickDropAllBody({
     required String uniqueTripIdentity,
     double latitude = 0,
     double longitude = 0,
     required bool isDroppingAll,
-  }) {
+  }) async {
+    final (lat, lng) = await _orLastKnownPosition(latitude, longitude);
     return buildPickDropAllBody(
       uniqueTripIdentity: uniqueTripIdentity,
-      latitude: latitude,
-      longitude: longitude,
+      latitude: lat,
+      longitude: lng,
       isDroppingAll: isDroppingAll,
     );
+  }
+
+  /// Screens often have no GPS fix yet (or don't pass one) and send 0,0,
+  /// which records the event in the Gulf of Guinea. The OS's last fix is
+  /// close enough.
+  static Future<(double, double)> _orLastKnownPosition(
+    double? latitude,
+    double? longitude,
+  ) async {
+    if (latitude != null &&
+        longitude != null &&
+        latitude != 0 &&
+        longitude != 0) {
+      return (latitude, longitude);
+    }
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return (last.latitude, last.longitude);
+    } catch (_) {
+      // No permission / no fix: fall through to what we were given.
+    }
+    return (latitude ?? 0, longitude ?? 0);
   }
 
   @visibleForTesting
@@ -1187,7 +1343,8 @@ class TripService {
 
   /// Body for POST /api/trips/pick/drop/student ([PickSingleStudentModel]).
   ///
-  /// `action` is `picked` / `dropped`.
+  /// `action` must be exactly `Pick` or `Drop`: the server matches `Pick`
+  /// case-sensitively and records anything else (e.g. `picked`) as a drop.
   @visibleForTesting
   static Map<String, dynamic> buildPickSingleStudentBody({
     required String uniqueTripIdentity,
@@ -1203,7 +1360,7 @@ class TripService {
       'studentReg': studentReg,
       'guardianPhoneNumber': guardianPhoneNumber,
       'numberPlate': numberPlate,
-      'action': isDropping ? 'dropped' : 'picked',
+      'action': isDropping ? 'Drop' : 'Pick',
       'latitude': latitude,
       'longitude': longitude,
     };
@@ -1242,6 +1399,9 @@ class Trip {
   final double? distance;
   final double? fare;
   final String? notes;
+  /// Set on the guardian's view (run rows carry it); chat target.
+  final String? driverPhone;
+  final String? driverName;
 
   Trip({
     required this.id,
@@ -1259,6 +1419,8 @@ class Trip {
     this.distance,
     this.fare,
     this.notes,
+    this.driverPhone,
+    this.driverName,
   });
 
   Trip copyWith({
@@ -1277,6 +1439,8 @@ class Trip {
     double? distance,
     double? fare,
     String? notes,
+    String? driverPhone,
+    String? driverName,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -1294,6 +1458,8 @@ class Trip {
       distance: distance ?? this.distance,
       fare: fare ?? this.fare,
       notes: notes ?? this.notes,
+      driverPhone: driverPhone ?? this.driverPhone,
+      driverName: driverName ?? this.driverName,
     );
   }
 
@@ -1350,7 +1516,14 @@ class Trip {
       distance: (json['distance'] as num?)?.toDouble(),
       fare: (json['fare'] as num?)?.toDouble(),
       notes: json['notes'],
+      driverPhone: _nonEmpty(json['driverPhoneNumber']),
+      driverName: _nonEmpty(json['driverName']),
     );
+  }
+
+  static String? _nonEmpty(Object? v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
   }
 
   Map<String, dynamic> toJson() {
@@ -1370,6 +1543,8 @@ class Trip {
       'distance': distance,
       'fare': fare,
       'notes': notes,
+      'driverPhoneNumber': driverPhone,
+      'driverName': driverName,
     };
   }
 
@@ -1377,6 +1552,12 @@ class Trip {
   bool get isCompleted => status == 'completed';
 
   int get pickedCount => students.where((s) => s.status == 'picked').length;
+
+  /// Students who got on the bus at some point, including those since
+  /// dropped off. Use this for finished trips, where [pickedCount] is 0.
+  int get pickedUpCount => students
+      .where((s) => s.status == 'picked' || s.status == 'dropped')
+      .length;
   int get absentCount => students.where((s) => s.status == 'absent').length;
   int get pendingCount => students.where((s) => s.status == 'pending').length;
 
@@ -1402,7 +1583,8 @@ class Trip {
     if (value == null) return null;
     if (value is DateTime) return value;
     try {
-      return DateTime.parse(value.toString());
+      // Server times are UTC; screens format hours directly.
+      return DateTime.parse(value.toString()).toLocal();
     } catch (e) {
       debugPrint('Failed to parse date: $value');
       return null;
@@ -1577,7 +1759,8 @@ class StudentPickup {
           json['guardianPhoneNumber'] ??
           json['parent_phone'] ??
           json['parentPhone'],
-      studentRegNumber: json['studentRegNumber']?.toString(),
+      studentRegNumber: (json['studentRegNumber'] ?? json['studentReg'])
+          ?.toString(),
       className: json['classname']?.toString() ?? json['className']?.toString(),
       schoolName:
           json['schoolname']?.toString() ?? json['schoolName']?.toString(),
@@ -1638,6 +1821,20 @@ class StudentPickup {
       _hasValidCoordinate(pickedLatitude, pickedLongitude)
       ? pickedLongitude
       : longitude;
+
+  /// How far along a trip a status is, so merges keep the later one.
+  static int statusRank(String status) {
+    switch (normalizeStatus(status)) {
+      case 'absent':
+        return 1;
+      case 'picked':
+        return 2;
+      case 'dropped':
+        return 3;
+      default:
+        return 0; // pending
+    }
+  }
 
   static String normalizeStatus(String value) {
     switch (value.trim().toLowerCase()) {

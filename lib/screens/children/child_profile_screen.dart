@@ -7,9 +7,11 @@ import '../../api/services/user_service.dart';
 import '../../models/guardian.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
 
-import '../../theme/app_colors.dart';
 class ChildProfileScreen extends StatefulWidget {
   const ChildProfileScreen({super.key});
 
@@ -18,18 +20,17 @@ class ChildProfileScreen extends StatefulWidget {
 }
 
 class _ChildProfileScreenState extends State<ChildProfileScreen> {
-  int _currentIndex = 3;
   String? _childId;
-  
+
   // Student details (may contain more data than the list item)
   api.Student? _studentDetails;
   bool _isLoadingStudent = false;
-  
+
   // Guardians list
   List<Guardian> _guardians = [];
   bool _isLoadingGuardians = false;
   String? _guardiansError;
-  
+
   // User profile for guardian name
   UserProfile? _userProfile;
   bool _isLoadingProfile = false;
@@ -38,9 +39,10 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get child ID from route arguments
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final newChildId = args?['childId'] as String?;
-    
+
     // Only fetch if child ID changed
     if (newChildId != _childId) {
       _childId = newChildId;
@@ -53,7 +55,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   /// Fetch full student details from API
   Future<void> _fetchStudentDetails() async {
     if (_childId == null) return;
-    
+
     setState(() {
       _isLoadingStudent = true;
     });
@@ -61,13 +63,13 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     try {
       final studentService = StudentService();
       final student = await studentService.getStudentById(_childId!);
-      
+
       if (mounted && student != null) {
         setState(() {
           _studentDetails = student;
           _isLoadingStudent = false;
         });
-        
+
         if (kDebugMode) {
           print('📱 ChildProfile: Loaded student details:');
           print('   Name: ${student.name}');
@@ -97,13 +99,13 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     try {
       final userService = UserService();
       final profile = await userService.getProfile();
-      
+
       if (mounted) {
         setState(() {
           _userProfile = profile;
           _isLoadingProfile = false;
         });
-        
+
         if (kDebugMode) {
           print('📱 ChildProfile: Loaded user profile:');
           print('   Name: ${profile.name}');
@@ -125,7 +127,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   /// Fetch guardians for the current student
   Future<void> _fetchGuardians() async {
     if (_childId == null) return;
-    
+
     setState(() {
       _isLoadingGuardians = true;
       _guardiansError = null;
@@ -134,13 +136,13 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     try {
       final studentService = StudentService();
       final guardians = await studentService.getStudentGuardians(_childId!);
-      
+
       if (mounted) {
         setState(() {
           _guardians = guardians;
           _isLoadingGuardians = false;
         });
-        
+
         if (kDebugMode) {
           print('📱 ChildProfile: Loaded ${guardians.length} guardians');
           for (final g in guardians) {
@@ -167,7 +169,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     if (_studentDetails != null && _studentDetails!.id == _childId) {
       return _studentDetails;
     }
-    
+
     // Fall back to the list data from provider
     if (_childId != null) {
       try {
@@ -179,7 +181,7 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
         return null;
       }
     }
-    
+
     return provider.apiStudents.isNotEmpty ? provider.apiStudents.first : null;
   }
 
@@ -189,18 +191,18 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     if (child.guardianName != null && child.guardianName!.isNotEmpty) {
       return child.guardianName;
     }
-    
+
     // 2. Try user profile (current logged-in user is the guardian)
     if (_userProfile != null && _userProfile!.name.isNotEmpty) {
       return _userProfile!.name;
     }
-    
+
     // 3. Try AuthProvider
     final authProvider = context.read<AuthProvider>();
     if (authProvider.userName != null && authProvider.userName!.isNotEmpty) {
       return authProvider.userName;
     }
-    
+
     return null;
   }
 
@@ -210,494 +212,353 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     if (child.guardianPhone != null && child.guardianPhone!.isNotEmpty) {
       return child.guardianPhone;
     }
-    
+
     // 2. Try user profile
     if (_userProfile != null && _userProfile!.phone.isNotEmpty) {
       return _userProfile!.phone;
     }
-    
+
     // 3. Try AuthProvider
     final authProvider = context.read<AuthProvider>();
     if (authProvider.userPhone != null && authProvider.userPhone!.isNotEmpty) {
       return authProvider.userPhone;
     }
-    
+
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    
-    // Get the student to display
     final child = _getDisplayStudent(provider);
-    
-    // Show loading if no child data
-    if (child == null) {
-      return MainScaffold(
-        title: 'Child Profile',
-        showBackButton: true,
-        showBottomNav: true,
-        bottomNavIndex: _currentIndex,
-        onBottomNavTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/dashboard');
-          }
-        },
-        body: const Center(
-          child: CircularProgressIndicator(
-            color: AppPalette.emerald,
-          ),
-        ),
-      );
-    }
 
     return MainScaffold(
       title: 'Child Profile',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: _currentIndex,
-      onBottomNavTap: (index) {
-        setState(() => _currentIndex = index);
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
-      },
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _fetchStudentDetails();
-          await _fetchGuardians();
-          await _fetchUserProfile();
-        },
-        color: AppPalette.emerald,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              // Profile Card
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: provider.cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    // Avatar
-                    Stack(
-                      children: [
-                        _buildAvatar(child.photo),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppPalette.emerald,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: provider.cardColor, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Name
-                    Text(
-                      child.name,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: provider.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-
-                    // School
-                    Text(
-                      child.schoolName ?? 'No School',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppPalette.emerald,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-
-                    // Class
-                    Text(
-                      child.className,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: provider.textMutedColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Guardians Information
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: provider.cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Guardians',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: provider.textColor,
-                          ),
-                        ),
-                        if (_isLoadingGuardians || _isLoadingStudent || _isLoadingProfile)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppPalette.emerald,
-                            ),
-                          )
-                        else if (_guardians.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppPalette.emerald.withAlpha(30),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${_guardians.length}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppPalette.emerald,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Display guardians list
-                    if (_guardiansError != null)
-                      _buildErrorWidget(_guardiansError!)
-                    else if (_guardians.isEmpty && !_isLoadingGuardians)
-                      _buildGuardianFromUserData(child)
-                    else
-                      _buildGuardiansList(),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // School Information
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: provider.cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'School Information',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: provider.textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(context, 'School', child.schoolName ?? 'N/A'),
-                    const Divider(height: 24),
-                    _buildInfoRow(context, 'Class', child.className),
-                    const Divider(height: 24),
-                    _buildInfoRow(context, 'Student ID', 'STU-${child.id.padLeft(4, '0')}'),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Save Changes Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Save Changes',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          AsyncBody(
+            loading: child == null,
+            skeleton: ListView(
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              children: const [
+                AppSkeleton(height: 220, borderRadius: AppRadius.brXl),
+                AppSpacing.vMd,
+                AppSkeleton(height: 140, borderRadius: AppRadius.brLg),
+                AppSpacing.vMd,
+                AppSkeleton(height: 160, borderRadius: AppRadius.brLg),
+              ],
+            ),
+            onRefresh: () async {
+              await _fetchStudentDetails();
+              await _fetchGuardians();
+              await _fetchUserProfile();
+            },
+            child: child == null
+                ? const SizedBox.shrink()
+                : _buildContent(child),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  /// Build the list of guardians
-  Widget _buildGuardiansList() {
-    return Column(
+  Widget _buildContent(api.Student child) {
+    final c = context.colors;
+    final busy = _isLoadingGuardians || _isLoadingStudent || _isLoadingProfile;
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        ..._guardians.asMap().entries.map((entry) {
-          final index = entry.key;
-          final guardian = entry.value;
-          final isLast = index == _guardians.length - 1;
-          
-          return Column(
+        // Profile hero
+        GradientHeroCard(
+          child: Column(
             children: [
-              _buildGuardianItem(guardian),
-              if (!isLast) const Divider(height: 24),
+              Stack(
+                children: [
+                  Hero(
+                    tag: 'child-avatar-${child.id}',
+                    child: AppAvatar(
+                      imageUrl: _validPhoto(child.photo),
+                      name: child.name,
+                      size: 100,
+                      borderColor: Colors.white,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              AppSpacing.vMd,
+              Text(
+                child.name,
+                textAlign: TextAlign.center,
+                style: context.text.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              AppSpacing.vXs,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xxs,
+                children: [
+                  StatusPill(
+                    label: child.schoolName ?? 'No School',
+                    color: Colors.white,
+                    icon: Icons.school_rounded,
+                    dense: true,
+                  ),
+                  if (child.className.isNotEmpty)
+                    StatusPill(
+                      label: child.className,
+                      color: Colors.white,
+                      showDot: false,
+                      dense: true,
+                    ),
+                ],
+              ),
             ],
-          );
-        }),
+          ),
+        ).enter(),
+        AppSpacing.vMd,
+
+        // Guardians
+        AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(child: SectionHeader(title: 'Guardians')),
+                  AnimatedSwitcher(
+                    duration: AppDuration.medium,
+                    child: busy
+                        ? SizedBox.square(
+                            key: const ValueKey('busy'),
+                            dimension: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: c.brand,
+                            ),
+                          )
+                        : _guardians.isNotEmpty
+                        ? StatusPill(
+                            key: const ValueKey('count'),
+                            label: '${_guardians.length}',
+                            color: c.brand,
+                            showDot: false,
+                            dense: true,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+              AppSpacing.vMd,
+              AnimatedSize(
+                duration: AppDuration.medium,
+                curve: AppCurves.easeOut,
+                alignment: Alignment.topCenter,
+                child: _guardiansError != null
+                    ? _buildErrorWidget()
+                    : _guardians.isEmpty && !_isLoadingGuardians
+                    ? _buildGuardianFromUserData(child)
+                    : _buildGuardiansList(),
+              ),
+            ],
+          ),
+        ).enterList(1),
+        AppSpacing.vMd,
+
+        // School information
+        AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeader(title: 'School Information'),
+              AppSpacing.vMd,
+              _buildInfoRow('School', child.schoolName ?? 'N/A'),
+              const Divider(height: AppSpacing.xl),
+              _buildInfoRow('Class', child.className),
+              const Divider(height: AppSpacing.xl),
+              _buildInfoRow('Student ID', 'STU-${child.id.padLeft(4, '0')}'),
+            ],
+          ),
+        ).enterList(2),
+        AppSpacing.vLg,
       ],
     );
   }
 
-  /// Build a single guardian item
+  /// Only real network URLs are loaded; anything else shows initials.
+  String? _validPhoto(String? url) =>
+      url != null && (url.startsWith('http://') || url.startsWith('https://'))
+      ? url
+      : null;
+
+  Widget _buildGuardiansList() {
+    return Column(
+      children: [
+        for (final (i, guardian) in _guardians.indexed) ...[
+          _buildGuardianItem(guardian).enterList(i),
+          if (i < _guardians.length - 1) const Divider(height: AppSpacing.xl),
+        ],
+      ],
+    );
+  }
+
   Widget _buildGuardianItem(Guardian guardian) {
-    final provider = context.read<AppProvider>();
-    
+    final c = context.colors;
+    final name = guardian.name.isNotEmpty && guardian.name != 'Unknown Guardian'
+        ? guardian.name
+        : 'Guardian';
+    final hasPhone = guardian.phone != null && guardian.phone!.isNotEmpty;
+
     return Row(
       children: [
-        // Guardian avatar/icon
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: guardian.isPrimary 
-                ? AppPalette.emerald.withAlpha(30)
-                : AppPalette.textMutedLight.withAlpha(30),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.person,
-            color: guardian.isPrimary 
-                ? AppPalette.emerald
-                : provider.textMutedColor,
-            size: 24,
-          ),
+        AppAvatar(
+          name: name,
+          size: 44,
+          borderColor: guardian.isPrimary ? c.brand : null,
         ),
-        const SizedBox(width: 12),
-        
-        // Guardian info
+        AppSpacing.hSm,
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
-                      guardian.name.isNotEmpty && guardian.name != 'Unknown Guardian'
-                          ? guardian.name 
-                          : 'Guardian',
-                      style: TextStyle(
-                        fontSize: 14,
+                      name,
+                      style: context.text.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: provider.textColor,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (guardian.isPrimary)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppPalette.emerald.withAlpha(30),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Primary',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: AppPalette.emerald,
-                        ),
-                      ),
+                  if (guardian.isPrimary) ...[
+                    AppSpacing.hXs,
+                    StatusPill(
+                      label: 'Primary',
+                      color: c.brand,
+                      showDot: false,
+                      dense: true,
                     ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 guardian.phone ?? 'No phone number',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: guardian.phone != null && guardian.phone!.isNotEmpty
-                      ? provider.textMutedColor 
-                      : provider.textMutedColor.withAlpha(128),
+                style: context.text.bodySmall?.copyWith(
+                  color: hasPhone ? c.textSecondary : c.textMuted,
                 ),
               ),
-              if (guardian.relationship != null && guardian.relationship!.isNotEmpty) ...[
-                const SizedBox(height: 2),
+              if (guardian.relationship != null &&
+                  guardian.relationship!.isNotEmpty)
                 Text(
                   guardian.relationship!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: provider.textMutedColor.withAlpha(180),
+                  style: context.text.labelSmall?.copyWith(
+                    color: c.textMuted,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
-              ],
             ],
           ),
         ),
-        
-        // Phone action button
-        if (guardian.phone != null && guardian.phone!.isNotEmpty)
+        if (hasPhone)
           IconButton(
             onPressed: () => _callGuardian(guardian.phone!),
-            icon: const Icon(
-              Icons.phone,
-              color: AppPalette.emerald,
-              size: 20,
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
+            tooltip: 'Call',
+            icon: const Icon(Icons.phone_rounded, size: 20),
+            color: c.brand,
+            style: IconButton.styleFrom(backgroundColor: c.brandSoft),
           ),
       ],
     );
   }
 
-  /// Build guardian widget using user data (when no extended guardians API data)
+  /// Guardian row built from student / profile / auth data when the
+  /// guardians API returned nothing.
   Widget _buildGuardianFromUserData(api.Student child) {
     final provider = context.read<AppProvider>();
-    
-    // Get guardian info from available sources
     final guardianName = _getGuardianName(child);
     final guardianPhone = _getGuardianPhone(child);
-    
-    if (kDebugMode) {
-      print('📱 ChildProfile: Building guardian from user data:');
-      print('   guardianName: $guardianName');
-      print('   guardianPhone: $guardianPhone');
-    }
-    
-    // If we have any guardian info, display it
-    if ((guardianName != null && guardianName.isNotEmpty) || 
+
+    if ((guardianName != null && guardianName.isNotEmpty) ||
         (guardianPhone != null && guardianPhone.isNotEmpty)) {
-      final guardian = Guardian.fromStudentGuardian(
-        guardianId: child.guardianId,
-        guardianName: guardianName ?? guardianPhone ?? 'Guardian',
-        guardianPhone: guardianPhone,
-        isPrimary: true,
+      return _buildGuardianItem(
+        Guardian.fromStudentGuardian(
+          guardianId: child.guardianId,
+          guardianName: guardianName ?? guardianPhone ?? 'Guardian',
+          guardianPhone: guardianPhone,
+          isPrimary: true,
+        ),
       );
-      return _buildGuardianItem(guardian);
     }
-    
+
     // Fallback to current user data from provider
     final userName = provider.userData['name'];
     final userPhone = provider.userData['phone'];
-    
     if (userName != null || userPhone != null) {
       return Column(
         children: [
-          _buildInfoRow(context, 'Guardian', userName ?? 'N/A'),
-          const Divider(height: 24),
-          _buildInfoRow(context, 'Phone', userPhone ?? 'N/A'),
+          _buildInfoRow('Guardian', userName ?? 'N/A'),
+          const Divider(height: AppSpacing.xl),
+          _buildInfoRow('Phone', userPhone ?? 'N/A'),
         ],
       );
     }
-    
-    // No guardian data available at all
-    return Center(
-      child: Column(
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 48,
-            color: provider.textMutedColor.withAlpha(128),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No guardian information available',
-            style: TextStyle(
-              fontSize: 14,
-              color: provider.textMutedColor,
-            ),
-          ),
-        ],
-      ),
+
+    return const EmptyState(
+      icon: Icons.people_outline_rounded,
+      title: 'No guardian information available',
+      compact: true,
     );
   }
 
-  /// Build error widget
-  Widget _buildErrorWidget(String error) {
-    final provider = context.read<AppProvider>();
-    
+  Widget _buildErrorWidget() {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
-        color: AppPalette.error.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
+        color: c.error.withValues(alpha: 0.08),
+        borderRadius: AppRadius.brSm,
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: AppPalette.error,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
+          Icon(Icons.error_outline_rounded, color: c.error, size: 20),
+          AppSpacing.hXs,
           Expanded(
             child: Text(
               'Failed to load guardians',
-              style: TextStyle(
-                fontSize: 13,
-                color: provider.textMutedColor,
-              ),
+              style: context.text.bodySmall?.copyWith(color: c.textSecondary),
             ),
           ),
-          TextButton(
-            onPressed: _fetchGuardians,
-            child: const Text(
-              'Retry',
-              style: TextStyle(
-                color: AppPalette.emerald,
-                fontSize: 13,
-              ),
-            ),
-          ),
+          TextButton(onPressed: _fetchGuardians, child: const Text('Retry')),
         ],
       ),
     );
@@ -706,65 +567,30 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   /// Call guardian
   void _callGuardian(String phone) {
     // TODO: Implement phone call using url_launcher
-    if (kDebugMode) {
-      print('📞 Calling guardian: $phone');
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Calling $phone...'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (kDebugMode) debugPrint('📞 Calling guardian: $phone');
+    AppSnackbar.info(context, 'Calling $phone...');
   }
 
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    final provider = context.watch<AppProvider>();
+  Widget _buildInfoRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: TextStyle(
-            fontSize: 14,
-            color: provider.textMutedColor,
+          style: context.text.bodyMedium?.copyWith(
+            color: context.colors.textSecondary,
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: provider.textColor,
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: context.text.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildAvatar(String? photoUrl) {
-    // Check if it's a valid network URL
-    if (photoUrl != null &&
-        photoUrl.isNotEmpty &&
-        (photoUrl.startsWith('http://') || photoUrl.startsWith('https://'))) {
-      return CircleAvatar(
-        radius: 50,
-        backgroundImage: NetworkImage(photoUrl),
-        backgroundColor: AppPalette.emerald.withAlpha(50),
-        onBackgroundImageError: (e, s) {
-          if (kDebugMode) print('⚠️ Failed to load photo: $e');
-        },
-      );
-    }
-
-    // Fallback to default avatar
-    return CircleAvatar(
-      radius: 50,
-      backgroundColor: AppPalette.emerald.withAlpha(50),
-      child: const Icon(
-        Icons.person,
-        color: AppPalette.emerald,
-        size: 40,
-      ),
     );
   }
 }

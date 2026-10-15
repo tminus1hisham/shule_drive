@@ -673,6 +673,36 @@ class LocalDatabaseService {
     return messages;
   }
 
+  /// Messages between [a] and [b] (either direction), oldest first. Matches
+  /// on the participants, not chat_topic, whose format has changed.
+  Future<List<Map<String, dynamic>>> getChatMessagesBetween(
+    String a,
+    String b, {
+    int limit = 200,
+  }) async {
+    final db = await database;
+    return db.query(
+      _chatMessagesTable,
+      where:
+          '(sender_id = ? AND recipient_id = ?) OR '
+          '(sender_id = ? AND recipient_id = ?)',
+      whereArgs: [a, b, b, a],
+      orderBy: 'timestamp ASC',
+      limit: limit,
+    );
+  }
+
+  /// Every chat message newer than [since], oldest first.
+  Future<List<Map<String, dynamic>>> getChatMessagesSince(DateTime since) async {
+    final db = await database;
+    return db.query(
+      _chatMessagesTable,
+      where: 'timestamp >= ?',
+      whereArgs: [since.toIso8601String()],
+      orderBy: 'timestamp ASC',
+    );
+  }
+
   /// Update message status
   Future<void> updateChatMessageStatus(String messageId, String status, {bool synced = true}) async {
     final db = await database;

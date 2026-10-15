@@ -20,6 +20,21 @@ class AutoloadTripsToggle extends StatelessWidget {
     final enabled = provider.autoloadTrips;
     final brand = context.colors.brand;
 
+    // The whole row toggles (and reads as one control), not just the Switch.
+    return MergeSemantics(
+      child: InkWell(
+        onTap: () => provider.setAutoloadTrips(!enabled),
+        child: _row(context, provider, enabled, brand),
+      ),
+    );
+  }
+
+  Widget _row(
+    BuildContext context,
+    AppProvider provider,
+    bool enabled,
+    Color brand,
+  ) {
     return Padding(
       padding:
           padding ??

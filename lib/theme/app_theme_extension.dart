@@ -22,6 +22,7 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.textSecondary,
     required this.textMuted,
     required this.brandGradient,
+    required this.accentGradient,
     required this.shadowSm,
     required this.shadowMd,
     required this.shadowLg,
@@ -42,6 +43,10 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color textSecondary;
   final Color textMuted;
   final Gradient brandGradient;
+
+  /// School-bus amber, for bus / ETA / live moments. Put dark text on it:
+  /// white on amber fails contrast.
+  final Gradient accentGradient;
   final List<BoxShadow> shadowSm;
   final List<BoxShadow> shadowMd;
   final List<BoxShadow> shadowLg;
@@ -65,6 +70,11 @@ class AppColors extends ThemeExtension<AppColors> {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [AppPalette.emerald, AppPalette.emeraldDeep],
+    ),
+    accentGradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [AppPalette.amberBright, AppPalette.amber],
     ),
     // Two layers each: a tight contact shadow plus a soft ambient one, both
     // tinted with brand ink rather than pure black.
@@ -106,6 +116,11 @@ class AppColors extends ThemeExtension<AppColors> {
       end: Alignment.bottomRight,
       colors: [AppPalette.emerald, AppPalette.emeraldDeep],
     ),
+    accentGradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [AppPalette.amberBright, AppPalette.amber],
+    ),
     shadowSm: [
       BoxShadow(color: Color(0x40000000), blurRadius: 2, offset: Offset(0, 1)),
       BoxShadow(color: Color(0x26000000), blurRadius: 8, offset: Offset(0, 2)),
@@ -141,6 +156,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? textSecondary,
     Color? textMuted,
     Gradient? brandGradient,
+    Gradient? accentGradient,
     List<BoxShadow>? shadowSm,
     List<BoxShadow>? shadowMd,
     List<BoxShadow>? shadowLg,
@@ -161,6 +177,7 @@ class AppColors extends ThemeExtension<AppColors> {
       textSecondary: textSecondary ?? this.textSecondary,
       textMuted: textMuted ?? this.textMuted,
       brandGradient: brandGradient ?? this.brandGradient,
+      accentGradient: accentGradient ?? this.accentGradient,
       shadowSm: shadowSm ?? this.shadowSm,
       shadowMd: shadowMd ?? this.shadowMd,
       shadowLg: shadowLg ?? this.shadowLg,
@@ -186,6 +203,7 @@ class AppColors extends ThemeExtension<AppColors> {
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textMuted: Color.lerp(textMuted, other.textMuted, t)!,
       brandGradient: Gradient.lerp(brandGradient, other.brandGradient, t)!,
+      accentGradient: Gradient.lerp(accentGradient, other.accentGradient, t)!,
       shadowSm: BoxShadow.lerpList(shadowSm, other.shadowSm, t)!,
       shadowMd: BoxShadow.lerpList(shadowMd, other.shadowMd, t)!,
       shadowLg: BoxShadow.lerpList(shadowLg, other.shadowLg, t)!,

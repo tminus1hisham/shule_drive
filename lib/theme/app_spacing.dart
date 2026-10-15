@@ -71,6 +71,12 @@ class AppDuration {
   static const Duration fast = Duration(milliseconds: 150);
   static const Duration medium = Duration(milliseconds: 250);
   static const Duration slow = Duration(milliseconds: 400);
+
+  /// Pushed-route transitions.
+  static const Duration page = Duration(milliseconds: 300);
+
+  /// Numbers rolling and progress filling: long enough to read as change.
+  static const Duration count = Duration(milliseconds: 600);
 }
 
 /// Standard animation curves. The built-in `Curves.easeOut*` are too soft;

@@ -10,7 +10,6 @@ import '../../providers/auth_provider.dart';
 import '../../utils/permission_helper.dart';
 import '../../widgets/main_scaffold.dart';
 
-import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../widgets/ui/ui.dart';
@@ -24,8 +23,6 @@ class ManageChildrenScreen extends StatefulWidget {
 
 class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     with SingleTickerProviderStateMixin {
-  int _currentIndex = 3;
-  
   // FAB animation controller
   AnimationController? _fabController;
   bool _isFabExpanded = false;
@@ -60,138 +57,48 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     });
   }
 
-  void _handleNavigation(int index) {
-    if (index == _currentIndex) return; // Already on this tab
-    
-    switch (index) {
-      case 0:
-        // Home/Landing
-        Navigator.pushReplacementNamed(context, '/dashboard');
-        break;
-      case 1:
-        // Chat
-        Navigator.pushNamed(context, '/chat');
-        break;
-      case 2:
-        // Notifications
-        Navigator.pushNamed(context, '/notifications');
-        break;
-      case 3:
-        // Settings/Profile
-        Navigator.pushNamed(context, '/profile');
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final children = provider.apiStudents;
-    final isLoading = provider.isLoading;
-    final errorMessage = provider.errorMessage;
 
     return MainScaffold(
       title: 'My Children',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: _currentIndex,
-      onBottomNavTap: _handleNavigation,
       floatingActionButton: _buildSpeedDialFab(provider),
-      body: RefreshIndicator(
-        onRefresh: () => provider.fetchGuardianStudents(),
-        child: _buildBody(context, provider, children, isLoading, errorMessage),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AppBackdrop()),
+          AsyncBody(
+            loading: provider.isLoading && children.isEmpty,
+            error: children.isEmpty ? provider.errorMessage : null,
+            onRetry: provider.fetchGuardianStudents,
+            isEmpty: children.isEmpty,
+            empty: const EmptyState(
+              icon: Icons.child_care_rounded,
+              title: 'No children added yet',
+              message: 'Tap the + button to add your first child',
+            ),
+            onRefresh: provider.fetchGuardianStudents,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                96, // clear the FAB
+              ),
+              itemCount: children.length,
+              itemBuilder: (context, index) => _buildChildCard(
+                context,
+                provider,
+                children[index],
+              ).enterList(index),
+            ),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildBody(
-    BuildContext context,
-    AppProvider provider,
-    List<api.Student> children,
-    bool isLoading,
-    String? errorMessage,
-  ) {
-    // Show loading
-    if (isLoading && children.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppPalette.emerald),
-      );
-    }
-
-    // Show error
-    if (errorMessage != null && children.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: provider.textMutedColor),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading children',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              errorMessage,
-              style: TextStyle(fontSize: 14, color: provider.textMutedColor),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => provider.fetchGuardianStudents(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Show empty state
-    if (children.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.child_care,
-              size: 80,
-              color: provider.textMutedColor.withAlpha(128),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No children added yet',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: provider.textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap the + button to add your first child',
-              style: TextStyle(fontSize: 14, color: provider.textMutedColor),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Show children list
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: children.length,
-      itemBuilder: (context, index) {
-        final child = children[index];
-        return _buildChildCard(context, provider, child);
-      },
     );
   }
 
@@ -217,79 +124,70 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     );
   }
 
-  /// Build Speed Dial FAB with expandable options
+  /// Speed-dial FAB: Add Child / Add Guardian fan out above it.
   Widget _buildSpeedDialFab(AppProvider provider) {
-    // Ensure controller is initialized
-    if (_fabController == null) {
-      return FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: AppPalette.emerald,
-        child: const Icon(Icons.add),
-      );
-    }
-    
+    final c = context.colors;
+    Widget option(
+      String tag,
+      IconData icon,
+      String label,
+      VoidCallback onTap,
+    ) => Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: FloatingActionButton.extended(
+        heroTag: tag,
+        onPressed: () {
+          _toggleFab();
+          onTap();
+        },
+        backgroundColor: context.scheme.surface,
+        foregroundColor: c.brand,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+      ),
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Secondary option: Add Extended Guardian
         _speedDialOption(
           _isFabExpanded
-              ? Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: FloatingActionButton.extended(
-                    onPressed: () {
-                      _toggleFab();
-                      _showAddExtendedGuardianDialog(context, provider);
-                    },
-                    backgroundColor: AppPalette.emerald.withAlpha(230),
-                    icon: const Icon(Icons.people_outline, size: 20),
-                    label: const Text(
-                      'Add Guardian',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    heroTag: 'addGuardian',
-                  ),
+              ? option(
+                  'addGuardian',
+                  Icons.people_outline_rounded,
+                  'Add Guardian',
+                  () => _showAddExtendedGuardianDialog(context, provider),
                 )
               : const SizedBox.shrink(),
         ),
-        // Primary option: Add Child
         _speedDialOption(
           _isFabExpanded
-              ? Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: FloatingActionButton.extended(
-                    onPressed: () {
-                      _toggleFab();
-                      _showAddChildDialog(context);
-                    },
-                    backgroundColor: AppPalette.emerald,
-                    icon: const Icon(Icons.person_add, size: 20),
-                    label: const Text(
-                      'Add Child',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    heroTag: 'addChild',
-                  ),
+              ? option(
+                  'addChild',
+                  Icons.person_add_rounded,
+                  'Add Child',
+                  () => _showAddChildDialog(context),
                 )
               : const SizedBox.shrink(),
         ),
-        // Main FAB - toggles the menu
         FloatingActionButton(
+          heroTag: 'mainFab',
           onPressed: _toggleFab,
-          backgroundColor: AppPalette.emerald,
+          backgroundColor: c.brand,
+          foregroundColor: context.scheme.onPrimary,
+          tooltip: _isFabExpanded ? 'Close' : 'Add',
           child: AnimatedBuilder(
             animation: _fabController!,
-            builder: (context, child) {
-              return Transform.rotate(
-                angle: AppCurves.easeInOut.transform(_fabController!.value) *
-                    0.785398,
-                child: const Icon(Icons.add, size: 28),
-              );
-            },
+            builder: (context, child) => Transform.rotate(
+              angle:
+                  AppCurves.easeInOut.transform(_fabController!.value) *
+                  0.785398,
+              child: child,
+            ),
+            child: const Icon(Icons.add_rounded, size: 28),
           ),
-          heroTag: 'mainFab',
-        ),
+        ).pop(delay: const Duration(milliseconds: 250)),
       ],
     );
   }
@@ -299,6 +197,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     AppProvider provider,
     api.Student child,
   ) {
+    final c = context.colors;
     return Dismissible(
       key: Key(child.id),
       direction: DismissDirection.endToStart,
@@ -306,41 +205,39 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
         padding: const EdgeInsets.only(right: AppSpacing.lg),
         decoration: BoxDecoration(
-          color: context.colors.error,
+          gradient: LinearGradient(
+            colors: [c.error.withValues(alpha: 0.75), c.error],
+          ),
           borderRadius: AppRadius.brLg,
         ),
         alignment: Alignment.centerRight,
-        child: const Icon(Icons.delete, color: Colors.white),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Remove',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(width: AppSpacing.xs),
+            Icon(Icons.delete_rounded, color: Colors.white),
+          ],
+        ),
       ),
-      confirmDismiss: (direction) async {
-        return await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete Child?'),
-            content: Text('Are you sure you want to remove ${child.name}?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.error,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        );
-      },
+      confirmDismiss: (_) => confirmDialog(
+        context,
+        title: 'Delete Child?',
+        message: 'Are you sure you want to remove ${child.name}?',
+        confirmLabel: 'Delete',
+        icon: Icons.delete_outline_rounded,
+        destructive: true,
+      ),
       onDismissed: (_) async {
         final success = await provider.deleteChildAPI(child.id);
         if (success && context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${child.name} removed')));
+          AppSnackbar.success(context, '${child.name} removed');
         }
       },
       child: Padding(
@@ -353,7 +250,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
             arguments: {'childId': child.id},
           ),
           shadow: const [],
-          border: Border.all(color: context.colors.outline),
+          border: Border.all(color: c.outline),
           padding: const EdgeInsets.all(AppSpacing.sm),
           child: Row(
             children: [
@@ -362,14 +259,22 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    _buildProfileImage(child.photo, provider),
+                    // Flies to the child profile header.
+                    Hero(
+                      tag: 'child-avatar-${child.id}',
+                      child: AppAvatar(
+                        imageUrl: child.photo,
+                        name: child.name,
+                        size: 64,
+                      ),
+                    ),
                     Positioned(
                       right: -2,
                       bottom: -2,
                       child: Container(
                         padding: const EdgeInsets.all(AppSpacing.xxs),
                         decoration: BoxDecoration(
-                          color: context.colors.brand,
+                          color: c.accent,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: context.scheme.surface,
@@ -377,7 +282,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                           ),
                         ),
                         child: const Icon(
-                          Icons.camera_alt,
+                          Icons.camera_alt_rounded,
                           color: Colors.white,
                           size: 12,
                         ),
@@ -401,35 +306,17 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                     Text(
                       child.schoolName ?? 'No School',
                       style: context.text.bodySmall?.copyWith(
-                        color: context.colors.textSecondary,
+                        color: c.textSecondary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     AppSpacing.vXs,
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.route,
-                          size: 14,
-                          color: child.route != null
-                              ? context.colors.brand
-                              : context.colors.textMuted,
-                        ),
-                        AppSpacing.hXxs,
-                        Expanded(
-                          child: Text(
-                            child.route ?? 'No route assigned',
-                            style: context.text.labelMedium?.copyWith(
-                              color: child.route != null
-                                  ? context.colors.brand
-                                  : context.colors.textMuted,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                    StatusPill(
+                      label: child.route ?? 'No route assigned',
+                      color: child.route != null ? c.brand : c.textMuted,
+                      icon: Icons.route_rounded,
+                      dense: true,
                     ),
                   ],
                 ),
@@ -440,12 +327,10 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
                   tooltip: 'Guardian contact',
                   onPressed: () => _showGuardianPhone(context, child),
                   icon: const Icon(Icons.phone_outlined, size: 20),
-                  color: context.colors.brand,
-                  style: IconButton.styleFrom(
-                    backgroundColor: context.colors.brandSoft,
-                  ),
+                  color: c.brand,
+                  style: IconButton.styleFrom(backgroundColor: c.brandSoft),
                 ),
-              Icon(Icons.chevron_right, color: context.colors.textMuted),
+              Icon(Icons.chevron_right_rounded, color: c.textMuted),
             ],
           ),
         ),
@@ -453,7 +338,7 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     );
   }
 
-  /// Show dialog to add extended guardian
+  /// Show sheet to add an extended guardian
   void _showAddExtendedGuardianDialog(
     BuildContext context,
     AppProvider provider,
@@ -462,180 +347,64 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
     final phoneController = TextEditingController();
     final relationshipController = TextEditingController();
 
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        decoration: BoxDecoration(
-          color: provider.backgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle bar
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppPalette.outlineLight,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Title
-                Text(
-                  'Add Extended Guardian',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: provider.textColor,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Add another guardian who can track and manage all your children',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: provider.textMutedColor,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Name Field
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Full Name',
-                    hintText: 'Enter guardian name',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppPalette.outlineLight),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppPalette.emerald),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Phone Field
-                TextField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: 'Phone Number',
-                    hintText: 'e.g., +254 712 345 678',
-                    prefixIcon: const Icon(Icons.phone_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppPalette.outlineLight),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppPalette.emerald),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Relationship Field
-                TextField(
-                  controller: relationshipController,
-                  decoration: InputDecoration(
-                    labelText: 'Relationship (Optional)',
-                    hintText: 'e.g., Father, Aunt, Uncle',
-                    prefixIcon: const Icon(Icons.people_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: AppPalette.outlineLight),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppPalette.emerald),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Add Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      if (nameController.text.isNotEmpty &&
-                          phoneController.text.isNotEmpty) {
-                        _addExtendedGuardian(
-                          context: context,
-                          name: nameController.text.trim(),
-                          phone: phoneController.text.trim(),
-                          relationship: relationshipController.text.trim(),
-                        );
-                        Navigator.pop(context);
-                      }
-                    },
-                    icon: const Icon(Icons.person_add),
-                    label: const Text(
-                      'Add Guardian',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppPalette.emerald,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Cancel Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(
-                        color: provider.textMutedColor,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Add Extended Guardian',
+            subtitle:
+                'Add another guardian who can track and manage all your '
+                'children',
           ),
-        ),
+          AppSpacing.vLg,
+          AppTextField(
+            controller: nameController,
+            label: 'Full Name',
+            hint: 'Enter guardian name',
+            prefixIcon: Icons.person_outline_rounded,
+          ).enterList(0),
+          AppSpacing.vMd,
+          AppTextField(
+            controller: phoneController,
+            label: 'Phone Number',
+            hint: 'e.g., +254 712 345 678',
+            prefixIcon: Icons.phone_outlined,
+            keyboardType: TextInputType.phone,
+          ).enterList(1),
+          AppSpacing.vMd,
+          AppTextField(
+            controller: relationshipController,
+            label: 'Relationship (Optional)',
+            hint: 'e.g., Father, Aunt, Uncle',
+            prefixIcon: Icons.people_outline_rounded,
+          ).enterList(2),
+          AppSpacing.vXl,
+          AppButton(
+            label: 'Add Guardian',
+            icon: Icons.person_add_rounded,
+            onPressed: () {
+              if (nameController.text.isNotEmpty &&
+                  phoneController.text.isNotEmpty) {
+                _addExtendedGuardian(
+                  context: context,
+                  name: nameController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  relationship: relationshipController.text.trim(),
+                );
+                Navigator.pop(context);
+              }
+            },
+          ),
+          AppSpacing.vXs,
+          AppButton(
+            label: 'Cancel',
+            variant: AppButtonVariant.tertiary,
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
       ),
     );
   }
@@ -649,177 +418,85 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
   }) {
     // TODO: Connect to your API to add extended guardian
     // For now, show a success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Extended guardian "$name" added successfully'),
-        backgroundColor: AppPalette.emerald,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        margin: const EdgeInsets.all(16),
-      ),
+    AppSnackbar.success(
+      context,
+      'Extended guardian "$name" added successfully',
     );
   }
 
-  /// Build profile image with placeholder
-  Widget _buildProfileImage(String? photoUrl, AppProvider provider) {
-    // Default placeholder widget
-    Widget placeholder = Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppPalette.emerald.withAlpha(50),
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(Icons.person, color: AppPalette.emerald, size: 32),
-    );
-
-    if (photoUrl == null || photoUrl.isEmpty) {
-      return ClipOval(child: placeholder);
-    }
-
-    return ClipOval(
-      child: Image.network(
-        photoUrl,
-        width: 64,
-        height: 64,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: AppPalette.emerald.withAlpha(30),
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(AppPalette.emerald),
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return placeholder;
-        },
-      ),
-    );
-  }
-
-  /// Show guardian phone number dialog
+  /// Show guardian phone number sheet
   void _showGuardianPhone(BuildContext context, api.Student child) {
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
+      builder: (context) {
+        final c = context.colors;
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppPalette.outlineLight,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildProfileImage(child.photo, context.read<AppProvider>()),
-            const SizedBox(height: 16),
-            Text(
-              child.name,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
+            AppAvatar(imageUrl: child.photo, name: child.name, size: 72).pop(),
+            AppSpacing.vMd,
+            Text(child.name, style: context.text.headlineSmall),
+            AppSpacing.vXxs,
             Text(
               'Guardian Contact',
-              style: TextStyle(fontSize: 14, color: AppPalette.textSecondaryLight),
+              style: context.text.bodyMedium?.copyWith(color: c.textSecondary),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppPalette.emerald.withAlpha(20),
-                borderRadius: BorderRadius.circular(12),
-              ),
+            AppSpacing.vMd,
+            AppCard(
+              color: c.brandSoft,
+              shadow: const [],
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.phone, color: AppPalette.emerald),
-                  const SizedBox(width: 12),
+                  Icon(Icons.phone_rounded, color: c.brand),
+                  AppSpacing.hSm,
                   Text(
                     child.guardianPhone!,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: AppPalette.emerald,
+                    style: context.text.titleMedium?.copyWith(
+                      color: c.onBrandSoft,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
               ),
+            ).enter(delay: const Duration(milliseconds: 80)),
+            AppSpacing.vXl,
+            AppButton(
+              label: 'Call Guardian',
+              icon: Icons.call_rounded,
+              onPressed: () => _callGuardian(child.guardianPhone!),
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: () => _callGuardian(child.guardianPhone!),
-                icon: const Icon(Icons.call),
-                label: const Text('Call Guardian'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.emerald,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
+            AppSpacing.vXs,
+            AppButton(
+              label: 'Close',
+              variant: AppButtonVariant.tertiary,
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
   /// Call guardian using device's phone app
   Future<void> _callGuardian(String phone) async {
-    if (kDebugMode) {
-      print('📞 Attempting to call guardian: $phone');
-    }
+    if (kDebugMode) debugPrint('📞 Attempting to call guardian: $phone');
 
     // Clean up the phone number (remove spaces, dashes, parentheses, etc.)
     final cleanPhone = phone.replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
-    
+
     // Ensure phone starts with + for international format, or add country code if needed
-    final formattedPhone = cleanPhone.startsWith('+') 
-        ? cleanPhone 
-        : (cleanPhone.startsWith('0') 
-            ? '+254${cleanPhone.substring(1)}'  // Convert 0... to +254... for Kenya
-            : (cleanPhone.startsWith('254') 
-                ? '+$cleanPhone' 
-                : '+254$cleanPhone'));
-    
-    // Create tel: URI
+    final formattedPhone = cleanPhone.startsWith('+')
+        ? cleanPhone
+        : (cleanPhone.startsWith('0')
+              ? '+254${cleanPhone.substring(1)}' // Convert 0... to +254... for Kenya
+              : (cleanPhone.startsWith('254')
+                    ? '+$cleanPhone'
+                    : '+254$cleanPhone'));
+
     final uri = Uri(scheme: 'tel', path: formattedPhone);
-    
-    if (kDebugMode) {
-      print('📞 Formatted phone: $formattedPhone');
-      print('📞 Launch URI: $uri');
-    }
-    
+
     try {
       // Try to launch directly without canLaunchUrl check
       // On Android 11+, canLaunchUrl may return false even when dialer is available
@@ -827,34 +504,21 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
         uri,
         mode: LaunchMode.externalApplication,
       );
-      
+
       if (!launched && mounted) {
         // If external application mode fails, try platform default
         final fallbackLaunched = await launchUrl(uri);
-        
+
         if (!fallbackLaunched && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not open phone dialer. Please check your phone app.'),
-              backgroundColor: AppPalette.error,
-              duration: Duration(seconds: 3),
-            ),
+          AppSnackbar.error(
+            context,
+            'Could not open phone dialer. Please check your phone app.',
           );
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('❌ Error launching phone dialer: $e');
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening dialer: $e'),
-            backgroundColor: AppPalette.error,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      if (kDebugMode) debugPrint('❌ Error launching phone dialer: $e');
+      if (mounted) AppSnackbar.error(context, 'Error opening dialer: $e');
     }
   }
 
@@ -868,138 +532,58 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
   }
 
   void _showImagePickerOptions(BuildContext context, api.Student child) {
-    final provider = context.read<AppProvider>();
-    final isDarkMode = provider.isDarkMode;
-
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Update Profile Photo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.emerald.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
-                ),
-                title: Text(
-                  'Take Photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                subtitle: Text(
-                  'Use camera to take a photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                    fontSize: 13,
-                  ),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  // Request camera permission first
-                  final hasPermission =
-                      await PermissionHelper.requestCameraPermission(context);
-                  if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(
-                      context,
-                      child,
-                      ImageSource.camera,
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.info.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_library,
-                    color: AppPalette.info,
-                  ),
-                ),
-                title: Text(
-                  'Choose from Gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                subtitle: Text(
-                  'Select a photo from your gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                  ),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  // Request photo library permission first
-                  final hasPermission =
-                      await PermissionHelper.requestPhotoLibraryPermission(
-                        context,
-                      );
-                  if (hasPermission && context.mounted) {
-                    await _pickAndUploadImage(
-                      context,
-                      child,
-                      ImageSource.gallery,
-                    );
-                  }
-                },
-              ),
-              if (child.photo != null) ...[
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppPalette.error.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete_outline, color: AppPalette.error),
-                  ),
-                  title: const Text(
-                    'Remove Photo',
-                    style: TextStyle(color: AppPalette.error),
-                  ),
-                  subtitle: Text(
-                    'Delete current profile photo',
-                    style: TextStyle(
-                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _removeStudentImage(context, child);
-                  },
-                ),
-              ],
-              const SizedBox(height: 20),
-            ],
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Update Profile Photo',
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
           ),
-        ),
+          AppSpacing.vSm,
+          AppListTile(
+            icon: Icons.camera_alt_rounded,
+            title: 'Take Photo',
+            subtitle: 'Use camera to take a photo',
+            onTap: () async {
+              Navigator.pop(context);
+              // Request camera permission first
+              final hasPermission =
+                  await PermissionHelper.requestCameraPermission(context);
+              if (hasPermission && context.mounted) {
+                await _pickAndUploadImage(context, child, ImageSource.camera);
+              }
+            },
+          ).enterList(0),
+          AppListTile(
+            icon: Icons.photo_library_rounded,
+            title: 'Choose from Gallery',
+            subtitle: 'Select a photo from your gallery',
+            iconColor: context.colors.info,
+            onTap: () async {
+              Navigator.pop(context);
+              // Request photo library permission first
+              final hasPermission =
+                  await PermissionHelper.requestPhotoLibraryPermission(context);
+              if (hasPermission && context.mounted) {
+                await _pickAndUploadImage(context, child, ImageSource.gallery);
+              }
+            },
+          ).enterList(1),
+          if (child.photo != null)
+            AppListTile(
+              icon: Icons.delete_outline_rounded,
+              title: 'Remove Photo',
+              subtitle: 'Delete current profile photo',
+              destructive: true,
+              onTap: () {
+                Navigator.pop(context);
+                _removeStudentImage(context, child);
+              },
+            ).enterList(2),
+        ],
       ),
     );
   }
@@ -1026,8 +610,10 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: AppPalette.emerald),
+        builder: (context) => Center(
+          child: GlassPanel(
+            child: CircularProgressIndicator(color: context.colors.brand),
+          ),
         ),
       );
 
@@ -1042,44 +628,17 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       Navigator.pop(context); // Close loading dialog
 
       if (imageUrl != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${child.name}\'s photo updated successfully'),
-            backgroundColor: AppPalette.emerald,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackbar.success(
+          context,
+          '${child.name}\'s photo updated successfully',
         );
       } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to upload photo. Please try again.'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        AppSnackbar.error(context, 'Failed to upload photo. Please try again.');
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context); // Close loading dialog if open
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        AppSnackbar.error(context, 'Error: $e');
       }
     }
   }
@@ -1093,32 +652,10 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       await provider.updateChildAPI(studentId: child.id, photo: null);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${child.name}\'s photo removed'),
-            backgroundColor: AppPalette.emerald,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
+        AppSnackbar.success(context, '${child.name}\'s photo removed');
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to remove photo'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      }
+      if (context.mounted) AppSnackbar.error(context, 'Failed to remove photo');
     }
   }
 }
@@ -1202,90 +739,45 @@ class _AddChildFormState extends State<AddChildForm> {
   }
 
   void _showImagePickerOptions() {
-    final provider = context.read<AppProvider>();
-    final isDarkMode = provider.isDarkMode;
-
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Add Profile Photo',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.emerald.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.camera_alt, color: AppPalette.emerald),
-                ),
-                title: Text(
-                  'Take Photo',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  // Request camera permission first
-                  final hasPermission =
-                      await PermissionHelper.requestCameraPermission(context);
-                  if (hasPermission && context.mounted) {
-                    _pickImage(ImageSource.camera);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.info.withAlpha(30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_library,
-                    color: AppPalette.info,
-                  ),
-                ),
-                title: Text(
-                  'Choose from Gallery',
-                  style: TextStyle(
-                    color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                  ),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  // Request photo library permission first
-                  final hasPermission =
-                      await PermissionHelper.requestPhotoLibraryPermission(
-                        context,
-                      );
-                  if (hasPermission && context.mounted) {
-                    _pickImage(ImageSource.gallery);
-                  }
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            title: 'Add Profile Photo',
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
           ),
-        ),
+          AppSpacing.vSm,
+          AppListTile(
+            icon: Icons.camera_alt_rounded,
+            title: 'Take Photo',
+            onTap: () async {
+              Navigator.pop(context);
+              // Request camera permission first
+              final hasPermission =
+                  await PermissionHelper.requestCameraPermission(context);
+              if (hasPermission && context.mounted) {
+                _pickImage(ImageSource.camera);
+              }
+            },
+          ).enterList(0),
+          AppListTile(
+            icon: Icons.photo_library_rounded,
+            title: 'Choose from Gallery',
+            iconColor: context.colors.info,
+            onTap: () async {
+              Navigator.pop(context);
+              // Request photo library permission first
+              final hasPermission =
+                  await PermissionHelper.requestPhotoLibraryPermission(context);
+              if (hasPermission && context.mounted) {
+                _pickImage(ImageSource.gallery);
+              }
+            },
+          ).enterList(1),
+        ],
       ),
     );
   }
@@ -1293,53 +785,65 @@ class _AddChildFormState extends State<AddChildForm> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final isDarkMode = provider.isDarkMode;
+    final c = context.colors;
 
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       decoration: BoxDecoration(
-        color: provider.backgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: context.scheme.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
       ),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.sm,
+            AppSpacing.xl,
+            AppSpacing.xl,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: c.outline,
+                      borderRadius: AppRadius.brPill,
+                    ),
+                  ),
+                ),
+                AppSpacing.vSm,
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Add Child',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: provider.textColor,
+                    Expanded(
+                      child: Text(
+                        'Add Child',
+                        style: context.text.headlineSmall,
                       ),
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close, color: provider.textMutedColor),
+                      tooltip: 'Close',
+                      icon: Icon(Icons.close_rounded, color: c.textMuted),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
                 Text(
                   'Enter your child\'s details below',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: provider.textMutedColor,
+                  style: context.text.bodyMedium?.copyWith(
+                    color: c.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 24),
+                AppSpacing.vXl,
 
                 // Profile Photo
                 Center(
@@ -1347,49 +851,54 @@ class _AddChildFormState extends State<AddChildForm> {
                     onTap: _showImagePickerOptions,
                     child: Stack(
                       children: [
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: AppPalette.emerald.withAlpha(30),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppPalette.emerald.withAlpha(50),
-                              width: 2,
+                        AnimatedSwitcher(
+                          duration: AppDuration.medium,
+                          transitionBuilder: (child, anim) =>
+                              ScaleTransition(scale: anim, child: child),
+                          child: Container(
+                            key: ValueKey(_selectedImage?.path),
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: c.brandSoft,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: c.brand.withValues(alpha: 0.3),
+                                width: 2,
+                              ),
+                              image: _selectedImage != null
+                                  ? DecorationImage(
+                                      image: FileImage(
+                                        File(_selectedImage!.path),
+                                      ),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
-                            image: _selectedImage != null
-                                ? DecorationImage(
-                                    image: FileImage(
-                                      File(_selectedImage!.path),
-                                    ),
-                                    fit: BoxFit.cover,
+                            child: _selectedImage == null
+                                ? Icon(
+                                    Icons.add_a_photo_rounded,
+                                    color: c.brand,
+                                    size: 40,
                                   )
                                 : null,
                           ),
-                          child: _selectedImage == null
-                              ? const Icon(
-                                  Icons.add_a_photo,
-                                  color: AppPalette.emerald,
-                                  size: 40,
-                                )
-                              : null,
                         ),
-                        // Edit badge
                         Positioned(
                           right: 0,
                           bottom: 0,
                           child: Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(AppSpacing.xs),
                             decoration: BoxDecoration(
-                              color: AppPalette.emerald,
+                              color: c.accent,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: provider.backgroundColor,
+                                color: context.scheme.surface,
                                 width: 3,
                               ),
                             ),
                             child: const Icon(
-                              Icons.edit,
+                              Icons.edit_rounded,
                               color: Colors.white,
                               size: 16,
                             ),
@@ -1397,28 +906,26 @@ class _AddChildFormState extends State<AddChildForm> {
                         ),
                       ],
                     ),
-                  ),
+                  ).pop(),
                 ),
-                const SizedBox(height: 8),
+                AppSpacing.vXs,
                 Center(
                   child: Text(
                     _selectedImage != null
                         ? 'Change Photo'
                         : 'Add Photo (Optional)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: provider.textMutedColor,
+                    style: context.text.labelMedium?.copyWith(
+                      color: c.textMuted,
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                AppSpacing.vXl,
 
-                // Name Field
-                _buildTextField(
+                AppTextField(
                   controller: _nameController,
                   label: 'Full Name',
                   hint: 'e.g. John Doe',
-                  icon: Icons.person,
+                  prefixIcon: Icons.person_rounded,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter child\'s name';
@@ -1428,277 +935,98 @@ class _AddChildFormState extends State<AddChildForm> {
                     }
                     return null;
                   },
-                  isDarkMode: isDarkMode,
-                ),
-                const SizedBox(height: 16),
-
-                // Class Field (Optional)
-                _buildTextField(
+                ).enterList(0),
+                AppSpacing.vMd,
+                AppTextField(
                   controller: _classController,
                   label: 'Class/Grade (Optional)',
                   hint: 'e.g. Class 4 West',
-                  icon: Icons.school,
-                  isDarkMode: isDarkMode,
+                  prefixIcon: Icons.school_rounded,
+                ).enterList(1),
+                AppSpacing.vMd,
+                _buildDropdown(
+                  label: 'School *',
+                  hint: 'Select School',
+                  icon: Icons.account_balance_rounded,
+                  value: _selectedSchool,
+                  items: _getSchoolsFromRoutes(provider.routes),
+                  emptyNote: 'No schools available. Please check your routes.',
+                  onChanged: (value) => setState(() {
+                    _selectedSchool = value;
+                    // Reset route when school changes (routes may be school-specific)
+                    _selectedRoute = null;
+                  }),
+                  validatorMessage: 'Please select a school',
+                ).enterList(2),
+                AppSpacing.vMd,
+                _buildDropdown(
+                  label: 'Route (Pickup Location) *',
+                  hint: 'Select Route',
+                  icon: Icons.route_rounded,
+                  value: _selectedRoute,
+                  items: _getRouteNames(provider.routes),
+                  emptyNote: 'No routes available.',
+                  onChanged: (value) => setState(() => _selectedRoute = value),
+                  validatorMessage: 'Please select a route',
+                ).enterList(3),
+                AppSpacing.vXxl,
+                AppButton(
+                  label: 'Add Child',
+                  icon: Icons.person_add_rounded,
+                  loading: _isLoading,
+                  onPressed: _submit,
                 ),
-                const SizedBox(height: 16),
-
-                // School Dropdown (Required)
-                _buildSchoolDropdown(provider, isDarkMode),
-                const SizedBox(height: 16),
-
-                // Route/Pickup Location Dropdown (Required)
-                _buildRouteDropdown(provider, isDarkMode),
-                const SizedBox(height: 24),
-                const SizedBox(height: 24),
-
-                // Submit Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppPalette.emerald,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      disabledBackgroundColor: const Color(
-                        0xFF6B9B5B,
-                      ).withAlpha(128),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Text(
-                            'Add Child',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 16),
               ],
             ),
           ),
         ),
       ),
-    ),
     );
   }
 
-  /// Build School Dropdown
-  Widget _buildSchoolDropdown(AppProvider provider, bool isDarkMode) {
-    final schools = _getSchoolsFromRoutes(provider.routes);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'School *',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: provider.textColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.surfaceSubtleLight,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButtonFormField<String>(
-            value: _selectedSchool,
-            isExpanded: true,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(
-                Icons.account_balance,
-                color: AppPalette.emerald,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-            ),
-            hint: Text(
-              'Select School',
-              style: TextStyle(
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            dropdownColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-            style: TextStyle(
-              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              fontSize: 15,
-            ),
-            icon: const Icon(Icons.arrow_drop_down, color: AppPalette.emerald),
-            items: schools.map((school) {
-              return DropdownMenuItem<String>(
-                value: school,
-                child: Text(school, overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedSchool = value;
-                // Reset route when school changes (optional - routes might be school-specific)
-                _selectedRoute = null;
-              });
-            },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please select a school';
-              }
-              return null;
-            },
-          ),
-        ),
-        if (schools.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'No schools available. Please check your routes.',
-              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
-            ),
-          ),
-      ],
-    );
-  }
-
-  /// Build Route/Pickup Location Dropdown
-  Widget _buildRouteDropdown(AppProvider provider, bool isDarkMode) {
-    final routes = _getRouteNames(provider.routes);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Route (Pickup Location) *',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: provider.textColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? AppPalette.surfaceSubtleDark
-                : AppPalette.surfaceSubtleLight,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButtonFormField<String>(
-            value: _selectedRoute,
-            isExpanded: true,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.route, color: AppPalette.emerald),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-            ),
-            hint: Text(
-              'Select Route',
-              style: TextStyle(
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            dropdownColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-            style: TextStyle(
-              color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              fontSize: 15,
-            ),
-            icon: const Icon(Icons.arrow_drop_down, color: AppPalette.emerald),
-            items: routes.map((route) {
-              return DropdownMenuItem<String>(
-                value: route,
-                child: Text(route, overflow: TextOverflow.ellipsis),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                _selectedRoute = value;
-              });
-            },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please select a route';
-              }
-              return null;
-            },
-          ),
-        ),
-        if (routes.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'No routes available.',
-              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
+  Widget _buildDropdown({
     required String label,
     required String hint,
     required IconData icon,
-    required bool isDarkMode,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
+    required String? value,
+    required List<String> items,
+    required String emptyNote,
+    required ValueChanged<String?> onChanged,
+    required String validatorMessage,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      validator: validator,
-      style: TextStyle(
-        color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppPalette.emerald),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: context.text.titleSmall),
+        AppSpacing.vXs,
+        DropdownButtonFormField<String>(
+          // ignore: deprecated_member_use
+          value: value,
+          isExpanded: true,
+          decoration: InputDecoration(prefixIcon: Icon(icon, color: c.brand)),
+          hint: Text(hint),
+          borderRadius: AppRadius.brMd,
+          icon: Icon(Icons.expand_more_rounded, color: c.brand),
+          items: [
+            for (final item in items)
+              DropdownMenuItem<String>(
+                value: item,
+                child: Text(item, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onChanged,
+          validator: (v) => v == null || v.isEmpty ? validatorMessage : null,
         ),
-        filled: true,
-        fillColor: isDarkMode
-            ? AppPalette.surfaceSubtleDark
-            : AppPalette.surfaceSubtleLight,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-      ),
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              emptyNote,
+              style: context.text.labelSmall?.copyWith(color: c.warning),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1720,8 +1048,10 @@ class _AddChildFormState extends State<AddChildForm> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const Center(
-            child: CircularProgressIndicator(color: AppPalette.emerald),
+          builder: (context) => Center(
+            child: GlassPanel(
+              child: CircularProgressIndicator(color: context.colors.brand),
+            ),
           ),
         );
       }
@@ -1748,24 +1078,32 @@ class _AddChildFormState extends State<AddChildForm> {
       guardianPhoneNumber: guardianPhone,
     );
 
-    // Upload image after student is created (if image was selected)
-    if (student != null && _selectedImage != null && mounted) {
+    // Upload image after student is created (needs the server's id)
+    if (student != null && student.id.isNotEmpty && _selectedImage != null) {
       await provider.uploadStudentImage(
         studentId: student.id,
         imagePath: _selectedImage!.path,
       );
-
-      if (mounted) {
-        Navigator.pop(context); // Close loading dialog
-      }
     }
+    // Close the upload spinner on every path, not just success.
+    if (_selectedImage != null && mounted) Navigator.pop(context);
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (student != null && mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${student.name} added successfully!')),
+    final name = _nameController.text.trim();
+    if (student == null) {
+      AppSnackbar.error(context, provider.errorMessage ?? "Couldn't add $name");
+      return;
+    }
+    final listed = provider.apiStudents.any((s) => s.id == student.id);
+    Navigator.pop(context);
+    if (listed) {
+      AppSnackbar.success(context, '$name added successfully!');
+    } else {
+      AppSnackbar.info(
+        context,
+        "$name was sent but isn't in your list yet. Pull to refresh shortly.",
       );
     }
   }

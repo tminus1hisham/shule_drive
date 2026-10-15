@@ -25,7 +25,7 @@ class NetworkException extends ApiException {
 /// Timeout Exception - Request took too long
 class TimeoutException extends ApiException {
   TimeoutException() : super(
-    message: 'Request timeout',
+    message: 'The server is taking too long to respond. Please try again.',
     statusCode: 408,
   );
 }

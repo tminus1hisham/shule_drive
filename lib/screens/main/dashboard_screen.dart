@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
+import '../../services/trip_history_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../utils/next_trip_selector.dart';
@@ -326,6 +327,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final driverId = authProvider.currentUser?.id;
     if (driverId == null || driverId.isEmpty) return;
+    // A running trip already has the driver's attention; the timer is also
+    // restarted when returning from the live map, so check here.
+    if (_scheduledTripProvider?.activeTrip != null) return;
 
     try {
       final tripService = TripService();
@@ -333,14 +337,24 @@ class _DashboardScreenState extends State<DashboardScreen>
         driverId,
         onRefresh: (_) {},
       );
+      final history = await TripHistoryService().getCachedDriverTripHistory(
+        driverId,
+      );
       if (!_canRunScheduledWork) return;
 
       final now = DateTime.now();
+      final pending = withoutTripsRunToday(
+        masterTrips,
+        history.map(
+          (h) => (masterTripId: h.trip.masterTripId, startTime: h.trip.startTime),
+        ),
+        now: now,
+      );
 
       // Keep the idle dashboard's "next trip" card in step with the clock.
-      _updateNextScheduledTrip(masterTrips, now);
+      _updateNextScheduledTrip(pending.isEmpty ? masterTrips : pending, now);
 
-      for (final trip in masterTrips) {
+      for (final trip in pending) {
         // Skip already-prompted trips
         if (_promptedTripIds.contains(trip.id)) continue;
 
@@ -645,7 +659,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       onBottomNavTap: (index) => _handleNavigation(index, isDriver),
       body: Stack(
         children: [
-          const Positioned.fill(child: _DashboardBackdrop()),
+          const Positioned.fill(child: AppBackdrop()),
           RefreshIndicator(
             onRefresh: _refresh,
             color: context.colors.brand,
@@ -655,19 +669,48 @@ class _DashboardScreenState extends State<DashboardScreen>
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
-                    child: _buildTopBar(userData, appProvider),
+                    child: _buildTopBar(
+                      userData,
+                      appProvider,
+                    ).enter(offsetY: -16),
                   ),
                   SliverToBoxAdapter(
-                    child: _buildGreeting(userData, isDriver, hasActiveTrip),
+                    child: _buildGreeting(
+                      userData,
+                      isDriver,
+                      hasActiveTrip,
+                    ).enterList(1),
                   ),
 
                   // Primary content — adapts to role and live trip status.
-                  if (isDriver)
-                    ..._driverSlivers(tripProvider, hasActiveTrip)
-                  else if (isGuardian)
-                    ..._guardianSlivers(tripProvider, hasActiveTrip),
+                  // Starting or ending a trip cross-fades the whole block.
+                  SliverToBoxAdapter(
+                    child: AnimatedSwitcher(
+                      duration: AppDuration.slow,
+                      switchInCurve: AppCurves.easeOut,
+                      layoutBuilder: (current, previous) => Stack(
+                        alignment: Alignment.topCenter,
+                        children: [...previous, ?current],
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey('$isDriver-$hasActiveTrip'),
+                        child: Column(
+                          children: isDriver
+                              ? _driverBlocks(tripProvider, hasActiveTrip)
+                              : isGuardian
+                              ? _guardianBlocks(tripProvider, hasActiveTrip)
+                              : const [],
+                        ),
+                      ),
+                    ).enterList(2),
+                  ),
 
-                  SliverToBoxAdapter(child: _buildQuickActions(isDriver)),
+                  SliverToBoxAdapter(
+                    child: _buildQuickActions(
+                      isDriver,
+                      hasActiveTrip: hasActiveTrip,
+                    ).enterList(3),
+                  ),
 
                   const SliverPadding(
                     padding: EdgeInsets.only(bottom: AppSpacing.xxl),
@@ -676,7 +719,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
           ),
-          if (_isCheckingMasterTrips) _buildCheckingOverlay(),
+          IgnorePointer(
+            ignoring: !_isCheckingMasterTrips,
+            child: AnimatedOpacity(
+              opacity: _isCheckingMasterTrips ? 1 : 0,
+              duration: AppDuration.medium,
+              child: _buildCheckingOverlay(),
+            ),
+          ),
         ],
       ),
     );
@@ -689,36 +739,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     child: child,
   );
 
-  List<Widget> _driverSlivers(TripProvider tripProvider, bool hasActiveTrip) {
+  List<Widget> _driverBlocks(TripProvider tripProvider, bool hasActiveTrip) {
     if (hasActiveTrip) {
-      return [
-        SliverToBoxAdapter(
-          child: _block(child: _buildDriverActiveTrip(tripProvider)),
-        ),
-      ];
+      return [_block(child: _buildDriverActiveTrip(tripProvider))];
     }
     return [
-      SliverToBoxAdapter(child: _block(child: _buildDriverStartTrip())),
+      _block(child: _buildDriverStartTrip()),
       if (_nextScheduledTrip != null)
-        SliverToBoxAdapter(
-          child: _block(top: AppSpacing.sm, child: _buildNextTripCard()),
-        ),
+        _block(top: AppSpacing.sm, child: _buildNextTripCard().enter()),
     ];
   }
 
-  List<Widget> _guardianSlivers(TripProvider tripProvider, bool hasActiveTrip) {
-    if (!hasActiveTrip) {
-      return [SliverToBoxAdapter(child: _block(child: _buildGuardianIdle()))];
-    }
-    return [
-      SliverToBoxAdapter(
-        child: _block(child: _buildGuardianActiveTrip(tripProvider)),
-      ),
-    ];
+  List<Widget> _guardianBlocks(TripProvider tripProvider, bool hasActiveTrip) {
+    if (!hasActiveTrip) return [_block(child: _buildGuardianIdle())];
+    return [_block(child: _buildGuardianActiveTrip(tripProvider))];
   }
 
   Widget _buildCheckingOverlay() {
-    return Positioned.fill(
+    return SizedBox.expand(
       child: ColoredBox(
         color: context.scheme.surface.withValues(alpha: 0.82),
         child: Center(
@@ -740,24 +778,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  /// Navigate to the start-trip flow, but never while a trip is running.
-  /// If a trip is active, redirect to the live trip screen instead.
-  void _goToStartTrip() {
-    final activeTrip = context.read<TripProvider>().activeTrip;
-    if (activeTrip != null) {
-      AppSnackbar.info(
-        context,
-        'A trip is already in progress. End it before starting a new one.',
-      );
-      Navigator.pushNamed(
-        context,
-        '/osm-tracking',
-        arguments: {'tripId': activeTrip.id, 'preloadedData': null},
-      );
-      return;
-    }
-    Navigator.pushNamed(context, '/start-trip');
-  }
+  void _goToStartTrip() => openDriverTrip(context);
 
   void _handleNavigation(int index, bool isDriver) {
     switch (index) {
@@ -821,7 +842,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(
-              'ShuleDrive',
+              'Transfa',
               style: context.text.titleLarge?.copyWith(fontSize: 18),
             ),
           ),
@@ -989,7 +1010,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// so the countdown is scannable at a glance.
   Widget _buildNextTripCard() {
     final next = _nextScheduledTrip!;
-    return _DashboardGlassPanel(
+    return GlassPanel(
       onTap: () => Navigator.pushNamed(
         context,
         '/trip-selection',
@@ -1003,7 +1024,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           Positioned(
             top: -52,
             right: -44,
-            child: _GlassGlow(
+            child: GlassGlow(
               color: context.colors.accent,
               diameter: 140,
               opacity: context.isDark ? 0.13 : 0.10,
@@ -1408,13 +1429,22 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildGuardianActiveTrip(TripProvider tripProvider) {
     final trip = tripProvider.activeTrip!;
     final guardianChildren = trip.students.toList();
+    void openTracking() => Navigator.pushNamed(
+      context,
+      '/osm-tracking',
+      arguments: {
+        'tripId': trip.id,
+        'busId': trip.vehicleId,
+        'routeId': trip.routeId,
+      },
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Live tracking hero — tappable to open the unified trip view
         GradientHeroCard(
-          onTap: () => Navigator.pushNamed(context, '/start-trip'),
+          onTap: openTracking,
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             children: [
@@ -1470,15 +1500,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       label: 'Track',
                       icon: Icons.map_outlined,
                       variant: AppButtonVariant.onBrand,
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        '/osm-tracking',
-                        arguments: {
-                          'tripId': trip.id,
-                          'busId': trip.vehicleId,
-                          'routeId': trip.routeId,
-                        },
-                      ),
+                      onPressed: openTracking,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -1486,7 +1508,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: SizedBox(
                       height: 52,
                       child: FilledButton.icon(
-                        onPressed: () => _openTripChat(context, trip),
+                        onPressed: () => openDriverChat(context, trip),
                         icon: const Icon(Icons.chat_bubble_outline, size: 20),
                         label: const Text('Chat'),
                         style: FilledButton.styleFrom(
@@ -1565,7 +1587,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       statusIcon = Icons.schedule_rounded;
     }
 
-    final time = student.pickupTime;
+    final time = student.status == 'dropped'
+        ? student.dropoffTime ?? student.pickupTime
+        : student.pickupTime;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -1625,15 +1649,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Compact action dock. One glass surface keeps all four destinations
   /// visible without letting shortcuts dominate the page.
-  Widget _buildQuickActions(bool isDriver) {
+  Widget _buildQuickActions(bool isDriver, {bool hasActiveTrip = false}) {
     final colors = context.colors;
 
     final actions = isDriver
         ? <_QuickAction>[
+            // _goToStartTrip opens the live map when a trip is running.
             _QuickAction(
-              icon: Icons.play_circle_outline_rounded,
-              label: 'Start Trip',
-              subtitle: 'Begin a new journey',
+              icon: hasActiveTrip
+                  ? Icons.map_outlined
+                  : Icons.play_circle_outline_rounded,
+              label: hasActiveTrip ? 'Live Trip' : 'Start Trip',
+              subtitle: hasActiveTrip
+                  ? 'Back to your route'
+                  : 'Begin a new journey',
               tint: colors.brand,
               onTap: _goToStartTrip,
             ),
@@ -1702,7 +1731,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           const SectionHeader(title: 'Quick actions'),
           const SizedBox(height: AppSpacing.xs),
-          _DashboardGlassPanel(
+          GlassPanel(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.xxs,
               vertical: AppSpacing.xs,
@@ -1794,20 +1823,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
     }
   }
-
-  void _openTripChat(BuildContext context, Trip trip) {
-    Navigator.pushNamed(
-      context,
-      '/chat-detail',
-      arguments: {
-        'tripId': trip.id,
-        'receiverId': trip.vehicleId, // Use vehicleId as receiver identifier
-        'receiverName': 'Driver - ${trip.routeName}',
-        'receiverRole': 'Driver',
-        'isTripChat': true,
-      },
-    );
-  }
 }
 
 // ==================== DASHBOARD PIECES ====================
@@ -1885,7 +1900,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                   Positioned(
                     top: -72,
                     right: -50,
-                    child: _GlassGlow(
+                    child: GlassGlow(
                       color: context.colors.accent,
                       diameter: 190,
                     ),
@@ -1893,7 +1908,7 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
                   Positioned(
                     bottom: -86,
                     left: -68,
-                    child: _GlassGlow(
+                    child: GlassGlow(
                       color: context.colors.brand,
                       diameter: 220,
                     ),
@@ -2117,182 +2132,6 @@ class _UpcomingTripGlassPrompt extends StatelessWidget {
   }
 }
 
-class _GlassGlow extends StatelessWidget {
-  const _GlassGlow({
-    required this.color,
-    required this.diameter,
-    this.opacity = 0.17,
-  });
-
-  final Color color;
-  final double diameter;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: diameter,
-        height: diameter,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              color.withValues(alpha: opacity),
-              Colors.transparent,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A quiet tinted canvas gives translucent cards something to refract on light
-/// themes while remaining subtle enough to keep the dashboard content primary.
-class _DashboardBackdrop extends StatelessWidget {
-  const _DashboardBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    final base = context.theme.scaffoldBackgroundColor;
-
-    return IgnorePointer(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.alphaBlend(
-                    context.colors.brand.withValues(
-                      alpha: context.isDark ? 0.08 : 0.055,
-                    ),
-                    base,
-                  ),
-                  base,
-                  Color.alphaBlend(
-                    context.colors.accent.withValues(
-                      alpha: context.isDark ? 0.06 : 0.04,
-                    ),
-                    base,
-                  ),
-                ],
-                stops: const [0, 0.52, 1],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 220,
-            right: -110,
-            child: _GlassGlow(
-              color: context.colors.brand,
-              diameter: 300,
-              opacity: context.isDark ? 0.08 : 0.065,
-            ),
-          ),
-          Positioned(
-            bottom: 40,
-            left: -120,
-            child: _GlassGlow(
-              color: context.colors.accent,
-              diameter: 290,
-              opacity: context.isDark ? 0.07 : 0.05,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A theme-aware frosted surface used by the dashboard's compact utility
-/// panels. The blur, translucent gradient and hairline edge provide the glass
-/// effect without sacrificing contrast in either brightness mode.
-class _DashboardGlassPanel extends StatelessWidget {
-  const _DashboardGlassPanel({
-    required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.md),
-    this.tint,
-    this.onTap,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final Color? tint;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const borderRadius = AppRadius.brLg;
-    final glassTint = tint ?? context.colors.brand;
-    final glassBase = context.isDark
-        ? context.scheme.surface.withValues(alpha: 0.70)
-        : Colors.white.withValues(alpha: 0.88);
-    final glassEnd = Color.alphaBlend(
-      glassTint.withValues(alpha: context.isDark ? 0.13 : 0.10),
-      context.scheme.surface,
-    ).withValues(alpha: context.isDark ? 0.70 : 0.84);
-    final edgeColor = context.isDark
-        ? Colors.white.withValues(alpha: 0.14)
-        : Color.alphaBlend(
-            glassTint.withValues(alpha: 0.16),
-            context.colors.outline,
-          );
-
-    Widget content = Padding(padding: padding, child: child);
-    if (onTap != null) {
-      content = Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: borderRadius,
-          child: content,
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: context.isDark ? 0.24 : 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: glassTint.withValues(alpha: context.isDark ? 0.08 : 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [glassBase, glassEnd],
-              ),
-              borderRadius: borderRadius,
-              border: Border.all(color: edgeColor),
-            ),
-            child: content,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Soft circular icon button used in the dashboard top bar, with an optional
 /// unread badge.
 class _CircleIconButton extends StatelessWidget {
@@ -2328,39 +2167,15 @@ class _CircleIconButton extends StatelessWidget {
       ),
     );
 
+    button = PressScale(scale: 0.9, child: button);
     if (tooltip != null) {
       button = Tooltip(message: tooltip!, child: button);
     }
 
-    if (badgeCount <= 0) return button;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        button,
-        Positioned(
-          top: -1,
-          right: -1,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            constraints: const BoxConstraints(minWidth: 18),
-            decoration: BoxDecoration(
-              color: context.colors.error,
-              borderRadius: AppRadius.brPill,
-              border: Border.all(color: context.scheme.surface, width: 1.5),
-            ),
-            child: Text(
-              badgeCount > 9 ? '9+' : '$badgeCount',
-              textAlign: TextAlign.center,
-              style: context.text.labelSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return CountBadge(
+      count: badgeCount,
+      offset: const Offset(-1, -1),
+      child: button,
     );
   }
 }
@@ -2436,63 +2251,66 @@ class _ActionTile extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '${action.label}. ${action.subtitle}',
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: AppRadius.brSm,
-          child: InkWell(
-            onTap: action.onTap,
+        child: PressScale(
+          scale: 0.94,
+          child: Material(
+            color: Colors.transparent,
             borderRadius: AppRadius.brSm,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xxs,
-                vertical: AppSpacing.xxs,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          action.tint.withValues(alpha: 0.24),
-                          action.tint.withValues(alpha: 0.10),
+            child: InkWell(
+              onTap: action.onTap,
+              borderRadius: AppRadius.brSm,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xxs,
+                  vertical: AppSpacing.xxs,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            action.tint.withValues(alpha: 0.24),
+                            action.tint.withValues(alpha: 0.10),
+                          ],
+                        ),
+                        borderRadius: AppRadius.brMd,
+                        border: Border.all(
+                          color: action.tint.withValues(alpha: 0.20),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: action.tint.withValues(alpha: 0.12),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
                         ],
                       ),
-                      borderRadius: AppRadius.brMd,
-                      border: Border.all(
-                        color: action.tint.withValues(alpha: 0.20),
+                      child: Icon(
+                        action.icon,
+                        color: action.tint,
+                        size: AppIconSize.md,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: action.tint.withValues(alpha: 0.12),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
-                    child: Icon(
-                      action.icon,
-                      color: action.tint,
-                      size: AppIconSize.md,
+                    const SizedBox(height: 6),
+                    Text(
+                      action.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: context.text.labelSmall?.copyWith(
+                        color: context.scheme.onSurface,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    action.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: context.text.labelSmall?.copyWith(
-                      color: context.scheme.onSurface,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -1,10 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/ui/ui.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 
 import '../../theme/app_colors.dart';
+
 /// Advanced Onboarding Screen with animations, glassmorphism, and parallax effects
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -56,17 +60,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _pageController = PageController();
     _pageController.addListener(_onPageChanged);
 
-    // Floating animation for illustrations
+    // Floating + particle loops are bounded: run forever they repainted a
+    // full-screen painter every frame (high idle CPU, ANR on slow phones).
     _floatController = AnimationController(
       duration: const Duration(seconds: 3),
       vsync: this,
-    )..repeat(reverse: true);
+    )..repeat(reverse: true, count: 4);
 
-    // Particle animation
     _particleController = AnimationController(
       duration: const Duration(seconds: 10),
       vsync: this,
-    )..repeat();
+    )..repeat(count: 2);
 
     // Scale animation for cards
     _scaleController = AnimationController(
@@ -132,13 +136,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0A0A0F)
-          : const Color(0xFFF8F9FA),
       body: Stack(
         children: [
           // Animated background particles
@@ -213,9 +214,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: (isDark ? Colors.white : Colors.black)
-                              .withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(20),
+                          color: c.surfaceSubtle,
+                          borderRadius: AppRadius.brPill,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -232,7 +232,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               ' / 03',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: isDark ? Colors.white38 : Colors.black38,
+                                color: c.textMuted,
                               ),
                             ),
                           ],
@@ -248,13 +248,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white60 : Colors.black54,
+                              color: c.textSecondary,
                             ),
                           ),
                           label: Icon(
                             Icons.arrow_forward,
                             size: 16,
-                            color: isDark ? Colors.white60 : Colors.black54,
+                            color: c.textSecondary,
                           ),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
@@ -305,53 +305,70 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       const SizedBox(height: 32),
 
                       // Next/Get Started button with glassmorphism
-                      GestureDetector(
-                        onTap: _nextPage,
-                        child: Container(
-                          width: double.infinity,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(24),
-                            gradient: LinearGradient(
-                              colors: [
-                                _pages[_currentIndex].primaryColor,
-                                _pages[_currentIndex].secondaryColor,
+                      PressScale(
+                        child: GestureDetector(
+                          onTap: _nextPage,
+                          child: Container(
+                            width: double.infinity,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(24),
+                              gradient: LinearGradient(
+                                colors: [
+                                  _pages[_currentIndex].primaryColor,
+                                  _pages[_currentIndex].secondaryColor,
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _pages[_currentIndex].primaryColor
+                                      .withValues(alpha: 0.4),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
                               ],
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _pages[_currentIndex].primaryColor
-                                    .withValues(alpha: 0.4),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                _currentIndex == _pages.length - 1
-                                    ? 'Get Started'
-                                    : 'Continue',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                child: Icon(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
                                   _currentIndex == _pages.length - 1
-                                      ? Icons.check_rounded
-                                      : Icons.arrow_forward_rounded,
-                                  color: Colors.white,
-                                  size: 24,
+                                      ? 'Get Started'
+                                      : 'Continue',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                // Arrow spins into a check on the last page.
+                                AnimatedSwitcher(
+                                  duration: AppDuration.slow,
+                                  transitionBuilder: (child, anim) =>
+                                      RotationTransition(
+                                        turns: Tween(
+                                          begin: -0.25,
+                                          end: 0.0,
+                                        ).animate(anim),
+                                        child: ScaleTransition(
+                                          scale: anim,
+                                          child: child,
+                                        ),
+                                      ),
+                                  child: Icon(
+                                    _currentIndex == _pages.length - 1
+                                        ? Icons.check_rounded
+                                        : Icons.arrow_forward_rounded,
+                                    key: ValueKey(
+                                      _currentIndex == _pages.length - 1,
+                                    ),
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

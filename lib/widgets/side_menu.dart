@@ -6,6 +6,7 @@ import '../providers/trip_provider.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme_extension.dart';
 import 'autoload_trips_toggle.dart';
+import 'main_scaffold.dart';
 import 'ui/ui.dart';
 
 class SideMenu extends StatefulWidget {
@@ -90,7 +91,10 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                         _buildActiveTripMenuItem(
                           context,
                           tripProvider.activeTrip!.routeName,
-                          () => _navigateTo(context, '/active-trip'),
+                          () {
+                            Navigator.pop(context);
+                            openDriverTrip(context);
+                          },
                         ),
                         const SizedBox(height: AppSpacing.xs),
                       ],
@@ -142,8 +146,8 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
                       const SizedBox(height: AppSpacing.md),
                       if (isDriver) const AutoloadTripsToggle(),
                       _buildThemeToggle(context, provider),
-                      const SizedBox(height: AppSpacing.xxl),
-                      _buildSocialMediaLinks(context),
+                      // Social icons removed: no accounts/URLs exist yet and
+                      // the buttons did nothing.
                     ],
                   ),
                 ),
@@ -177,7 +181,7 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
           ),
           const SizedBox(width: AppSpacing.sm),
           Text(
-            'ShuleDrive',
+            'Transfa',
             style: context.text.headlineSmall?.copyWith(
               color: context.colors.brand,
             ),
@@ -247,104 +251,77 @@ class _SideMenuState extends State<SideMenu> with TickerProviderStateMixin {
         ? Icons.dark_mode_outlined
         : Icons.light_mode_outlined;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: [
-          Icon(themeIcon, color: context.colors.textSecondary, size: 24),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Theme', style: context.text.titleMedium),
-                Text(
-                  themeLabel,
-                  style: context.text.bodySmall?.copyWith(
-                    color: context.colors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: provider.toggleTheme,
-            onLongPress: provider.useSystemTheme,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: 6,
-              ),
-              decoration: BoxDecoration(
-                color: isSystemDefault
-                    ? context.colors.surfaceSubtle
-                    : brand.withValues(alpha: 0.15),
-                borderRadius: AppRadius.brPill,
-                border: Border.all(
-                  color: isSystemDefault
-                      ? Colors.transparent
-                      : brand.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+    // Whole row toggles; long-press anywhere returns to the system theme.
+    return InkWell(
+      onTap: provider.toggleTheme,
+      onLongPress: provider.useSystemTheme,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(themeIcon, color: context.colors.textSecondary, size: 24),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    isDarkMode ? Icons.nights_stay : Icons.wb_sunny,
-                    size: 16,
-                    color: isSystemDefault ? context.colors.textSecondary : brand,
-                  ),
-                  const SizedBox(width: 6),
+                  Text('Theme', style: context.text.titleMedium),
                   Text(
-                    isDarkMode ? 'Dark' : 'Light',
-                    style: context.text.labelMedium?.copyWith(
-                      color: isSystemDefault
-                          ? context.colors.textSecondary
-                          : brand,
-                      fontWeight: FontWeight.w600,
+                    themeLabel,
+                    style: context.text.bodySmall?.copyWith(
+                      color: context.colors.textMuted,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSocialMediaLinks(BuildContext context) {
-    final icons = [
-      Icons.facebook,
-      Icons.close,
-      Icons.camera_alt_outlined,
-      Icons.business_center_outlined,
-    ];
-    final brand = context.colors.brand;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: icons.map((icon) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-          child: Material(
-            color: brand.withValues(alpha: 0.1),
-            borderRadius: AppRadius.brPill,
-            child: InkWell(
-              onTap: () {},
-              borderRadius: AppRadius.brPill,
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: Icon(icon, color: brand, size: 20),
+            ExcludeSemantics(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: isSystemDefault
+                      ? context.colors.surfaceSubtle
+                      : brand.withValues(alpha: 0.15),
+                  borderRadius: AppRadius.brPill,
+                  border: Border.all(
+                    color: isSystemDefault
+                        ? Colors.transparent
+                        : brand.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isDarkMode ? Icons.nights_stay : Icons.wb_sunny,
+                      size: 16,
+                      color: isSystemDefault
+                          ? context.colors.textSecondary
+                          : brand,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isDarkMode ? 'Dark' : 'Light',
+                      style: context.text.labelMedium?.copyWith(
+                        color: isSystemDefault
+                            ? context.colors.textSecondary
+                            : brand,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      }).toList(),
+          ],
+        ),
+      ),
     );
   }
 

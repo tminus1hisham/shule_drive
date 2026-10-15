@@ -59,6 +59,10 @@ class MqttService {
 
   Future<void>? _connecting;
 
+  // Must be const reads: AOT builds only bake in literal-key fromEnvironment.
+  static const _brokerUsername = String.fromEnvironment('MQTT_USERNAME');
+  static const _brokerPassword = String.fromEnvironment('MQTT_PASSWORD');
+
   /// Stable per-install id so the broker keeps this client's session (and
   /// queues QoS 1 messages) across reconnects instead of starting fresh.
   static Future<String> _installId() async {
@@ -80,8 +84,24 @@ class MqttService {
   }
 
   Future<void> _connect() async {
+    debugPrint('🔄 Connecting to MQTT broker...');
 
-    print('🔄 Connecting to MQTT broker...');
+    // Broker credentials never live in source: --dart-define for builds,
+    // the git-ignored .env for local runs. Checked outside the try so a
+    // missing config fails once instead of looping through reconnects.
+    final username = _brokerUsername.isNotEmpty
+        ? _brokerUsername
+        : appConfig.get('MQTT_USERNAME') ?? '';
+    final password = _brokerPassword.isNotEmpty
+        ? _brokerPassword
+        : appConfig.get('MQTT_PASSWORD') ?? '';
+    if (username.isEmpty || password.isEmpty) {
+      debugPrint(
+        '❌ MQTT disabled: set MQTT_USERNAME and MQTT_PASSWORD '
+        '(--dart-define or .env)',
+      );
+      throw ApiException(message: 'MQTT is not configured');
+    }
 
     _manualDisconnect = false;
 
@@ -89,33 +109,23 @@ class MqttService {
       final userId = await _tokenStorage.getUserId();
       final token = await _tokenStorage.getAccessToken();
 
-      print('   ├─ User ID: ${userId ?? "NOT FOUND"}');
-      print(
-        '   ├─ Token: ${token != null ? "${token.substring(0, min(20, token.length))}..." : "NOT FOUND"}',
-      );
-
       if (userId == null || token == null) {
-        print('   └─ ❌ Missing credentials - cannot connect');
+        debugPrint('   └─ ❌ Missing credentials - cannot connect');
         throw UnauthorizedException(message: 'No authentication credentials');
       }
 
       final broker = appConfig.getOrDefault(
         'MQTT_BROKER',
-        'analytics.teleeza.africa',
+        'orca-broker-prod.atomiot.live',
       );
-      final username = appConfig.getOrDefault(
-        'MQTT_USERNAME',
-        'teleezaAnalytics',
-      );
-      final password = appConfig.getOrDefault(
-        'MQTT_PASSWORD',
-        'teleezaAnalyticsAdmin2023',
-      );
-
-      _client = MqttServerClient(broker, '');
+      final clientId = 'shuledrive_${userId}_${await _installId()}';
+      _client = MqttServerClient(broker, clientId);
       _client.logging(on: false);
       _client.setProtocolV311();
       _client.keepAlivePeriod = 20;
+      // iOS kills sockets while the app is suspended; without this a dead
+      // link looks connected after resume and nothing triggers a reconnect.
+      _client.disconnectOnNoResponsePeriod = 10;
       _client.connectTimeoutPeriod = 2000;
       _client.onConnected = _onConnected;
       _client.onDisconnected = _onDisconnected;
@@ -124,7 +134,7 @@ class MqttService {
 
       // Set up the connection message
       final connMess = MqttConnectMessage()
-          .withClientIdentifier('shuledrive_${userId}_${await _installId()}')
+          .withClientIdentifier(clientId)
           .withWillTopic('users/$userId/status')
           .withWillMessage(
             jsonEncode({
@@ -154,12 +164,7 @@ class MqttService {
         retain: true,
       );
 
-      print('✅ MQTT setup complete - listening for messages');
-
-      final senderPhone = await _tokenStorage.getUserPhone();
-      if (senderPhone != null && senderPhone.isNotEmpty) {
-        _subscriptions.putIfAbsent('chats/$senderPhone', () => [handleMessage]);
-      }
+      debugPrint('✅ MQTT setup complete - listening for messages');
 
       // A reconnect builds a new client, so every known topic (guardian
       // status, trip events, chat) must be subscribed again.
@@ -169,19 +174,14 @@ class MqttService {
     } on UnauthorizedException {
       rethrow; // No session yet; login connects again.
     } on SocketException catch (e) {
-      print('❌ MQTT CONNECTION FAILED: Network error - $e');
+      debugPrint('❌ MQTT CONNECTION FAILED: Network error - $e');
       if (!_manualDisconnect) _scheduleReconnect();
       throw NetworkException();
     } catch (e) {
-      print('❌ MQTT CONNECTION FAILED: $e');
+      debugPrint('❌ MQTT CONNECTION FAILED: $e');
       if (!_manualDisconnect) _scheduleReconnect();
       throw ApiException(message: 'MQTT connection failed: $e');
     }
-  }
-
-  void handleMessage(String topic, String message) {
-    print('Received message on $topic: $message');
-    // Do something with the message
   }
 
   /// Disconnect from MQTT broker
@@ -263,8 +263,10 @@ class MqttService {
       throw ApiException(message: 'MQTT not connected');
     }
 
+    // UTF-8 to match bytesToStringAsString on receive; addString writes
+    // UTF-16 halves, so any emoji turned the whole message into ''.
     final builder = MqttClientPayloadBuilder();
-    builder.addString(message);
+    builder.addUTF8String(message);
 
     final result = _client.publishMessage(
       topic,
@@ -274,7 +276,7 @@ class MqttService {
     );
 
     if (kDebugMode) {
-      print('📤 MQTT Publish: topic=$topic, retain=$retain, result=$result');
+      debugPrint('📤 MQTT Publish: topic=$topic, retain=$retain, result=$result');
     }
   }
 
@@ -298,15 +300,15 @@ class MqttService {
     _isConnected = true;
     _reconnectTimer?.cancel();
     _connectionController.add(true);
-    print('✅ MQTT CONNECTION SUCCESSFUL');
-    print('   ├─ Broker: ${_client.server}');
-    print('   ├─ Client ID: ${_client.clientIdentifier}');
-    print('   ├─ Connected at: ${DateTime.now().toIso8601String()}');
-    print('   └─ Status: Online');
+    debugPrint('✅ MQTT CONNECTION SUCCESSFUL');
+    debugPrint('   ├─ Broker: ${_client.server}');
+    debugPrint('   ├─ Client ID: ${_client.clientIdentifier}');
+    debugPrint('   ├─ Connected at: ${DateTime.now().toIso8601String()}');
+    debugPrint('   └─ Status: Online');
   }
 
   void _onDisconnected() {
-    print('⚠️ MQTT DISCONNECTED from broker');
+    debugPrint('⚠️ MQTT DISCONNECTED from broker');
     _isConnected = false;
     _connectionController.add(false);
     if (!_manualDisconnect) {
@@ -315,11 +317,11 @@ class MqttService {
   }
 
   void _onSubscribed(String topic) {
-    print('Subscribed to: $topic');
+    debugPrint('Subscribed to: $topic');
   }
 
   void _onSubscribeFail(String topic) {
-    print('Failed to subscribe to: $topic');
+    debugPrint('Failed to subscribe to: $topic');
   }
 
   void _onMessage(List<MqttReceivedMessage<MqttMessage>> messages) {
@@ -357,7 +359,7 @@ class MqttService {
       if (!_isConnected) {
         connect().catchError((e) {
           if (kDebugMode) {
-            print('MQTT reconnect failed: $e');
+            debugPrint('MQTT reconnect failed: $e');
           }
         });
       }

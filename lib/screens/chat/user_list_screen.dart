@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
-import '../../widgets/ui/staggered_entrance.dart';
+import '../../theme/app_theme_extension.dart';
+import '../../widgets/main_scaffold.dart';
+import '../../widgets/ui/ui.dart';
 import 'package:provider/provider.dart';
 import '../../models/chat_conversation.dart';
-import '../../providers/app_provider.dart';
+
 import '../../providers/chat_provider.dart';
 
-import '../../theme/app_colors.dart';
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
 
@@ -16,12 +17,9 @@ class UserListScreen extends StatefulWidget {
   State<UserListScreen> createState() => _UserListScreenState();
 }
 
-class _UserListScreenState extends State<UserListScreen>
-    with SingleTickerProviderStateMixin {
+class _UserListScreenState extends State<UserListScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
 
   bool _isLoading = true;
   String? _error;
@@ -35,14 +33,6 @@ class _UserListScreenState extends State<UserListScreen>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: AppDuration.slow,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    );
 
     _loadUsers();
 
@@ -51,7 +41,6 @@ class _UserListScreenState extends State<UserListScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchDebounce?.cancel();
@@ -101,7 +90,6 @@ class _UserListScreenState extends State<UserListScreen>
           _isLoading = false;
           _error = null;
         });
-        _animationController.forward();
       }
     } catch (e, stackTrace) {
       debugPrint('❌ Error loading users: $e');
@@ -129,360 +117,118 @@ class _UserListScreenState extends State<UserListScreen>
     );
   }
 
+  static const _filterLabels = {'Driver': 'Drivers', 'Guardian': 'Guardians'};
+
   @override
   Widget build(BuildContext context) {
-    final appProvider = context.watch<AppProvider>();
-    final isDarkMode = appProvider.isDarkMode;
-
-    return Scaffold(
-      backgroundColor: isDarkMode
-          ? AppPalette.bgDark
-          : AppPalette.bgLight,
-      appBar: _buildAppBar(isDarkMode),
-      body: Column(
-        children: [
-          // Search Bar
-          _buildSearchBar(isDarkMode),
-
-          // Filter Chips
-          _buildFilterChips(isDarkMode),
-
-          // Content
-          Expanded(child: _buildBody(isDarkMode)),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(bool isDarkMode) {
-    return AppBar(
-      backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      elevation: 0,
-      leading: IconButton(
-        icon: Icon(
-          Icons.arrow_back_rounded,
-          color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Text(
-        'New Chat',
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-        ),
-      ),
+    final c = context.colors;
+    return MainScaffold(
+      title: 'New Chat',
+      showBackButton: true,
       actions: [
-        if (_isLoading)
-          Center(
-            child: Container(
-              width: 20,
-              height: 20,
-              margin: const EdgeInsets.only(right: 16),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isDarkMode ? Colors.white70 : AppPalette.emerald,
-                ),
-              ),
-            ),
-          )
-        else
-          IconButton(
-            icon: Icon(
-              Icons.refresh,
-              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-            ),
-            onPressed: _loadUsers,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildSearchBar(bool isDarkMode) {
-    return Container(
-      color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceSubtleDark : AppPalette.surfaceSubtleLight,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: TextField(
-          controller: _searchController,
-          focusNode: _searchFocusNode,
-          style: TextStyle(
-            color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-          ),
-          decoration: InputDecoration(
-            hintText: 'Search by name or phone...',
-            hintStyle: TextStyle(
-              color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-            ),
-            prefixIcon: Icon(
-              Icons.search,
-              color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-            ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: Icon(
-                      Icons.clear,
-                      color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-                      size: 20,
+        AnimatedSwitcher(
+          duration: AppDuration.medium,
+          child: _isLoading
+              ? Padding(
+                  key: const ValueKey('busy'),
+                  padding: const EdgeInsets.only(right: AppSpacing.md),
+                  child: SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: c.brand,
                     ),
-                    onPressed: () {
-                      _searchController.clear();
-                      _filterUsers();
-                    },
-                  )
-                : null,
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChips(bool isDarkMode) {
-    return Container(
-      color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _filters.map((filter) {
-            final isSelected = _selectedFilter == filter;
-            // Display plural labels for better UX
-            final displayLabel =
-                {'Driver': 'Drivers', 'Guardian': 'Guardians'}[filter] ??
-                filter;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                selected: isSelected,
-                label: Text(displayLabel),
-                labelStyle: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected
-                      ? Colors.white
-                      : isDarkMode
-                      ? AppPalette.textSecondaryDark
-                      : AppPalette.textSecondaryLight,
-                ),
-                backgroundColor: isDarkMode
-                    ? AppPalette.surfaceSubtleDark
-                    : AppPalette.surfaceSubtleLight,
-                selectedColor: AppPalette.emerald,
-                checkmarkColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: isSelected
-                        ? Colors.transparent
-                        : isDarkMode
-                        ? Colors.white12
-                        : AppPalette.outlineLight,
                   ),
+                )
+              : IconButton(
+                  key: const ValueKey('refresh'),
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'Refresh',
+                  onPressed: _loadUsers,
                 ),
-                onSelected: (_) {
-                  setState(() {
-                    _selectedFilter = filter;
-                    _filterUsers();
-                  });
-                },
-              ),
-            );
-          }).toList(),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBody(bool isDarkMode) {
-    if (_isLoading) {
-      return _buildLoadingState(isDarkMode);
-    }
-
-    if (_error != null) {
-      return _buildErrorState(isDarkMode);
-    }
-
-    if (_filteredUsers.isEmpty) {
-      return _buildEmptyState(isDarkMode);
-    }
-
-    return _buildUserList(isDarkMode);
-  }
-
-  Widget _buildLoadingState(bool isDarkMode) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 8,
-      itemBuilder: (context, index) => _buildSkeletonItem(isDarkMode),
-    );
-  }
-
-  Widget _buildSkeletonItem(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
+      ],
+      body: Stack(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withAlpha(10)
-                  : AppPalette.outlineLight,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 140,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white.withAlpha(10)
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 100,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white.withAlpha(10)
-                        : AppPalette.outlineLight,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(bool isDarkMode) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Colors.red.shade400,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Couldn\'t load users',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap refresh to try again',
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _loadUsers,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isDarkMode) {
-    final isSearching = _searchController.text.isNotEmpty;
-
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          const Positioned.fill(child: AppBackdrop()),
+          Column(
             children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: isDarkMode
-                      ? Colors.white.withAlpha(10)
-                      : AppPalette.surfaceSubtleLight,
-                  shape: BoxShape.circle,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                  AppSpacing.md,
+                  AppSpacing.sm,
                 ),
-                child: Icon(
-                  isSearching ? Icons.search_off : Icons.people_outline,
-                  size: 48,
-                  color: isDarkMode ? Colors.white30 : AppPalette.textMutedLight,
+                child: Column(
+                  children: [
+                    AppTextField(
+                      controller: _searchController,
+                      hint: 'Search by name or phone...',
+                      prefixIcon: Icons.search_rounded,
+                      suffixIcon: _searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              tooltip: 'Clear search',
+                              onPressed: () {
+                                _searchController.clear();
+                                _filterUsers();
+                              },
+                            ),
+                    ).enter(),
+                    AppSpacing.vSm,
+                    SegmentedFilter(
+                      selected: _filters.indexOf(_selectedFilter),
+                      onChanged: (i) {
+                        setState(() => _selectedFilter = _filters[i]);
+                        _filterUsers();
+                      },
+                      segments: [
+                        for (final f in _filters)
+                          FilterSegment(_filterLabels[f] ?? f),
+                      ],
+                    ).enter(delay: const Duration(milliseconds: 60)),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                isSearching ? 'No users found' : 'No users available',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? AppPalette.textPrimaryDark : AppPalette.textPrimaryLight,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isSearching
-                    ? 'Try a different search term'
-                    : 'There are no users to chat with at the moment',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+              Expanded(
+                child: AsyncBody(
+                  loading: _isLoading,
+                  error: _error == null ? null : 'Tap refresh to try again',
+                  onRetry: _loadUsers,
+                  isEmpty: _filteredUsers.isEmpty,
+                  empty: _buildEmptyState(),
+                  // Re-keyed per search/filter so the new result set
+                  // cross-fades in with a fresh stagger.
+                  child: KeyedSubtree(
+                    key: ValueKey('$_selectedFilter|${_searchController.text}'),
+                    child: _buildUserList(),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildUserList(bool isDarkMode) {
+  Widget _buildEmptyState() {
+    final isSearching = _searchController.text.isNotEmpty;
+    return EmptyState(
+      icon: isSearching
+          ? Icons.search_off_rounded
+          : Icons.people_outline_rounded,
+      title: isSearching ? 'No users found' : 'No users available',
+      message: isSearching
+          ? 'Try a different search term'
+          : 'There are no users to chat with at the moment',
+    );
+  }
+
+  Widget _buildUserList() {
+    final c = context.colors;
     // Group users by first letter of name
     final groupedUsers = <String, List<ChatUser>>{};
     for (final user in _filteredUsers) {
@@ -491,251 +237,151 @@ class _UserListScreenState extends State<UserListScreen>
           : '#';
       groupedUsers.putIfAbsent(firstLetter, () => []).add(user);
     }
-
     final sortedKeys = groupedUsers.keys.toList()..sort();
+    var i = 0;
 
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: sortedKeys.length,
-        itemBuilder: (context, sectionIndex) {
-          final letter = sortedKeys[sectionIndex];
-          final usersInSection = groupedUsers[letter]!;
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Section Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-                child: Text(
-                  letter,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppPalette.emerald,
-                  ),
-                ),
-              ),
-
-              // Users in this section
-              ...usersInSection.asMap().entries.map((entry) {
-                final index = entry.key;
-                final user = entry.value;
-                return _buildUserTile(
-                  user,
-                  isDarkMode,
-                  sectionIndex * 100 + index,
-                );
-              }),
-            ],
-          );
-        },
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        0,
+        AppSpacing.md,
+        AppSpacing.xl,
       ),
-    );
-  }
-
-  Widget _buildUserTile(ChatUser user, bool isDarkMode, int index) {
-    return StaggeredEntrance(
-      animation: _animationController,
-      index: index,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(isDarkMode ? 30 : 10),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+      children: [
+        for (final letter in sortedKeys) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xs,
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.xs,
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: () => _startChat(user),
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  // Avatar
-                  Stack(
-                    children: [
-                      _buildAvatar(user, isDarkMode),
-                      if (user.isOnline)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: AppPalette.success,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isDarkMode
-                                    ? AppPalette.surfaceDark
-                                    : Colors.white,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-
-                  // User Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: isDarkMode
-                                ? AppPalette.textPrimaryDark
-                                : AppPalette.textPrimaryLight,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            if (user.role != null) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getRoleColor(
-                                    user.role!,
-                                  ).withAlpha(30),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  user.role!,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _getRoleColor(user.role!),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Expanded(
-                              child: Text(
-                                user.isOnline
-                                    ? 'Online'
-                                    : user.formattedLastSeen,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: user.isOnline
-                                      ? AppPalette.success
-                                      : isDarkMode
-                                      ? AppPalette.textMutedDark
-                                      : AppPalette.textMutedLight,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Chat Button
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.chat_bubble_outline,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ],
+            child: Text(
+              letter,
+              style: context.text.labelLarge?.copyWith(
+                color: c.brand,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
-        ),
-      ),
+          for (final user in groupedUsers[letter]!)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: _buildUserTile(user).enterList(i++),
+            ),
+        ],
+      ],
     );
   }
 
-  Widget _buildAvatar(ChatUser user, bool isDarkMode) {
+  Widget _buildUserTile(ChatUser user) {
+    final c = context.colors;
     final avatarUrl = user.avatar;
-    // Check if it's a valid network URL
-    if (avatarUrl != null &&
-        avatarUrl.isNotEmpty &&
-        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
-      return CircleAvatar(
-        radius: 26,
-        backgroundImage: NetworkImage(avatarUrl),
-        backgroundColor: isDarkMode
-            ? AppPalette.surfaceSubtleDark
-            : AppPalette.outlineLight,
-        onBackgroundImageError: (e, s) {
-          if (kDebugMode) print('⚠️ Failed to load avatar: $e');
-        },
-      );
-    }
+    final hasValidUrl =
+        avatarUrl != null &&
+        (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'));
 
-    return CircleAvatar(
-      radius: 26,
-      backgroundColor: _getAvatarColor(user.name),
-      child: Text(
-        user.initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+    return AppCard(
+      onTap: () => _startChat(user),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AppAvatar(
+                imageUrl: hasValidUrl ? avatarUrl : null,
+                name: user.name,
+                size: 52,
+              ),
+              if (user.isOnline)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: c.success,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: context.scheme.surface,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          AppSpacing.hMd,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.name,
+                  style: context.text.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                AppSpacing.vXxs,
+                Row(
+                  children: [
+                    if (user.role != null) ...[
+                      StatusPill(
+                        label: user.role!,
+                        color: _getRoleColor(user.role!),
+                        showDot: false,
+                        dense: true,
+                      ),
+                      AppSpacing.hXs,
+                    ],
+                    Expanded(
+                      child: Text(
+                        user.isOnline ? 'Online' : user.formattedLastSeen,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.bodySmall?.copyWith(
+                          color: user.isOnline ? c.success : c.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: c.brandGradient,
+              borderRadius: AppRadius.brSm,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  Color _getAvatarColor(String name) {
-    final colors = [
-      AppPalette.emerald,
-      AppPalette.info,
-      AppPalette.warning,
-      const Color(0xFF9C27B0),
-      const Color(0xFFE91E63),
-      const Color(0xFF00BCD4),
-      const Color(0xFF795548),
-    ];
-    return colors[name.hashCode % colors.length];
   }
 
   Color _getRoleColor(String role) {
+    final c = context.colors;
     switch (role.toLowerCase()) {
       case 'driver':
-        return AppPalette.info;
+        return c.accent;
       case 'guardian':
       case 'parent':
-        return const Color(0xFF9C27B0);
+        return c.info;
       case 'admin':
       case 'staff':
-        return AppPalette.warning;
+        return c.warning;
       default:
-        return AppPalette.emerald;
+        return c.brand;
     }
   }
 }

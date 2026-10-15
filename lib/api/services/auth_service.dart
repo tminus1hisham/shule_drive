@@ -35,18 +35,24 @@ class AuthService {
   }) async {
     try {
       final normalizedPhone = _normalizePhone(phoneNumber);
+      final firebaseToken =
+          await FirebaseNotificationBackend.currentToken() ?? '';
 
       final response = await _apiClient.post(
         Endpoints.login,
         body: {
           'phoneNumber': normalizedPhone,
           'password': password,
-          'firebaseToken': await FirebaseNotificationBackend.currentToken() ?? '',
+          'firebaseToken': firebaseToken,
         },
         requiresAuth: false,
       );
 
-      return LoginResponse.fromJson(response);
+      final login = LoginResponse.fromJson(response);
+      if (login.success) {
+        await FirebaseNotificationBackend.rememberSentToken(firebaseToken);
+      }
+      return login;
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -578,9 +584,6 @@ class LoginResponse {
       json = json['data'] as Map<String, dynamic>;
     }
 
-    // Debug: print the raw response to understand structure
-    debugPrint('LoginResponse raw: $json');
-
     User? user;
 
     // Try to extract user data from various API response formats
@@ -677,8 +680,6 @@ class LoginResponse {
       // Use base64 decode instead of base64Url since we already converted
       final decoded = utf8.decode(base64.decode(payload));
       final payloadJson = jsonDecode(decoded);
-
-      debugPrint('JWT payload decoded: $payloadJson');
 
       // Try different possible role fields in JWT
       final role =

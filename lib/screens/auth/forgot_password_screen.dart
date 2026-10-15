@@ -21,6 +21,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   String _completePhoneNumber = '';
+  String? _phoneEmptyError;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -54,7 +55,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Future<void> _sendOTP() async {
-    if (!_formKey.currentState!.validate()) return;
+    // IntlPhoneField only validates on change; catch the untouched field.
+    final phoneEmpty = _phoneController.text.trim().isEmpty;
+    setState(
+      () => _phoneEmptyError = phoneEmpty
+          ? 'Please enter your phone number'
+          : null,
+    );
+    if (!_formKey.currentState!.validate() || phoneEmpty) return;
 
     HapticFeedback.lightImpact();
 
@@ -143,7 +151,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               const SizedBox(height: AppSpacing.xs),
               IntlPhoneField(
                 controller: _phoneController,
-                decoration: const InputDecoration(hintText: '712 345 678'),
+                decoration: InputDecoration(
+                  hintText: '712 345 678',
+                  errorText: _phoneEmptyError,
+                ),
                 initialCountryCode: 'KE',
                 disableLengthCheck: true,
                 flagsButtonPadding: const EdgeInsets.only(left: AppSpacing.sm),
@@ -153,7 +164,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 ),
                 dropdownTextStyle: context.text.bodyLarge,
                 style: context.text.bodyLarge,
-                onChanged: (phone) => _completePhoneNumber = phone.completeNumber,
+                onChanged: (phone) {
+                  _completePhoneNumber = phone.completeNumber;
+                  if (_phoneEmptyError != null) {
+                    setState(() => _phoneEmptyError = null);
+                  }
+                },
                 validator: (phone) {
                   if (phone == null || phone.number.isEmpty) {
                     return 'Please enter your phone number';

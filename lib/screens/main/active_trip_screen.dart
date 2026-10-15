@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show sin, cos, sqrt, atan2, pi;
+import 'dart:math' show sin, cos, sqrt, atan2;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../api/api.dart' as api;
-import '../../providers/app_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../models/map_models.dart';
@@ -18,10 +17,13 @@ import '../../config/map_config.dart';
 import '../../services/notification_service.dart';
 import '../../mqtt_client.dart';
 import '../../utils/student_trip_logic.dart';
+import '../../utils/location_settings.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/next_student_trip_action_card.dart';
+import '../../widgets/ui/ui.dart';
+import '../../theme/app_spacing.dart';
+import '../../theme/app_theme_extension.dart';
 
-import '../../theme/app_colors.dart';
 /// Active Trip Screen - Shows live map tracking with flutter_map
 ///
 /// Features:
@@ -133,11 +135,16 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     });
   }
 
+  List<String> get _statuses => _preloadedStudents.isNotEmpty
+      ? [for (final s in _preloadedStudents) '${s['status']}']
+      : [...?_activeTrip?.students.map((s) => s.status)];
+
   void _recomputeCounts() {
     if (_preloadedStudents.isNotEmpty) {
       _totalCount = _preloadedStudents.length;
-      _pickedCount =
-          _preloadedStudents.where((s) => s['status'] == 'picked').length;
+      _pickedCount = _preloadedStudents
+          .where((s) => s['status'] == 'picked')
+          .length;
     } else if (_activeTrip != null) {
       _totalCount = _activeTrip!.students.length;
       _pickedCount = _activeTrip!.pickedCount;
@@ -351,8 +358,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
   Future<void> _checkLocationPermission() async {
     try {
-      bool serviceEnabled =
-          await geo.Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled = await geo.Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() => _hasLocationPermission = false);
         return;
@@ -386,10 +392,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
       _locationSubscription =
           geo.Geolocator.getPositionStream(
-            locationSettings: const geo.LocationSettings(
-              accuracy: geo.LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
+            locationSettings: driverLocationSettings(),
           ).listen(
             _onPositionUpdate,
             onError: (error) => debugPrint('❌ Location stream error: $error'),
@@ -492,14 +495,17 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   Map<String, dynamic>? _nextActionableStudent() {
-    final students = List<Map<String, dynamic>>.from(_buildStudentListFromStops());
+    final students = List<Map<String, dynamic>>.from(
+      _buildStudentListFromStops(),
+    );
     if (students.isEmpty) return null;
 
     students.sort((a, b) => _asInt(a['order']).compareTo(_asInt(b['order'])));
 
     final isReturnTrip = isReturnTripDirection(_activeTrip?.tripDirection);
     if (isReturnTrip) {
-      return _firstStudentWithStatus(students, 'picked');
+      return _firstStudentWithStatus(students, 'picked') ??
+          _firstStudentWithStatus(students, 'pending');
     }
 
     return _firstStudentWithStatus(students, 'pending') ??
@@ -519,10 +525,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   StudentTripActionMode _actionModeForStudent(Map<String, dynamic> student) {
-    if (isReturnTripDirection(_activeTrip?.tripDirection)) {
-      return StudentTripActionMode.dropoff;
-    }
-
     final status = (student['status'] ?? 'pending').toString();
     return status == 'picked'
         ? StudentTripActionMode.dropoff
@@ -596,9 +598,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
-  StudentTripActionMode _actionModeForTripTarget(
-    NextStudentTripTarget target,
-  ) {
+  StudentTripActionMode _actionModeForTripTarget(NextStudentTripTarget target) {
     final student = _findStudentById(target.id);
     if (student != null) return _actionModeForStudent(student);
 
@@ -750,13 +750,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     }
   }
 
-  Future<void> _showStudentPickupDialog(
-    RouteStop stop,
-    BusLocation busLocation,
-  ) async {
-    _maybeShowNextStudentProximityPrompt(busLocation, force: true);
-  }
-
   void _maybeShowNextStudentProximityPrompt(
     BusLocation location, {
     bool force = false,
@@ -840,90 +833,68 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   void _showTripOptions() {
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.my_location),
-              title: const Text('Center on Bus'),
-              onTap: () {
-                Navigator.pop(context);
-                _centerOnBus();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('View Students'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(
-                  context,
-                  '/students-list',
-                  arguments: {'tripId': _tripId},
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.chat),
-              title: const Text('Chat with Guardians'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/chat');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.call),
-              title: const Text('Emergency Call'),
-              onTap: () {
-                Navigator.pop(context);
-                _showEmergencyDialog();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEmergencyDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning, color: AppPalette.error),
-            SizedBox(width: 8),
-            Text('Emergency'),
-          ],
-        ),
-        content: const Text('Are you sure you want to make an emergency call?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppListTile(
+            icon: Icons.my_location_rounded,
+            title: 'Center on Bus',
+            onTap: () {
               Navigator.pop(context);
+              _centerOnBus();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppPalette.error,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Call Emergency'),
-          ),
+          ).enterList(0),
+          AppListTile(
+            icon: Icons.list_alt_rounded,
+            title: 'View Students',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(
+                context,
+                '/students-list',
+                arguments: {'tripId': _tripId},
+              );
+            },
+          ).enterList(1),
+          AppListTile(
+            icon: Icons.chat_bubble_outline_rounded,
+            title: 'Chat with Guardians',
+            iconColor: context.colors.info,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/chat');
+            },
+          ).enterList(2),
+          AppListTile(
+            icon: Icons.call_rounded,
+            title: 'Emergency Call',
+            destructive: true,
+            onTap: () {
+              Navigator.pop(context);
+              _showEmergencyDialog();
+            },
+          ).enterList(3),
         ],
       ),
     );
   }
 
+  void _showEmergencyDialog() {
+    confirmDialog(
+      context,
+      title: 'Emergency',
+      message: 'Are you sure you want to make an emergency call?',
+      confirmLabel: 'Call Emergency',
+      icon: Icons.warning_rounded,
+      destructive: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final appProvider = context.watch<AppProvider>();
-    final isDarkMode = appProvider.isDarkMode;
+    final c = context.colors;
 
     return MainScaffold(
       title: _activeTrip?.routeName ?? 'Active Trip',
@@ -932,6 +903,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.more_vert),
+          tooltip: 'Trip options',
           onPressed: _showTripOptions,
         ),
       ],
@@ -963,8 +935,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                   if (_routePoints.isNotEmpty)
                     Polyline(
                       points: _routePoints,
-                      color: AppPalette.emerald,
-                      strokeWidth: 4,
+                      color: c.brand,
+                      strokeWidth: 5,
+                      borderColor: Colors.white.withValues(alpha: 0.8),
+                      borderStrokeWidth: 2,
                     ),
                 ],
               ),
@@ -980,13 +954,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       ),
                       width: 30,
                       height: 30,
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: AppDuration.slow,
                         decoration: BoxDecoration(
-                          color: isProcessed
-                              ? AppPalette.textMutedLight
-                              : AppPalette.emerald,
+                          color: isProcessed ? c.textMuted : c.brand,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: c.shadowSm,
                         ),
                         child: Center(
                           child: Text(
@@ -1023,9 +997,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                       height: 24,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: AppPalette.emerald,
+                          color: c.accent,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: c.shadowMd,
                         ),
                       ),
                     ),
@@ -1034,79 +1009,85 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             ],
           ),
 
-          // Loading indicator
-          if (_isLoading)
-            Container(
-              color: Colors.black26,
-              child: const Center(
-                child: CircularProgressIndicator(color: AppPalette.emerald),
-              ),
-            ),
-
-          // Location permission warning
-          if (!_hasLocationPermission && !_isLoading)
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppPalette.warning),
+          // Loading scrim fades away once the trip is ready.
+          IgnorePointer(
+            ignoring: !_isLoading,
+            child: AnimatedOpacity(
+              opacity: _isLoading ? 1 : 0,
+              duration: AppDuration.slow,
+              child: ColoredBox(
+                color: Colors.black.withValues(
+                  alpha: context.isDark ? 0.5 : 0.25,
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.location_off, color: Colors.orange.shade800),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Location permission required for real-time tracking',
-                        style: TextStyle(color: Colors.orange.shade800),
-                      ),
+                child: Center(
+                  child: GlassPanel(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.lg,
                     ),
-                    TextButton(
-                      onPressed: _checkLocationPermission,
-                      child: const Text('Enable'),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: c.brand),
+                        AppSpacing.vMd,
+                        Text('Loading trip…', style: context.text.titleSmall),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-
-          // Top info bar
-          Positioned(
-            top: _hasLocationPermission ? 16 : 80,
-            left: 16,
-            right: 16,
-            child: _buildTopInfoBar(isDarkMode),
           ),
 
-          // Alerts panel
-          if (_alerts.isNotEmpty)
-            Positioned(
-              top: _hasLocationPermission ? 100 : 164,
-              left: 16,
-              right: 16,
-              child: _buildAlertsPanel(isDarkMode),
+          // Top overlays: permission banner, trip bar, geofence alerts.
+          Positioned(
+            top: AppSpacing.md,
+            left: AppSpacing.md,
+            right: 72,
+            child: RepaintBoundary(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AnimatedSize(
+                    duration: AppDuration.medium,
+                    curve: AppCurves.easeOut,
+                    child: !_hasLocationPermission && !_isLoading
+                        ? Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.xs,
+                            ),
+                            child: _buildPermissionBanner(),
+                          )
+                        : const SizedBox(width: double.infinity),
+                  ),
+                  _buildTopInfoBar().enter(offsetY: -40),
+                  if (_alerts.isNotEmpty) ...[
+                    AppSpacing.vXs,
+                    _buildAlertsPanel(),
+                  ],
+                ],
+              ),
             ),
+          ),
 
           // Map controls
           Positioned(
-            right: 16,
-            bottom: 200,
+            right: AppSpacing.md,
+            top: AppSpacing.md,
             child: Column(
               children: [
-                _buildMapButton(
-                  icon: Icons.my_location,
-                  label: 'Center',
-                  color: AppPalette.emerald,
+                _MapButton(
+                  icon: _followBus
+                      ? Icons.my_location_rounded
+                      : Icons.location_searching_rounded,
+                  tooltip: 'Center on bus',
+                  highlighted: true,
                   onPressed: _centerOnBus,
                 ),
-                const SizedBox(height: 8),
-                _buildMapButton(
-                  icon: Icons.add,
+                AppSpacing.vXs,
+                _MapButton(
+                  icon: Icons.add_rounded,
+                  tooltip: 'Zoom in',
                   onPressed: () {
                     final currentZoom = _mapController.camera.zoom;
                     _mapController.move(
@@ -1115,9 +1096,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     );
                   },
                 ),
-                const SizedBox(height: 8),
-                _buildMapButton(
-                  icon: Icons.remove,
+                AppSpacing.vXs,
+                _MapButton(
+                  icon: Icons.remove_rounded,
+                  tooltip: 'Zoom out',
                   onPressed: () {
                     final currentZoom = _mapController.camera.zoom;
                     _mapController.move(
@@ -1126,15 +1108,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     );
                   },
                 ),
-                const SizedBox(height: 8),
-                _buildMapButton(
-                  icon: Icons.my_location,
-                  onPressed: _centerOnBus,
-                ),
-                const SizedBox(height: 8),
-                _buildMapStyleSelector(isDarkMode),
+                AppSpacing.vXs,
+                _buildMapStyleSelector(),
               ],
-            ),
+            ).enter(delay: const Duration(milliseconds: 150)),
           ),
 
           // Bottom panel
@@ -1142,43 +1119,51 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: _buildBottomPanel(isDarkMode),
+            child: RepaintBoundary(
+              child: _buildBottomPanel().enter(
+                offsetY: 80,
+                delay: const Duration(milliseconds: 80),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMapButton({
-    required IconData icon,
-    required VoidCallback onPressed,
-    String? label,
-    Color? color,
-  }) {
-    final isDark = context.read<AppProvider>().isDarkMode;
-    final bgColor = color ?? (isDark ? AppPalette.surfaceSubtleDark : Colors.white);
-    final fgColor = color != null
-        ? Colors.white
-        : (isDark ? Colors.white : Colors.black87);
-
-    return FloatingActionButton.small(
-      onPressed: onPressed,
-      backgroundColor: bgColor,
-      foregroundColor: fgColor,
-      heroTag: label ?? icon.toString(),
-      child: label == null
-          ? Icon(icon)
-          : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18),
-                Text(label, style: const TextStyle(fontSize: 8)),
-              ],
+  Widget _buildPermissionBanner() {
+    final c = context.colors;
+    return GlassPanel(
+      tint: c.warning,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.xs,
+        AppSpacing.xxs,
+        AppSpacing.xs,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_off_rounded, color: c.warning),
+          AppSpacing.hXs,
+          Expanded(
+            child: Text(
+              'Location permission required for real-time tracking',
+              style: context.text.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-    );
+          ),
+          TextButton(
+            onPressed: _checkLocationPermission,
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    ).enter(offsetY: -20);
   }
 
-  Widget _buildMapStyleSelector(bool isDarkMode) {
+  Widget _buildMapStyleSelector() {
+    final c = context.colors;
     final styles = [
       {'key': MapConfig.mapboxLightStyle, 'label': 'Light', 'icon': Icons.map},
       {
@@ -1194,12 +1179,13 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     ];
 
     return PopupMenuButton<String>(
+      tooltip: 'Map style',
       onSelected: (style) {
+        HapticFeedback.selectionClick();
         setState(() => _currentMapStyle = style);
       },
       offset: const Offset(-50, 0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.brMd),
       itemBuilder: (context) => styles.map((style) {
         final isSelected = _currentMapStyle == style['key'];
         return PopupMenuItem<String>(
@@ -1208,155 +1194,137 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
             children: [
               Icon(
                 style['icon'] as IconData,
-                size: 20,
-                color: isSelected
-                    ? AppPalette.emerald
-                    : (isDarkMode ? Colors.white70 : Colors.black54),
+                size: AppIconSize.md,
+                color: isSelected ? c.brand : c.textSecondary,
               ),
-              const SizedBox(width: 12),
+              AppSpacing.hSm,
               Text(
                 style['label'] as String,
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected
-                      ? AppPalette.emerald
-                      : (isDarkMode ? Colors.white : Colors.black87),
+                  color: isSelected ? c.brand : null,
                 ),
               ),
               if (isSelected) ...[
                 const Spacer(),
-                const Icon(Icons.check, size: 18, color: AppPalette.emerald),
+                Icon(Icons.check, size: 18, color: c.brand),
               ],
             ],
           ),
         );
       }).toList(),
-      child: FloatingActionButton.small(
-        onPressed: null,
-        backgroundColor: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-        foregroundColor: isDarkMode ? Colors.white : Colors.black87,
-        child: const Icon(Icons.layers),
-      ),
+      child: const _MapButton(icon: Icons.layers_rounded, onPressed: null),
     );
   }
 
-  Widget _buildTopInfoBar(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
-        ],
+  Widget _buildTopInfoBar() {
+    final c = context.colors;
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+        AppSpacing.sm,
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   _activeTrip?.routeName ?? 'Route',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : Colors.black,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '$_pickedCount/$_totalCount students picked',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppPalette.emerald.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.circle, color: AppPalette.emerald, size: 8),
-                const SizedBox(width: 6),
-                Text(
-                  'LIVE',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppPalette.emerald,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAlertsPanel(bool isDarkMode) {
-    return Column(
-      children: _alerts.take(3).map((alert) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 8,
+              ),
+              StatusPill(
+                label: 'LIVE',
+                color: c.brand,
+                pulse: true,
+                dense: true,
               ),
             ],
           ),
-          child: Row(
+          AppSpacing.vXxs,
+          Row(
             children: [
-              Text(alert.type.icon, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      alert.type.displayName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                    ),
-                    Text(
-                      '${alert.stopName} - ${alert.formattedDistance}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                      ),
-                    ),
-                  ],
+              AnimatedCount(
+                _pickedCount,
+                style: context.text.bodySmall?.copyWith(
+                  color: c.brand,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
-                alert.formattedEta,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppPalette.emerald,
-                ),
+                '/$_totalCount students picked',
+                style: context.text.bodySmall?.copyWith(color: c.textSecondary),
               ),
             ],
           ),
+          AppSpacing.vXs,
+          TripProgress.bar(
+            done: _pickedCount,
+            total: _totalCount,
+            thickness: 5,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertsPanel() {
+    final c = context.colors;
+    return Column(
+      children: _alerts.take(3).map((alert) {
+        return Padding(
+          key: ValueKey('${alert.stopName}-${alert.type.name}'),
+          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+          child: GlassPanel(
+            tint: c.accent,
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Row(
+              children: [
+                Text(alert.type.icon, style: const TextStyle(fontSize: 24)),
+                AppSpacing.hSm,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        alert.type.displayName,
+                        style: context.text.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        '${alert.stopName} - ${alert.formattedDistance}',
+                        style: context.text.bodySmall?.copyWith(
+                          color: c.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusPill(
+                  label: alert.formattedEta,
+                  color: c.brand,
+                  showDot: false,
+                  dense: true,
+                ),
+              ],
+            ),
+          ).enter(offsetY: -16),
         );
       }).toList(),
     );
   }
 
-  Widget _buildBottomPanel(bool isDarkMode) {
+  Widget _buildBottomPanel() {
+    final c = context.colors;
     final nextStudent = _nextActionableStudent();
     final nextMode = nextStudent == null
         ? StudentTripActionMode.pickup
@@ -1367,53 +1335,55 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final studentTargets = _studentTripTargets();
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.xs,
+        AppSpacing.md,
+        AppSpacing.md,
+      ),
       decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 16),
-        ],
+        color: context.scheme.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
+        border: Border(top: BorderSide(color: c.outline)),
+        boxShadow: c.shadowLg,
       ),
       child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Grabber
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: c.outline,
+                borderRadius: AppRadius.brPill,
+              ),
+            ),
             // Speed and heading info
-            if (_currentLocation != null)
+            if (_currentLocation != null) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.speed,
-                    size: 16,
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+                  _TelemetryChip(
+                    icon: Icons.speed_rounded,
+                    value: _currentLocation!.speed.round(),
+                    unit: ' km/h',
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${_currentLocation!.speed.toStringAsFixed(0)} km/h',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(
-                    Icons.navigation,
-                    size: 16,
-                    color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${_currentLocation!.heading.toStringAsFixed(0)}°',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                    ),
+                  AppSpacing.hXs,
+                  _TelemetryChip(
+                    icon: Icons.navigation_rounded,
+                    value: _currentLocation!.heading.round(),
+                    unit: '°',
                   ),
                 ],
               ),
-            const SizedBox(height: 12),
+              AppSpacing.vSm,
+            ],
 
             NextStudentTripActionCard(
               student: _nextStudentTripTarget(),
@@ -1434,91 +1404,29 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
               onStudents: _showStudentList,
               onNotify: _showNotifyOptions,
             ),
-            const SizedBox(height: 12),
+            AppSpacing.vSm,
 
             // Action buttons
             Row(
               children: [
                 Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 56,
-                    child: ElevatedButton.icon(
-                      onPressed: _showStudentList,
-                      icon: const Icon(Icons.people),
-                      label: Text(
-                        'Students ($_pickedCount/$_totalCount)',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDarkMode
-                            ? AppPalette.surfaceSubtleDark
-                            : AppPalette.surfaceSubtleLight,
-                        foregroundColor: isDarkMode
-                            ? Colors.white
-                            : Colors.black87,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                    ),
+                  child: AppButton(
+                    label: 'Students ($_pickedCount/$_totalCount)',
+                    icon: Icons.people_rounded,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: _showStudentList,
                   ),
                 ),
-                const SizedBox(width: 12),
+                AppSpacing.hSm,
                 Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 56,
-                    child: ElevatedButton.icon(
-                      onPressed: _isEndingTrip ? null : _completeTrip,
-                      icon: _isEndingTrip
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : const Icon(Icons.check_circle),
-                      label: Text(
-                        _isEndingTrip ? '...' : 'Complete',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppPalette.emerald,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                    ),
+                  child: AppButton(
+                    label: 'Complete',
+                    icon: Icons.flag_rounded,
+                    loading: _isEndingTrip,
+                    onPressed: _completeTrip,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'T-minus1',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode
-                      ? const Color(0x66FFFFFF)
-                      : const Color(0x66000000),
-                ),
-              ),
             ),
           ],
         ),
@@ -1565,32 +1473,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   Future<void> _pickAllStudents() async {
     if (_tripId == null) return;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Pick All Students'),
-        content: const Text(
-          'Are you sure you want to mark all pending students as picked?',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppPalette.emerald,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Pick All'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDialog(
+      context,
+      title: 'Pick All Students',
+      message: 'Are you sure you want to mark all pending students as picked?',
+      confirmLabel: 'Pick All',
+      icon: Icons.done_all_rounded,
     );
 
-    if (confirm != true) return;
+    if (!confirm) return;
 
     if (!mounted) return;
     final tripProvider = context.read<TripProvider>();
@@ -1623,44 +1514,22 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       });
       HapticFeedback.mediumImpact();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ All pending students marked as picked'),
-          backgroundColor: AppPalette.emerald,
-        ),
-      );
+      AppSnackbar.success(context, 'All pending students marked as picked');
     }
   }
 
   Future<void> _dropAllStudents() async {
     if (_tripId == null) return;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Drop All Students'),
-        content: const Text(
-          'Are you sure you want to mark all picked students as dropped?',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppPalette.emerald,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Drop All'),
-          ),
-        ],
-      ),
+    final confirm = await confirmDialog(
+      context,
+      title: 'Drop All Students',
+      message: 'Are you sure you want to mark all picked students as dropped?',
+      confirmLabel: 'Drop All',
+      icon: Icons.done_all_rounded,
     );
 
-    if (confirm != true) return;
+    if (!confirm) return;
 
     if (!mounted) return;
     final tripProvider = context.read<TripProvider>();
@@ -1693,12 +1562,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       });
       HapticFeedback.mediumImpact();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ All students marked as dropped'),
-          backgroundColor: AppPalette.emerald,
-        ),
-      );
+      AppSnackbar.success(context, 'All students marked as dropped');
     }
   }
 
@@ -1751,9 +1615,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     setState(() => _isUpdatingStudentStatus = true);
 
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
+    // Close the sheet/dialog the action came from — but only if one is open.
+    // (`canPop` alone would pop this screen itself when it was pushed.)
+    if (ModalRoute.of(context)?.isCurrent == false) {
+      Navigator.of(context).pop();
     }
 
     final tripProvider = context.read<TripProvider>();
@@ -1802,11 +1667,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     });
 
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tripProvider.errorMessage ?? 'Failed to update status'),
-          backgroundColor: AppPalette.error,
-        ),
+      AppSnackbar.error(
+        context,
+        tripProvider.errorMessage ?? 'Failed to update status',
       );
       return;
     }
@@ -1827,25 +1690,11 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         ? 'Marked absent'
         : 'Dropped off';
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Text(
-              statusText,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        backgroundColor: newStatus == 'absent'
-            ? AppPalette.warning
-            : AppPalette.emerald,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      ),
-    );
+    if (newStatus == 'absent') {
+      AppSnackbar.info(context, statusText);
+    } else {
+      AppSnackbar.success(context, statusText);
+    }
   }
 
   /// Open the group chat for this active trip.
@@ -1860,6 +1709,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'receiverName': _activeTrip?.routeName ?? 'Trip Chat',
         'receiverRole': 'Group',
         'isTripChat': true,
+        'memberPhones': _guardianPhones(),
       },
     );
   }
@@ -1871,17 +1721,15 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final studentName = student['name'] as String? ?? 'Student';
 
     if (guardianPhone == null && guardianId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No guardian contact available')),
-      );
+      AppSnackbar.info(context, 'No guardian contact available');
+
       return;
     }
 
     Navigator.pushNamed(
       context,
-      '/chat',
+      '/chat-detail',
       arguments: {
-        'receiverId': guardianId ?? guardianPhone,
         'receiverName': student['guardianName'] ?? 'Guardian of $studentName',
         'receiverPhone': guardianPhone,
         'receiverAvatar': null,
@@ -1893,58 +1741,62 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   void _showNotifyOptions() {
-    showModalBottomSheet(
+    showAppBottomSheet<void>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Notify guardians',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.schedule, color: AppPalette.emerald),
-                title: const Text('Running Late'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _sendBulkMessage('The bus is running late.');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.traffic, color: AppPalette.emerald),
-                title: const Text('Traffic Delay'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _sendBulkMessage('Traffic is delaying the trip.');
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.check_circle,
-                  color: AppPalette.emerald,
-                ),
-                title: const Text('On Schedule'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _sendBulkMessage('The bus is on schedule.');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit_note, color: AppPalette.emerald),
-                title: const Text('Custom Message'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showMessageAllDialog();
-                },
-              ),
-            ],
+      builder: (context) {
+        final c = context.colors;
+        final options = [
+          (
+            Icons.schedule_rounded,
+            'Running Late',
+            c.warning,
+            'The bus is running late.',
           ),
-        ),
-      ),
+          (
+            Icons.traffic_rounded,
+            'Traffic Delay',
+            c.accent,
+            'Traffic is delaying the trip.',
+          ),
+          (
+            Icons.check_circle_rounded,
+            'On Schedule',
+            c.brand,
+            'The bus is on schedule.',
+          ),
+        ];
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              title: 'Notify guardians',
+              subtitle: 'Send a quick update to every guardian on this trip',
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            ),
+            AppSpacing.vSm,
+            for (final (i, o) in options.indexed)
+              AppListTile(
+                icon: o.$1,
+                title: o.$2,
+                iconColor: o.$3,
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendBulkMessage(o.$4, title: '🚌 ${o.$2}');
+                },
+              ).enterList(i),
+            AppListTile(
+              icon: Icons.edit_note_rounded,
+              title: 'Custom Message',
+              iconColor: c.info,
+              onTap: () {
+                Navigator.pop(context);
+                _showMessageAllDialog();
+              },
+            ).enterList(options.length),
+          ],
+        );
+      },
     );
   }
 
@@ -1962,27 +1814,29 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
-  Future<void> _sendBulkMessage(String message) async {
-    final students = _buildStudentListFromStops();
-    final guardianContacts = <String>{};
+  List<String> _guardianPhones() => {
+    for (final student in _buildStudentListFromStops())
+      if ((student['guardianPhone'] as String?)?.isNotEmpty ?? false)
+        student['guardianPhone'] as String,
+  }.toList();
 
-    for (final student in students) {
-      final phone = student['guardianPhone'] as String?;
-      if (phone != null && phone.isNotEmpty) guardianContacts.add(phone);
-    }
-
-    if (guardianContacts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No guardian contacts available')),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Alert sent to ${guardianContacts.length} guardians'),
-      ),
+  Future<void> _sendBulkMessage(
+    String message, {
+    String title = '🚌 Message from your driver',
+  }) async {
+    final route = _activeTrip?.routeName;
+    final sent = await context.read<TripProvider>().alertGuardians(
+      phones: _guardianPhones(),
+      title: title,
+      message: route == null || route.isEmpty ? message : '$message ($route)',
+      tripId: _tripId ?? _activeTrip?.id,
     );
+    if (!mounted) return;
+    if (sent == 0) {
+      AppSnackbar.info(context, 'No guardian contacts available');
+    } else {
+      AppSnackbar.success(context, 'Alert sent to $sent guardians');
+    }
   }
 
   Future<void> _completeTrip() async {
@@ -1995,8 +1849,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         builder: (context) => _CompleteTripDialog(
           tripName: _activeTrip?.routeName ?? 'Trip',
           totalStudents: _totalCount,
-          pickedCount: _pickedCount,
-          absentCount: _totalCount - _pickedCount,
+          pickedCount: _statuses
+              .where((s) => s == 'picked' || s == 'dropped')
+              .length,
+          absentCount: _statuses.where((s) => s == 'absent').length,
         ),
       );
 
@@ -2020,12 +1876,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
           if (mounted) {
             if (success) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Trip completed successfully'),
-                  backgroundColor: AppPalette.emerald,
-                ),
-              );
+              AppSnackbar.success(context, 'Trip completed successfully');
+
               Navigator.pushNamedAndRemoveUntil(
                 context,
                 '/dashboard',
@@ -2033,13 +1885,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 arguments: {'fromTripEnd': true},
               );
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Failed to complete trip: ${tripProvider.errorMessage ?? "Unknown error"}',
-                  ),
-                  backgroundColor: AppPalette.error,
-                ),
+              AppSnackbar.error(
+                context,
+                'Failed to complete trip: '
+                '${tripProvider.errorMessage ?? "Unknown error"}',
               );
             }
           }
@@ -2047,16 +1896,14 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppPalette.error),
-        );
+        AppSnackbar.error(context, 'Error: $e');
       }
     } finally {
       if (mounted) setState(() => _isEndingTrip = false);
     }
   }
 
-  /// Show trip summary after completing a trip
+  /// Celebratory trip summary shown after a trip is confirmed complete.
   Future<void> _showTripSummary() async {
     final absentCount = _preloadedStudents
         .where((s) => s['status'] == 'absent')
@@ -2064,125 +1911,116 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final droppedCount = _preloadedStudents
         .where((s) => s['status'] == 'dropped')
         .length;
+    // Dropped students were picked first; count them as picked up.
+    final pickedUp = _pickedCount + droppedCount;
+    final endedAt = TimeOfDay.now();
 
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppPalette.emerald.withAlpha(30),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.check_circle, color: AppPalette.emerald),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Trip Complete!',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
+        final c = context.colors;
+        return Dialog(
+          clipBehavior: Clip.antiAlias,
+          shape: const RoundedRectangleBorder(borderRadius: AppRadius.brXl),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildSummaryRow(
-                'Route',
-                _activeTrip?.routeName ?? '-',
-                isDarkMode,
-              ),
-              _buildSummaryRow('Students Picked', '$_pickedCount', isDarkMode),
-              _buildSummaryRow('Students Absent', '$absentCount', isDarkMode),
-              if (droppedCount > 0)
-                _buildSummaryRow(
-                  'Students Dropped',
-                  '$droppedCount',
-                  isDarkMode,
+              GradientHeroCard(
+                borderRadius: BorderRadius.zero,
+                child: Column(
+                  children: [
+                    TripProgress.ring(
+                      done: _pickedCount + droppedCount,
+                      total: _totalCount,
+                      onBrand: true,
+                      size: 88,
+                      thickness: 8,
+                      center: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 40,
+                      ).pop(delay: const Duration(milliseconds: 350)),
+                    ),
+                    AppSpacing.vMd,
+                    Text(
+                      'Trip Complete!',
+                      style: context.text.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    AppSpacing.vXxs,
+                    Text(
+                      _activeTrip?.routeName ?? '-',
+                      textAlign: TextAlign.center,
+                      style: context.text.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
                 ),
-              _buildSummaryRow('Total Students', '$_totalCount', isDarkMode),
-              const SizedBox(height: 8),
-              // Progress bar
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: _totalCount > 0 ? _pickedCount / _totalCount : 0,
-                  backgroundColor: isDarkMode
-                      ? AppPalette.textSecondaryLight
-                      : AppPalette.outlineLight,
-                  valueColor: const AlwaysStoppedAnimation(AppPalette.emerald),
-                  minHeight: 8,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${_totalCount > 0 ? (_pickedCount / _totalCount * 100).toInt() : 0}% pickup rate',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
+              ).celebrate(delay: const Duration(milliseconds: 500)),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: StatTile(
+                            icon: Icons.check_circle_rounded,
+                            value: '$pickedUp',
+                            label: 'Picked',
+                            color: c.brand,
+                          ),
+                        ),
+                        Expanded(
+                          child: StatTile(
+                            icon: Icons.cancel_rounded,
+                            value: '$absentCount',
+                            label: 'Absent',
+                            color: c.warning,
+                          ),
+                        ),
+                        if (droppedCount > 0)
+                          Expanded(
+                            child: StatTile(
+                              icon: Icons.home_rounded,
+                              value: '$droppedCount',
+                              label: 'Dropped',
+                              color: c.info,
+                            ),
+                          ),
+                        Expanded(
+                          child: StatTile(
+                            icon: Icons.groups_rounded,
+                            value: '$_totalCount',
+                            label: 'Total',
+                          ),
+                        ),
+                      ],
+                    ).enter(delay: const Duration(milliseconds: 200)),
+                    AppSpacing.vMd,
+                    Text(
+                      'Ended at ${endedAt.format(context)} · '
+                      '${_totalCount > 0 ? (pickedUp / _totalCount * 100).toInt() : 0}% pickup rate',
+                      style: context.text.bodySmall?.copyWith(
+                        color: c.textSecondary,
+                      ),
+                    ),
+                    AppSpacing.vLg,
+                    AppButton(
+                      label: 'Done',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppPalette.emerald,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Done',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
         );
       },
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-              fontSize: 14,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: isDarkMode ? Colors.white : Colors.black,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -2218,7 +2056,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'latitude': s.latitude,
         'longitude': s.longitude,
         'homeLatitude': s.pickedLatitude != 0 ? s.pickedLatitude : s.latitude,
-        'homeLongitude': s.pickedLongitude != 0 ? s.pickedLongitude : s.longitude,
+        'homeLongitude': s.pickedLongitude != 0
+            ? s.pickedLongitude
+            : s.longitude,
         'pickedLatitude': s.pickedLatitude,
         'pickedLongitude': s.pickedLongitude,
         'droppedLatitude': s.droppedLatitude,
@@ -2239,52 +2079,46 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     // Use actual students from the active trip
     if (_activeTrip != null && _activeTrip!.students.isNotEmpty) {
-      return _activeTrip!.students
-          .asMap()
-          .entries
-          .map(
-            (entry) {
-              final s = entry.value;
-              final stop = _stops.firstWhere(
-                (stop) => stop.studentIds?.contains(s.id) ?? false,
-                orElse: () => RouteStop(
-                  id: '',
-                  name: s.route ?? 'Unknown Stop',
-                  position: LatLng(s.latitude ?? 0, s.longitude ?? 0),
-                  order: entry.key,
-                ),
-              );
+      return _activeTrip!.students.asMap().entries.map((entry) {
+        final s = entry.value;
+        final stop = _stops.firstWhere(
+          (stop) => stop.studentIds?.contains(s.id) ?? false,
+          orElse: () => RouteStop(
+            id: '',
+            name: s.route ?? 'Unknown Stop',
+            position: LatLng(s.latitude ?? 0, s.longitude ?? 0),
+            order: entry.key,
+          ),
+        );
 
-              return {
-                'id': s.id,
-                'tripStudentId': s.tripStudentId,
-                'name': s.name,
-                'stopName': stop.name,
-                'status': s.status,
-                'guardianPhone': s.parentPhone,
-                'guardianId': null,
-                'guardianName': null,
-                'photo': s.photo,
-                'studentRegNumber': s.studentRegNumber,
-                'className': s.className,
-                'schoolName': s.schoolName,
-                'route': s.route,
-                'address': s.address ?? stop.address,
-                'latitude': s.latitude ?? stop.position.latitude,
-                'longitude': s.longitude ?? stop.position.longitude,
-                'homeLatitude': s.homeLatitude,
-                'homeLongitude': s.homeLongitude,
-                'pickedLatitude': s.pickedLatitude,
-                'pickedLongitude': s.pickedLongitude,
-                'droppedLatitude': s.droppedLatitude,
-                'droppedLongitude': s.droppedLongitude,
-                'pickupTime': s.pickupTime,
-                'dropoffTime': s.dropoffTime,
-                'order': stop.order == 0 ? entry.key : stop.order,
-              };
-            },
-          )
-          .toList();
+        return {
+          'id': s.id,
+          'tripStudentId': s.tripStudentId,
+          'name': s.name,
+          'stopName': stop.name,
+          'status': s.status,
+          'guardianPhone': s.parentPhone,
+          'guardianId': null,
+          'guardianName': null,
+          'photo': s.photo,
+          'studentRegNumber': s.studentRegNumber,
+          'className': s.className,
+          'schoolName': s.schoolName,
+          'route': s.route,
+          'address': s.address ?? stop.address,
+          'latitude': s.latitude ?? stop.position.latitude,
+          'longitude': s.longitude ?? stop.position.longitude,
+          'homeLatitude': s.homeLatitude,
+          'homeLongitude': s.homeLongitude,
+          'pickedLatitude': s.pickedLatitude,
+          'pickedLongitude': s.pickedLongitude,
+          'droppedLatitude': s.droppedLatitude,
+          'droppedLongitude': s.droppedLongitude,
+          'pickupTime': s.pickupTime,
+          'dropoffTime': s.dropoffTime,
+          'order': stop.order == 0 ? entry.key : stop.order,
+        };
+      }).toList();
     }
 
     // Fallback to stops if no students in trip
@@ -2341,60 +2175,55 @@ class _StudentListBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
-        color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: context.scheme.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
       ),
       child: Column(
         children: [
           // Handle bar
           Container(
-            margin: const EdgeInsets.only(top: 12),
+            margin: const EdgeInsets.only(top: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: (isDarkMode ? Colors.white : Colors.black).withValues(
-                alpha: 0.24,
-              ),
-              borderRadius: BorderRadius.circular(2),
+              color: c.outline,
+              borderRadius: AppRadius.brPill,
             ),
           ),
 
           // Header
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.md,
+            ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppPalette.emerald.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.people, color: AppPalette.emerald),
+                TripProgress.ring(
+                  done: pickedCount,
+                  total: totalCount,
+                  size: 52,
+                  thickness: 5,
                 ),
-                const SizedBox(width: 16),
+                AppSpacing.hMd,
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Students',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : Colors.black,
-                        ),
-                      ),
+                      Text('Students', style: context.text.headlineSmall),
                       Text(
                         '$pickedCount of $totalCount picked up',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+                        style: context.text.bodyMedium?.copyWith(
+                          color: c.textSecondary,
                         ),
                       ),
                     ],
@@ -2402,373 +2231,158 @@ class _StudentListBottomSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: onMessageAll,
-                  icon: const Icon(Icons.campaign, color: AppPalette.emerald),
+                  icon: Icon(Icons.campaign_rounded, color: c.brand),
                   tooltip: 'Alert all guardians',
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Close',
                 ),
               ],
             ),
           ),
 
-          // Progress bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: totalCount > 0 ? pickedCount / totalCount : 0,
-                backgroundColor: isDarkMode ? Colors.white12 : AppPalette.outlineLight,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppPalette.emerald,
-                ),
-                minHeight: 8,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Message All button
           if (students.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onMessageAll,
-                  icon: const Icon(Icons.campaign),
-                  label: Text('Alert All Guardians (${students.length})'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppPalette.emerald,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.md,
               ),
-            ),
-
-          if (students.isNotEmpty) const SizedBox(height: 12),
-
-          // Pick All and Drop All Buttons
-          if (students.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: onPickAll,
-                      icon: const Icon(Icons.check_circle_outline, size: 20),
-                      label: const Text('Pick All'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDarkMode
-                            ? Colors.white12
-                            : AppPalette.surfaceSubtleLight,
-                        foregroundColor: isDarkMode
-                            ? Colors.white
-                            : Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isDarkMode
-                                ? Colors.white24
-                                : AppPalette.outlineLight,
-                          ),
-                        ),
-                      ),
-                    ),
+                  AppButton(
+                    label: 'Alert All Guardians (${students.length})',
+                    icon: Icons.campaign_rounded,
+                    size: AppButtonSize.medium,
+                    onPressed: onMessageAll,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: onDropAll,
-                      icon: const Icon(Icons.home_outlined, size: 20),
-                      label: const Text('Drop All'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDarkMode
-                            ? Colors.white12
-                            : AppPalette.surfaceSubtleLight,
-                        foregroundColor: isDarkMode
-                            ? Colors.white
-                            : Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isDarkMode
-                                ? Colors.white24
-                                : AppPalette.outlineLight,
-                          ),
+                  AppSpacing.vSm,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Pick All',
+                          icon: Icons.done_all_rounded,
+                          variant: AppButtonVariant.secondary,
+                          size: AppButtonSize.medium,
+                          onPressed: onPickAll,
                         ),
                       ),
-                    ),
+                      AppSpacing.hSm,
+                      Expanded(
+                        child: AppButton(
+                          label: 'Drop All',
+                          icon: Icons.home_rounded,
+                          variant: AppButtonVariant.outline,
+                          size: AppButtonSize.medium,
+                          onPressed: onDropAll,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
+              ).enter(),
             ),
-
-          if (students.isNotEmpty) const SizedBox(height: 16),
 
           // Student list
           Expanded(
             child: students.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 64,
-                          color: isDarkMode ? Colors.white30 : AppPalette.textMutedLight,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No students in this trip',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: isDarkMode
-                                ? AppPalette.textSecondaryDark
-                                : AppPalette.textSecondaryLight,
-                          ),
-                        ),
-                      ],
-                    ),
+                ? const EmptyState(
+                    icon: Icons.people_outline_rounded,
+                    title: 'No students in this trip',
+                    compact: true,
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      0,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                    ),
                     itemCount: students.length,
+                    separatorBuilder: (_, _) => AppSpacing.vXs,
                     itemBuilder: (context, index) {
                       final student = students[index];
-                      final status = student['status'] ?? 'pending';
+                      final String status = student['status'] ?? 'pending';
                       final isPicked = status == 'picked';
-                      final isDropped = status == 'dropped';
-                      final isAbsent = status == 'absent';
                       final isPending = status == 'pending';
+                      final id = student['id'].toString();
+                      final hasGuardian =
+                          student['guardianPhone'] != null ||
+                          student['guardianId'] != null;
 
-                      final content = Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? AppPalette.surfaceSubtleDark
-                              : AppPalette.surfaceSubtleLight,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ListTile(
-                          onTap: () => onStudentTap(student),
-                          leading: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: isPicked
-                                  ? AppPalette.emerald
-                                  : isDropped
-                                  ? AppPalette.info
-                                  : isDarkMode
-                                  ? Colors.white12
-                                  : AppPalette.outlineLight,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isPicked
-                                  ? Icons.check
-                                  : isDropped
-                                  ? Icons.logout
-                                  : Icons.person,
-                              color: isPicked || isDropped
-                                  ? Colors.white
-                                  : isDarkMode
-                                  ? AppPalette.textSecondaryDark
-                                  : AppPalette.textSecondaryLight,
-                            ),
-                          ),
-                          title: Text(
-                            student['name'] ?? 'Student ${index + 1}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: isDarkMode ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          subtitle: Text(
-                            student['stopName'] ?? 'No stop assigned',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDarkMode
-                                  ? AppPalette.textSecondaryDark
-                                  : AppPalette.textSecondaryLight,
-                            ),
-                          ),
-                          trailing: isPending
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Pick button
-                                    _buildMiniActionButton(
-                                      icon: Icons.check,
-                                      color: AppPalette.emerald,
-                                      onTap: () => onUpdateStatus(
-                                        student['id'],
-                                        'picked',
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    // Absent button
-                                    _buildMiniActionButton(
-                                      icon: Icons.person_off,
-                                      color: AppPalette.warning,
-                                      onTap: () => onUpdateStatus(
-                                        student['id'],
-                                        'absent',
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (student['guardianPhone'] != null ||
-                                        student['guardianId'] != null)
-                                      IconButton(
-                                        onPressed: () =>
-                                            onChatWithGuardian(student),
-                                        icon: const Icon(
-                                          Icons.chat_bubble_outline,
-                                        ),
-                                        color: AppPalette.emerald,
-                                      ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isPicked
-                                            ? const Color(
-                                                0xFF6B9B5B,
-                                              ).withValues(alpha: 0.1)
-                                            : isDropped
-                                            ? AppPalette.info.withValues(alpha: 0.1)
-                                            : AppPalette.warning.withValues(
-                                                alpha: 0.1,
-                                              ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        isPicked
-                                            ? 'Picked'
-                                            : isDropped
-                                            ? 'Dropped'
-                                            : 'Absent',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: isPicked
-                                              ? AppPalette.emerald
-                                              : isDropped
-                                              ? AppPalette.info
-                                              : AppPalette.warning,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                      final row = StudentStatusRow(
+                        name: student['name'] ?? 'Student ${index + 1}',
+                        status: status,
+                        photoUrl: student['photo'] as String?,
+                        subtitle: student['stopName'] ?? 'No stop assigned',
+                        onTap: () => onStudentTap(student),
+                        trailing: isPending
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildMiniActionButton(
+                                    icon: Icons.check_rounded,
+                                    color: c.brand,
+                                    tooltip: 'Pick up',
+                                    onTap: () => onUpdateStatus(id, 'picked'),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildMiniActionButton(
+                                    icon: Icons.person_off_rounded,
+                                    color: c.warning,
+                                    tooltip: 'Mark absent',
+                                    onTap: () => onUpdateStatus(id, 'absent'),
+                                  ),
+                                ],
+                              )
+                            : hasGuardian
+                            ? IconButton(
+                                onPressed: () => onChatWithGuardian(student),
+                                icon: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
                                 ),
-                        ),
-                      );
+                                color: c.brand,
+                                tooltip: 'Chat with guardian',
+                              )
+                            : null,
+                      ).enterList(index);
 
-                      if (isDropped || isAbsent) {
-                        return content;
-                      }
+                      if (!isPending && !isPicked) return row;
 
-                      return Dismissible(
-                        key: Key('bs_swipe_${student['id']}'),
-                        direction: isPicked
-                            ? DismissDirection.startToEnd
-                            : DismissDirection.horizontal,
-                        dismissThresholds: const {
-                          DismissDirection.startToEnd: 0.3,
-                          DismissDirection.endToStart: 0.3,
-                        },
-                        confirmDismiss: (direction) async {
-                          if (direction == DismissDirection.startToEnd) {
-                            HapticFeedback.mediumImpact();
+                      // Pending: swipe right to pick up, left for absent.
+                      // Picked: swipe right to drop off.
+                      return SwipeAction(
+                        key: ValueKey('bs_swipe_$id'),
+                        start: SwipeSpec(
+                          label: isPending ? 'Pick Up' : 'Drop Off',
+                          icon: isPending
+                              ? Icons.check_circle_rounded
+                              : Icons.home_rounded,
+                          color: isPending ? c.brand : c.info,
+                          onTrigger: () async {
                             onUpdateStatus(
-                              student['id'],
+                              id,
                               isPending ? 'picked' : 'dropped',
                             );
-                          } else {
-                            HapticFeedback.heavyImpact();
-                            onUpdateStatus(student['id'], 'absent');
-                          }
-                          return false; // Don't actually dismiss the widget from the tree, UI will rebuild
-                        },
-                        background: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: isPending
-                                ? AppPalette.emerald
-                                : AppPalette.info,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.only(left: 20),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isPending ? Icons.check_circle : Icons.logout,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                isPending ? 'Pick Up' : 'Drop Off',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
+                            return false;
+                          },
                         ),
-                        secondaryBackground: isPending
-                            ? Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                decoration: BoxDecoration(
-                                  color: AppPalette.warning,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    const Text(
-                                      'Absent',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Icon(
-                                      Icons.cancel,
-                                      color: Colors.white,
-                                      size: 28,
-                                    ),
-                                  ],
-                                ),
+                        end: isPending
+                            ? SwipeSpec(
+                                label: 'Absent',
+                                icon: Icons.cancel_rounded,
+                                color: c.warning,
+                                onTrigger: () async {
+                                  onUpdateStatus(id, 'absent');
+                                  return false;
+                                },
                               )
-                            : const SizedBox.shrink(),
-                        child: content,
+                            : null,
+                        child: row,
                       );
                     },
                   ),
@@ -2781,25 +2395,31 @@ class _StudentListBottomSheet extends StatelessWidget {
   Widget _buildMiniActionButton({
     required IconData icon,
     required Color color,
+    required String tooltip,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+    return Tooltip(
+      message: tooltip,
+      child: PressScale(
+        scale: 0.9,
+        child: Material(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: AppRadius.brSm,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: AppRadius.brSm,
+            child: SizedBox.square(
+              dimension: 40,
+              child: Icon(icon, color: color, size: AppIconSize.md),
+            ),
+          ),
         ),
-        child: Icon(icon, color: color, size: 18),
       ),
     );
   }
 }
 
-/// Modern Student Action Dialog - Shows Pick/Absent/Drop actions
+/// Student action dialog: status-tinted header with Pick / Absent / Drop.
 class _StudentActionDialog extends StatelessWidget {
   final Map<String, dynamic> student;
   final bool isPicked;
@@ -2821,202 +2441,173 @@ class _StudentActionDialog extends StatelessWidget {
     required this.onChat,
   });
 
+  String get _status => isPicked
+      ? 'picked'
+      : isDropped
+      ? 'dropped'
+      : isAbsent
+      ? 'absent'
+      : 'pending';
+
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
     final studentName = student['name'] ?? 'Student';
     final stopName = student['stopName'] as String?;
     final guardianPhone = student['guardianPhone'] as String?;
     final studentClass = student['class'] ?? student['className'] ?? '';
+    final style = StudentStatusStyle.of(context, _status);
+    // Pending reads as the brand; any settled status tints the header.
+    final headerColor = _status == 'pending' ? c.brand : style.color;
 
     return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.brXl),
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header with avatar
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.xl,
+              ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: _getHeaderGradient(),
+                  colors: [
+                    headerColor,
+                    Color.alphaBlend(
+                      Colors.black.withValues(alpha: 0.25),
+                      headerColor,
+                    ),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
                 ),
               ),
               child: Column(
                 children: [
-                  // Close button
                   Align(
                     alignment: Alignment.topRight,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: 'Close',
+                      icon: const Icon(Icons.close_rounded),
+                      color: Colors.white,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
                       ),
                     ),
                   ),
-                  // Avatar
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        width: 3,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _getInitials(studentName),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  StatusAvatar(
+                    name: studentName,
+                    photoUrl: student['photo'] as String?,
+                    color: Colors.white,
+                    size: 80,
+                  ).pop(),
+                  AppSpacing.vMd,
                   Text(
                     studentName,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                    textAlign: TextAlign.center,
+                    style: context.text.headlineSmall?.copyWith(
                       color: Colors.white,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   if (studentClass.isNotEmpty)
                     Text(
                       studentClass,
-                      style: TextStyle(
-                        fontSize: 14,
+                      style: context.text.bodyMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
-                  const SizedBox(height: 8),
-                  _buildStatusBadge(),
+                  AppSpacing.vXs,
+                  StatusPill(
+                    label: _status == 'pending'
+                        ? 'Pending Pickup'
+                        : style.label,
+                    color: Colors.white,
+                    icon: style.icon,
+                  ),
                 ],
               ),
             ),
 
             // Content
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Stop info
                   if (stopName != null)
-                    _buildInfoRow(Icons.location_on_outlined, 'Stop', stopName),
+                    _buildInfoRow(
+                      context,
+                      Icons.location_on_outlined,
+                      'Stop',
+                      stopName,
+                    ),
                   if (guardianPhone != null)
                     _buildInfoRow(
+                      context,
                       Icons.phone_outlined,
                       'Guardian',
                       guardianPhone,
                     ),
-                  const SizedBox(height: 20),
-
-                  // Actions
+                  AppSpacing.vSm,
                   Text(
                     'Actions',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+                    style: context.text.labelLarge?.copyWith(
+                      color: c.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Action buttons row
+                  AppSpacing.vSm,
                   Row(
                     children: [
                       Expanded(
                         child: _buildActionButton(
-                          icon: Icons.check_circle,
+                          icon: Icons.check_circle_rounded,
                           label: 'Pick',
-                          color: AppPalette.emerald,
+                          color: c.brand,
                           isActive: isPicked,
                           onTap: isPicked ? null : onPick,
-                        ),
+                        ).enterList(0),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildActionButton(
-                          icon: Icons.person_off,
+                          icon: Icons.person_off_rounded,
                           label: 'Absent',
-                          color: AppPalette.warning,
+                          color: c.warning,
                           isActive: isAbsent,
                           onTap: isAbsent ? null : onAbsent,
-                        ),
+                        ).enterList(1),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _buildActionButton(
-                          icon: Icons.logout,
+                          icon: Icons.home_rounded,
                           label: 'Drop',
-                          color: AppPalette.info,
+                          color: c.info,
                           isActive: isDropped,
                           onTap: isDropped ? null : onDrop,
-                        ),
+                        ).enterList(2),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // Chat button
-                  if (guardianPhone != null)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: onChat,
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        label: const Text('Chat with Guardian'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isDarkMode
-                              ? const Color(0xFF3C3C3C)
-                              : AppPalette.surfaceSubtleLight,
-                          foregroundColor: isDarkMode
-                              ? Colors.white
-                              : Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                      ),
+                  if (guardianPhone != null) ...[
+                    AppSpacing.vMd,
+                    AppButton(
+                      label: 'Chat with Guardian',
+                      icon: Icons.chat_bubble_outline_rounded,
+                      variant: AppButtonVariant.secondary,
+                      onPressed: onChat,
                     ),
+                  ],
                 ],
               ),
             ),
@@ -3026,76 +2617,29 @@ class _StudentActionDialog extends StatelessWidget {
     );
   }
 
-  List<Color> _getHeaderGradient() {
-    if (isPicked) return [AppPalette.emerald, AppPalette.emeraldPressed];
-    if (isAbsent) return [AppPalette.warning, Colors.deepOrange];
-    if (isDropped) return [AppPalette.info, Colors.blueAccent];
-    return [AppPalette.emerald, const Color(0xFF4A7A3A)];
-  }
-
-  Widget _buildStatusBadge() {
-    String label;
-    Color color;
-    IconData icon;
-
-    if (isPicked) {
-      label = 'Picked Up';
-      color = Colors.white;
-      icon = Icons.check_circle;
-    } else if (isAbsent) {
-      label = 'Absent';
-      color = Colors.white;
-      icon = Icons.person_off;
-    } else if (isDropped) {
-      label = 'Dropped Off';
-      color = Colors.white;
-      icon = Icons.logout;
-    } else {
-      label = 'Pending Pickup';
-      color = Colors.white;
-      icon = Icons.schedule;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    final muted = context.colors.textMuted;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppPalette.textMutedLight),
-          const SizedBox(width: 8),
+          Icon(icon, size: 18, color: muted),
+          AppSpacing.hXs,
           Text(
             '$label: ',
-            style: TextStyle(fontSize: 13, color: AppPalette.textMutedLight),
+            style: context.text.bodySmall?.copyWith(color: muted),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              style: context.text.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -3110,44 +2654,40 @@ class _StudentActionDialog extends StatelessWidget {
     required bool isActive,
     required VoidCallback? onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isActive ? color : color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isActive ? color : color.withValues(alpha: 0.3),
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: isActive ? Colors.white : color, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.white : color,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+    return PressScale(
+      enabled: onTap != null,
+      child: Material(
+        color: isActive ? color : color.withValues(alpha: 0.1),
+        borderRadius: AppRadius.brSm,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadius.brSm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.brSm,
+              border: Border.all(
+                color: isActive ? color : color.withValues(alpha: 0.3),
               ),
             ),
-          ],
+            child: Column(
+              children: [
+                Icon(icon, color: isActive ? Colors.white : color, size: 24),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isActive ? Colors.white : color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    if (parts.isNotEmpty && parts[0].isNotEmpty) {
-      return parts[0][0].toUpperCase();
-    }
-    return 'S';
   }
 }
 
@@ -3166,17 +2706,6 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
   final TextEditingController _messageController = TextEditingController();
   bool _isSending = false;
 
-  final List<Map<String, dynamic>> _quickMessages = [
-    {'icon': Icons.schedule, 'text': 'Running late', 'color': AppPalette.warning},
-    {'icon': Icons.traffic, 'text': 'Traffic delay', 'color': AppPalette.error},
-    {
-      'icon': Icons.access_time_filled,
-      'text': 'Arriving soon',
-      'color': AppPalette.emerald,
-    },
-    {'icon': Icons.location_on, 'text': 'At the stop', 'color': AppPalette.info},
-  ];
-
   @override
   void dispose() {
     _messageController.dispose();
@@ -3185,66 +2714,50 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
+    final quickMessages = [
+      (Icons.schedule_rounded, 'Running late', c.warning),
+      (Icons.traffic_rounded, 'Traffic delay', c.error),
+      (Icons.access_time_filled_rounded, 'Arriving soon', c.brand),
+      (Icons.location_on_rounded, 'At the stop', c.info),
+    ];
+    final canSend = !_isSending && _messageController.text.trim().isNotEmpty;
 
     return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: Container(
-        width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xl,
+      ),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.brXl),
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420, maxHeight: 600),
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppPalette.surfaceSubtleDark : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with animated icon
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppPalette.emerald, AppPalette.emeraldPressed],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
+              GradientHeroCard(
+                borderRadius: BorderRadius.zero,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                  AppSpacing.xl,
                 ),
                 child: Column(
                   children: [
-                    // Close button
                     Align(
                       alignment: Alignment.topRight,
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                      child: IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close_rounded),
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    // Animated broadcast icon
                     Container(
                       width: 70,
                       height: 70,
@@ -3257,25 +2770,23 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                         ),
                       ),
                       child: const Icon(
-                        Icons.campaign,
+                        Icons.campaign_rounded,
                         color: Colors.white,
                         size: 36,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
+                    ).pop(),
+                    AppSpacing.vMd,
+                    Text(
                       'Alert All Guardians',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                      style: context.text.headlineSmall?.copyWith(
                         color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    AppSpacing.vXxs,
                     Text(
                       'Message will be sent to ${widget.studentCount} guardians',
-                      style: TextStyle(
-                        fontSize: 14,
+                      style: context.text.bodyMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
@@ -3283,159 +2794,79 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                 ),
               ),
 
-              // Content
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Quick message chips
                     Text(
                       'Quick Messages',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
+                      style: context.text.labelLarge?.copyWith(
+                        color: c.textSecondary,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    AppSpacing.vSm,
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _quickMessages.map((msg) {
-                        return GestureDetector(
-                          onTap: () => setState(
-                            () => _messageController.text = msg['text'],
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        for (final (i, m) in quickMessages.indexed)
+                          ActionChip(
+                            avatar: Icon(m.$1, size: 16, color: m.$3),
+                            label: Text(m.$2),
+                            labelStyle: context.text.labelMedium?.copyWith(
+                              color: m.$3,
+                              fontWeight: FontWeight.w600,
                             ),
-                            decoration: BoxDecoration(
-                              color: (msg['color'] as Color).withValues(
-                                alpha: 0.1,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: (msg['color'] as Color).withValues(
-                                  alpha: 0.3,
-                                ),
-                              ),
+                            backgroundColor: m.$3.withValues(alpha: 0.1),
+                            side: BorderSide(
+                              color: m.$3.withValues(alpha: 0.3),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  msg['icon'] as IconData,
-                                  size: 16,
-                                  color: msg['color'] as Color,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  msg['text'] as String,
-                                  style: TextStyle(
-                                    color: msg['color'] as Color,
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                            shape: const StadiumBorder(),
+                            onPressed: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _messageController.text = m.$2);
+                            },
+                          ).enterList(i),
+                      ],
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // Message input
-                    Text(
-                      'Custom Message',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDarkMode ? AppPalette.textSecondaryDark : AppPalette.textSecondaryLight,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
+                    AppSpacing.vLg,
+                    AppTextField(
+                      label: 'Custom Message',
                       controller: _messageController,
+                      hint: 'Type your alert message…',
                       maxLines: 3,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black87,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Type your alert message...',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
-                        ),
-                        filled: true,
-                        fillColor: isDarkMode
-                            ? AppPalette.surfaceDark
-                            : AppPalette.bgLight,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: AppPalette.emerald,
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-
-                    const SizedBox(height: 8),
-
-                    // Character count
+                    AppSpacing.vXs,
                     Align(
                       alignment: Alignment.centerRight,
                       child: Text(
                         '${_messageController.text.length} chars',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDarkMode ? AppPalette.textMutedDark : AppPalette.textMutedLight,
+                        style: context.text.labelSmall?.copyWith(
+                          color: c.textMuted,
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 16),
-
-                    // Action buttons
+                    AppSpacing.vMd,
                     Row(
                       children: [
                         Expanded(
-                          child: TextButton(
+                          child: AppButton(
+                            label: 'Cancel',
+                            variant: AppButtonVariant.tertiary,
                             onPressed: () => Navigator.pop(context),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: isDarkMode
-                                    ? AppPalette.textSecondaryDark
-                                    : AppPalette.textSecondaryLight,
-                              ),
-                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        AppSpacing.hSm,
                         Expanded(
                           flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                _isSending ||
-                                    _messageController.text.trim().isEmpty
-                                ? null
-                                : () async {
+                          child: AppButton(
+                            label: 'Send Alert',
+                            icon: Icons.send_rounded,
+                            loading: _isSending,
+                            onPressed: canSend
+                                ? () async {
                                     setState(() => _isSending = true);
                                     widget.onSend(
                                       _messageController.text.trim(),
@@ -3445,31 +2876,8 @@ class _AlertAllDialogState extends State<_AlertAllDialog> {
                                     );
                                     if (!context.mounted) return;
                                     Navigator.pop(context);
-                                  },
-                            icon: _isSending
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                : const Icon(Icons.send, size: 18),
-                            label: Text(
-                              _isSending ? 'Sending...' : 'Send Alert',
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppPalette.emerald,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
+                                  }
+                                : null,
                           ),
                         ),
                       ],
@@ -3501,537 +2909,309 @@ class _CompleteTripDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
     final completionRate = totalStudents > 0
         ? pickedCount / totalStudents
         : 0.0;
     final isComplete = completionRate >= 1.0;
+    final tone = isComplete ? c.brand : c.warning;
+    // Named for what it really counts: everyone not picked up yet.
+    final notPicked = absentCount;
 
     return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          decoration: BoxDecoration(
-            color: isDarkMode ? AppPalette.surfaceDark : Colors.white,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header - Full Width
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isComplete
-                          ? [AppPalette.emerald, const Color(0xFF4A7A3A)]
-                          : [AppPalette.warning, const Color(0xFFF57C00)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.4),
-                            width: 2,
-                          ),
-                        ),
-                        child: Icon(
-                          isComplete
-                              ? Icons.check_circle
-                              : Icons.warning_rounded,
-                          color: Colors.white,
-                          size: 36,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        isComplete ? 'Ready to Complete?' : 'Trip Not Complete',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tripName,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                        textAlign: TextAlign.center,
+      clipBehavior: Clip.antiAlias,
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xl,
+      ),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.brXl),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  AppSpacing.lg,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      tone,
+                      Color.alphaBlend(
+                        Colors.black.withValues(alpha: 0.22),
+                        tone,
                       ),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
+                child: Column(
+                  children: [
+                    TripProgress.ring(
+                      done: pickedCount,
+                      total: totalStudents,
+                      onBrand: true,
+                      size: 84,
+                      thickness: 8,
+                    ),
+                    AppSpacing.vSm,
+                    Text(
+                      isComplete ? 'Ready to Complete?' : 'Trip Not Complete',
+                      textAlign: TextAlign.center,
+                      style: context.text.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    AppSpacing.vXxs,
+                    Text(
+                      tripName,
+                      textAlign: TextAlign.center,
+                      style: context.text.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                // Content
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Stats Row
-                      Row(
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        _buildStatCard(
+                          context,
+                          value: totalStudents,
+                          label: 'Students',
+                          icon: Icons.people_outline_rounded,
+                          color: c.info,
+                        ),
+                        const SizedBox(width: 10),
+                        _buildStatCard(
+                          context,
+                          value: pickedCount,
+                          label: 'Picked Up',
+                          icon: Icons.check_circle_outline_rounded,
+                          color: c.brand,
+                        ),
+                        const SizedBox(width: 10),
+                        _buildStatCard(
+                          context,
+                          value: notPicked,
+                          label: 'Not picked',
+                          icon: Icons.person_off_outlined,
+                          color: c.warning,
+                        ),
+                      ],
+                    ).enter(delay: const Duration(milliseconds: 120)),
+                    if (!isComplete) ...[
+                      AppSpacing.vMd,
+                      StatusPill(
+                        label: '$notPicked students not yet picked up',
+                        color: c.warning,
+                        icon: Icons.info_outline_rounded,
+                      ),
+                    ],
+                    AppSpacing.vMd,
+                    AppCard(
+                      color: c.surfaceSubtle,
+                      shadow: const [],
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildStatCard(
-                            value: totalStudents.toString(),
-                            label: 'Students',
-                            icon: Icons.people_outline,
-                            color: AppPalette.info,
-                            isDarkMode: isDarkMode,
+                          Icon(
+                            Icons.notifications_active_outlined,
+                            color: c.brand,
+                            size: 18,
                           ),
                           const SizedBox(width: 10),
-                          _buildStatCard(
-                            value: pickedCount.toString(),
-                            label: 'Picked Up',
-                            icon: Icons.check_circle_outline,
-                            color: AppPalette.emerald,
-                            isDarkMode: isDarkMode,
-                          ),
-                          const SizedBox(width: 10),
-                          _buildStatCard(
-                            value: absentCount.toString(),
-                            label: 'Absent',
-                            icon: Icons.person_off_outlined,
-                            color: AppPalette.warning,
-                            isDarkMode: isDarkMode,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Guardian Notification',
+                                  style: context.text.labelLarge,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'All guardians will be notified that the trip has ended.',
+                                  style: context.text.bodySmall?.copyWith(
+                                    color: c.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 20),
-
-                      // Circular Progress
-                      Center(
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              width: 90,
-                              height: 90,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  CircularProgressIndicator(
-                                    value: completionRate,
-                                    strokeWidth: 8,
-                                    backgroundColor: isDarkMode
-                                        ? Colors.white.withValues(alpha: 0.1)
-                                        : AppPalette.outlineLight,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      isComplete
-                                          ? AppPalette.emerald
-                                          : AppPalette.warning,
-                                    ),
-                                  ),
-                                  Center(
-                                    child: Text(
-                                      '${(completionRate * 100).toInt()}%',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDarkMode
-                                            ? Colors.white
-                                            : Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Warning if not complete
-                      if (!isComplete)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppPalette.warning.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                size: 16,
-                                color: Colors.orange[700],
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '$absentCount students still pending',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      const SizedBox(height: 16),
-
-                      // Info Card
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : AppPalette.bgLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDarkMode
-                                ? Colors.white.withValues(alpha: 0.1)
-                                : const Color(0xFFE0E0D5),
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF6B9B5B,
-                                ).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.notifications_active_outlined,
-                                color: AppPalette.emerald,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Guardian Notification',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDarkMode
-                                          ? Colors.white
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'All guardians will be notified that the trip has ended.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDarkMode
-                                          ? AppPalette.textSecondaryDark
-                                          : AppPalette.textSecondaryLight,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Buttons
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.pop(context, true),
-                          icon: Icon(
-                            isComplete ? Icons.check_circle : Icons.warning,
-                            size: 20,
-                          ),
-                          label: Text(
-                            isComplete ? 'Complete Trip' : 'Complete Anyway',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isComplete
-                                ? AppPalette.emerald
-                                : AppPalette.warning,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Go Back'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: isDarkMode
-                                ? AppPalette.textSecondaryDark
-                                : AppPalette.textSecondaryLight,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard({
-    required String value,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool isDarkMode,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : color,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: isDarkMode
-                    ? Colors.white60
-                    : color.withValues(alpha: 0.8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Student Pickup Bottom Sheet
-class StudentPickupBottomSheet extends StatefulWidget {
-  final String stopName;
-  final List<dynamic> students;
-  final BusLocation busLocation;
-
-  const StudentPickupBottomSheet({
-    super.key,
-    required this.stopName,
-    required this.students,
-    required this.busLocation,
-  });
-
-  @override
-  State<StudentPickupBottomSheet> createState() =>
-      _StudentPickupBottomSheetState();
-}
-
-class _StudentPickupBottomSheetState extends State<StudentPickupBottomSheet> {
-  final Set<String> _pickedStudents = {};
-  final Set<String> _absentStudents = {};
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppPalette.emerald.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.location_on, color: AppPalette.emerald),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Arrived at',
-                      style: TextStyle(fontSize: 13, color: AppPalette.textSecondaryLight),
                     ),
-                    Text(
-                      widget.stopName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    AppSpacing.vLg,
+                    AppButton(
+                      label: isComplete ? 'Complete Trip' : 'Complete Anyway',
+                      icon: isComplete
+                          ? Icons.check_circle_rounded
+                          : Icons.warning_rounded,
+                      variant: isComplete
+                          ? AppButtonVariant.primary
+                          : AppButtonVariant.danger,
+                      onPressed: () => Navigator.pop(context, true),
+                    ),
+                    AppSpacing.vXs,
+                    AppButton(
+                      label: 'Go Back',
+                      variant: AppButtonVariant.tertiary,
+                      onPressed: () => Navigator.pop(context, false),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const Text(
-            'Select Students',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: widget.students.length,
-              itemBuilder: (context, index) {
-                final student = widget.students[index];
-                final studentId = student.id?.toString() ?? '';
-                final studentName =
-                    student.fullname ?? student.name ?? 'Student';
-                final studentClass =
-                    student.classname ?? student.className ?? '';
-                final isPicked = _pickedStudents.contains(studentId);
-                final isAbsent = _absentStudents.contains(studentId);
+        ),
+      ),
+    );
+  }
 
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: isPicked
-                        ? AppPalette.success
-                        : isAbsent
-                        ? AppPalette.warning
-                        : AppPalette.outlineLight,
-                    child: Text(
-                      studentName.isNotEmpty
-                          ? studentName[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        color: isPicked || isAbsent
-                            ? Colors.white
-                            : Colors.black87,
-                      ),
-                    ),
-                  ),
-                  title: Text(studentName),
-                  subtitle: studentClass.isNotEmpty ? Text(studentClass) : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            if (isPicked) {
-                              _pickedStudents.remove(studentId);
-                            } else {
-                              _pickedStudents.add(studentId);
-                              _absentStudents.remove(studentId);
-                            }
-                          });
-                        },
-                        icon: Icon(
-                          isPicked
-                              ? Icons.check_circle
-                              : Icons.check_circle_outline,
-                          color: isPicked ? AppPalette.success : AppPalette.textMutedLight,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            if (isAbsent) {
-                              _absentStudents.remove(studentId);
-                            } else {
-                              _absentStudents.add(studentId);
-                              _pickedStudents.remove(studentId);
-                            }
-                          });
-                        },
-                        icon: Icon(
-                          isAbsent ? Icons.cancel : Icons.cancel_outlined,
-                          color: isAbsent ? AppPalette.warning : AppPalette.textMutedLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+  Widget _buildStatCard(
+    BuildContext context, {
+    required int value,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: AppRadius.brSm,
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: StatTile(
+          icon: icon,
+          value: '$value',
+          label: label,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+// ============================================================================
+// MAP OVERLAY WIDGETS
+// ============================================================================
+
+/// Round floating map control. [highlighted] gives the brand fill used for
+/// the primary "center on bus" action.
+class _MapButton extends StatelessWidget {
+  const _MapButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String? tooltip;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final button = PressScale(
+      scale: 0.9,
+      enabled: onPressed != null,
+      child: Material(
+        color: highlighted ? c.brand : context.scheme.surface,
+        shape: const CircleBorder(),
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        child: Ink(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: c.shadowMd,
+            border: highlighted ? null : Border.all(color: c.outline),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context, {
-                  'picked': _pickedStudents.toList(),
-                  'absent': _absentStudents.toList(),
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppPalette.emerald,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    onPressed!();
+                  },
+            child: SizedBox.square(
+              dimension: 44,
+              child: AnimatedSwitcher(
+                duration: AppDuration.medium,
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Icon(
+                  icon,
+                  key: ValueKey(icon),
+                  size: AppIconSize.md,
+                  color: highlighted
+                      ? context.scheme.onPrimary
+                      : context.scheme.onSurface,
                 ),
               ),
-              child: const Text(
-                'Confirm',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
             ),
           ),
+        ),
+      ),
+    );
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+  }
+}
+
+/// Small live readout (speed, heading) whose number rolls as it updates.
+class _TelemetryChip extends StatelessWidget {
+  const _TelemetryChip({
+    required this.icon,
+    required this.value,
+    required this.unit,
+  });
+
+  final IconData icon;
+  final int value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final style = context.text.labelMedium?.copyWith(
+      color: context.scheme.onSurface,
+      fontWeight: FontWeight.w700,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: c.surfaceSubtle,
+        borderRadius: AppRadius.brPill,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: AppIconSize.sm, color: c.accent),
+          const SizedBox(width: 6),
+          AnimatedCount(value, style: style, suffix: unit),
         ],
       ),
     );
   }
 }
-

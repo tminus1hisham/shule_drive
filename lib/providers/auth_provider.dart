@@ -6,7 +6,10 @@ import '../api/api.dart' as api;
 import '../api/services/auth_service.dart';
 import '../api/services/bus_service.dart';
 import '../mqtt_client.dart' show MqttService;
+import '../services/chat_service.dart';
 import '../services/guardian_trip_notification_service.dart';
+import '../services/notification_backends/firebase_backend.dart';
+import '../services/notification_service.dart';
 import '../services/token_storage.dart';
 import '../utils/buffer_manager.dart';
 
@@ -172,6 +175,7 @@ class AuthProvider extends ChangeNotifier {
             ) ??
             false;
         _startLiveAlerts();
+        unawaited(_requireFreshPushToken());
         // Defer notifyListeners to avoid build-phase errors
         WidgetsBinding.instance.addPostFrameCallback((_) {
           notifyListeners();
@@ -405,11 +409,29 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Shown once on the login screen, then cleared.
+  String? signInNotice;
+
+  /// A restored guardian session can hold a push token the server never got
+  /// (there's no token-update endpoint), so pushes fail with "SenderId
+  /// mismatch". Signing in again is the only way to send the current one.
+  Future<void> _requireFreshPushToken() async {
+    if (!isGuardian) return;
+    final token = await FirebaseNotificationBackend.tokenServerLacks();
+    if (token == null) return;
+    await logout();
+    await FirebaseNotificationBackend.rememberReloginAsked(token);
+    signInNotice = 'Please sign in again to turn on trip notifications.';
+    notifyListeners();
+  }
+
   /// Guardians listen for pick/drop/absent alerts for the whole session,
   /// whichever screen is showing. Stopped in [logout].
   void _startLiveAlerts() {
     final phone = _currentUser?.phone;
-    if (isGuardian && phone != null && phone.isNotEmpty) {
+    if (phone == null || phone.isEmpty) return;
+    unawaited(ChatService().startInbox(phone));
+    if (isGuardian) {
       unawaited(GuardianTripNotificationService().start(phone));
     }
   }
@@ -486,8 +508,15 @@ class AuthProvider extends ChangeNotifier {
     await _setMustChangePassword(false);
 
     // Stop live alerts so the next user on this device doesn't get them.
+    // The server keeps pushing to this phone's FCM token, so kill it too.
+    unawaited(FirebaseNotificationBackend.forgetToken());
     await GuardianTripNotificationService().stop();
+    await GuardianTripNotificationService().clearAlertHistory();
+    await ChatService().stopInbox();
     await MqttService().disconnect();
+    try {
+      await NotificationService().clearAll();
+    } catch (_) {} // plugin not initialised (tests, web)
 
     // 4. Reset all local state
     _currentUser = null;

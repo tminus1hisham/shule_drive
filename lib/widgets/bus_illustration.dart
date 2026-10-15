@@ -41,8 +41,15 @@ class _BusIllustrationState extends State<BusIllustration>
     );
 
     _setupAnimations();
-    _mainController.repeat();
+    // Play the scene twice, then park the bus at the stop: endless loops
+    // repainted this ~1,300-line painter every frame and kept idle login /
+    // dashboard screens at 60-140% CPU.
     _loopController.repeat();
+    _mainController.repeat(count: 2).whenComplete(() {
+      if (!mounted) return;
+      _loopController.stop();
+      _mainController.value = 0.4; // inside the "stopped at the kerb" span
+    });
   }
 
   void _setupAnimations() {

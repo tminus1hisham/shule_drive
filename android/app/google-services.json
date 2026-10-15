@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "shuledrive-demo",
-    "storage_bucket": "shuledrive-demo.appspot.com"
+    "project_number": "171299810563",
+    "project_id": "trasfa-136b4",
+    "storage_bucket": "trasfa-136b4.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890",
+        "mobilesdk_app_id": "1:171299810563:android:9b3b060fc88ff9bbb78d36",
         "android_client_info": {
-          "package_name": "com.example.shuledrive"
+          "package_name": "com.mobile.transfa"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "YOUR_API_KEY_HERE"
+          "current_key": "AIzaSyBjcng0fT7Xtqnq26rRrFGMH3_y4dB77Ao"
         }
       ],
       "services": {
