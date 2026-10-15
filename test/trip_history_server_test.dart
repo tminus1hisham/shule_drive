@@ -111,8 +111,24 @@ void main() {
 
       final finished = trips.last;
       expect(finished.status, 'completed');
-      expect(finished.endTime, DateTime.parse('2026-09-30T10:44:04Z'));
+      expect(finished.endTime, DateTime.parse('2026-09-30T10:44:04Z').toLocal());
       expect(finished.pickedUpCount, 1);
+    });
+
+    test('drop-all does not turn an absent student into a pickup', () {
+      final trip = TripService.tripsFromRunRows([
+        _row(run: 'r', studentId: 1, notPicked: true, dropped: true),
+      ]).single;
+      expect(trip.students.single.status, 'absent');
+      expect(trip.students.single.studentRegNumber, 'JJH001');
+    });
+
+    test('the end-of-trip drop sweep is not a pickup', () {
+      final row = _row(run: 'r', studentId: 1, dropped: true, completed: true)
+        ..['dropTime'] = '2026-09-30T10:44:04Z';
+      final trip = TripService.tripsFromRunRows([row]).single;
+      expect(trip.students.single.status, 'pending');
+      expect(trip.pickedUpCount, 0);
     });
   });
 
@@ -148,6 +164,21 @@ void main() {
       expect(merged.distance, 12.5);
       expect(merged.students.single.status, 'dropped');
     });
+
+    test('keeps students added mid-trip that the server run lacks', () {
+      final local = serverTrip.copyWith(
+        students: [
+          ...serverTrip.students,
+          StudentPickup(id: '9', name: 'Late', status: 'picked'),
+        ],
+      );
+      final merged = TripHistoryService.mergeHistories(
+        server: [_entry(serverTrip)],
+        local: [_entry(local)],
+      ).single.trip;
+
+      expect(merged.students.map((s) => s.id), ['1', '9']);
+    });
   });
 
   test('loads the driver\'s server trips and keeps them offline', () async {
@@ -160,8 +191,26 @@ void main() {
       if (request.url.path == '/api/trips/get/all/master/trips') {
         return http.Response(jsonEncode([_masterTrip.toJson()]), 200);
       }
+      if (request.url.path == '/api/trips/get/unique/trips/from/trip') {
+        // The run's own rows: its whole roster.
+        expect(request.url.queryParameters['tripUniqueIdentity'], 'mine');
+        return http.Response(
+          jsonEncode([
+            for (final id in [1, 2, 3])
+              _row(
+                run: 'mine',
+                studentId: id,
+                picked: true,
+                dropped: true,
+                completed: true,
+              ),
+          ]),
+          200,
+        );
+      }
       expect(request.url.path, '/api/trips/get/unique/trips');
       expect(request.url.queryParameters['masterTripId'], '1');
+      // Live shape: ONE summary row per run.
       return http.Response(
         jsonEncode([
           _row(
@@ -182,12 +231,18 @@ void main() {
       final online = await service.getDriverTripHistory(_driverId);
       expect(online.map((h) => h.trip.id), ['mine']);
       expect(online.single.driverName, 'ObedDriver');
+      expect(online.single.trip.pickedUpCount, 3);
+      expect(
+        online.single.trip.endTime,
+        DateTime.parse('2026-09-30T10:44:04Z').toLocal(),
+      );
 
       offline = true;
       final saved = await service.getDriverTripHistory(_driverId);
       expect(saved.map((h) => h.trip.id), ['mine']);
-      expect((await service.getDriverStats(_driverId)).totalPicked, 1);
+      expect((await service.getDriverStats(_driverId)).totalPicked, 3);
     }, () => client);
     client.close();
   });
+
 }

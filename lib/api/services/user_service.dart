@@ -192,8 +192,10 @@ class UserService {
     int page = 1,
     int limit = 20,
     bool unreadOnly = false,
+    VoidCallback? onFallback,
   }) async {
     return _buffer.withBuffer<List<Notification>>(
+      onFallback: onFallback,
       apiCall: () async {
         final response = await _apiClient.get(Endpoints.getAllNotifications);
 

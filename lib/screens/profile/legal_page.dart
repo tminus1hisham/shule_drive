@@ -104,13 +104,13 @@ class LegalPage extends StatelessWidget {
 
 /// Text shared by both legal pages.
 const legalIntro =
-    'Welcome to ShuleDrive! We value your trust and are committed to protecting your privacy. This Privacy Policy explains how ShuleDrive ("we," "us," or "our") collects, uses, shares, and protects your information when you use our website, mobile application, and related services (collectively, the "Services"). By using our Services, you agree to the collection and use of information in accordance with this policy.';
+    'Welcome to Transfa! We value your trust and are committed to protecting your privacy. This Privacy Policy explains how Transfa ("we," "us," or "our") collects, uses, shares, and protects your information when you use our website, mobile application, and related services (collectively, the "Services"). By using our Services, you agree to the collection and use of information in accordance with this policy.';
 
 const List<LegalSection> legalCommonSections = [
   (
     heading: '1. Who We Are',
     body:
-        'ShuleDrive is a platform designed to revolutionize school transportation in Kenya, making it safer, smarter, and more reliable. We operate within the jurisdiction of Kenya and comply with applicable data protection laws, including the Data Protection Act, 2019.\n\n'
+        'Transfa is a platform designed to revolutionize school transportation in Kenya, making it safer, smarter, and more reliable. We operate within the jurisdiction of Kenya and comply with applicable data protection laws, including the Data Protection Act, 2019.\n\n'
         'Our Contact Details:\n• Address: Westlands Heights, Nairobi\n• Phone: +254 750 003304\n• Email: info@shuledrive.com',
   ),
   (

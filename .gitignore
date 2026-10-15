@@ -56,3 +56,5 @@ app.*.map.json
 key.properties
 /android/key.properties
 .github/workflows/ci.yml
+credentials.md
+*.md

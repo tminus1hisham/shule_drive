@@ -35,18 +35,18 @@ class PermissionHelper {
   static Future<bool> requestPhotoLibraryPermission(
     BuildContext context,
   ) async {
-    PermissionStatus status;
+    // image_picker uses PHPicker on iOS 14+, which needs no permission;
+    // asking would show a needless full-library prompt (or, without the
+    // PERMISSION_PHOTOS Podfile macro, always report denied).
+    if (Platform.isIOS) return true;
 
-    if (Platform.isIOS) {
+    final PermissionStatus status;
+    // For Android, check storage permission
+    if (Platform.version.contains('33') || Platform.version.contains('13')) {
+      // Android 13+ uses READ_MEDIA_IMAGES
       status = await Permission.photos.request();
     } else {
-      // For Android, check storage permission
-      if (Platform.version.contains('33') || Platform.version.contains('13')) {
-        // Android 13+ uses READ_MEDIA_IMAGES
-        status = await Permission.photos.request();
-      } else {
-        status = await Permission.storage.request();
-      }
+      status = await Permission.storage.request();
     }
 
     if (status.isGranted || status.isLimited) {

@@ -296,6 +296,7 @@ Configuration priority (highest to lowest):
 | `MAPBOX_ACCESS_TOKEN` | Yes | Mapbox public token (starts with `pk.`) |
 | `API_BASE_URL` | No | Backend API URL (defaults to staging) |
 | `ENVIRONMENT` | No | `development`, `staging`, or `production` |
+| `MQTT_USERNAME` / `MQTT_PASSWORD` | Yes | Broker credentials. Never in source: `.env` locally, `--dart-define` for release builds. Without them MQTT (tracking, alerts, chat) stays off |
 
 ### API Configuration
 

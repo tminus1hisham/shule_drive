@@ -8,6 +8,8 @@ import 'notification_backends/firebase_backend.dart';
 import 'notification_backends/mqtt_backend.dart';
 import 'notification_backends/onesignal_backend.dart';
 
+import '../mqtt_client.dart';
+import 'chat_service.dart';
 import 'guardian_trip_notification_service.dart';
 import 'local_database_service.dart';
 
@@ -77,6 +79,10 @@ class NotificationService {
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
+  /// Clear every notification this app has shown, e.g. on logout so the
+  /// next user of the phone doesn't see the previous user's alerts.
+  Future<void> clearAll() => _localNotifications.cancelAll();
   final LocalDatabaseService _db = LocalDatabaseService();
 
   // Backend instances
@@ -369,10 +375,15 @@ class NotificationService {
     if (data['type'] == 'geofence_alert' || data.containsKey('geofence_type')) {
       await _handleGeofenceAlert(data);
     }
+    // While the MQTT inbox is up it shows chat messages itself, skipping
+    // the chat that's open.
+    else if (ChatService.isChatPush(data['title']) && MqttService().isConnected) {
+      return;
+    }
     // Pick/drop/absent alerts also arrive over MQTT; showOnce de-dups them.
     else {
       await GuardianTripNotificationService().showOnce(
-        title: data['title']?.toString() ?? 'ShuleDrive',
+        title: data['title']?.toString() ?? 'Transfa',
         body: data['body']?.toString() ?? '',
         payload: jsonEncode(data),
       );
@@ -389,7 +400,7 @@ class NotificationService {
       await _handleGeofenceAlert(data);
     } else {
       await showLocalNotification(
-        title: data['title']?.toString() ?? 'ShuleDrive',
+        title: data['title']?.toString() ?? 'Transfa',
         body: data['body']?.toString() ?? '',
         payload: jsonEncode(data),
         channelId: _getChannelIdForType(data['type']?.toString()),
@@ -410,7 +421,7 @@ class NotificationService {
         await _handleGeofenceAlert(payload);
       } else {
         await showLocalNotification(
-          title: payload['title']?.toString() ?? 'ShuleDrive',
+          title: payload['title']?.toString() ?? 'Transfa',
           body: payload['body']?.toString() ?? '',
           payload: jsonEncode(payload),
           channelId: _getChannelIdForType(payload['type']?.toString()),
@@ -426,10 +437,11 @@ class NotificationService {
       if (message.containsKey('notification')) {
         final notification = message['notification'] as Map<String, dynamic>;
         final data = message['data'] as Map<String, dynamic>? ?? {};
+        // Data-only pushes arrive with a null notification title/body.
         return {
           ...data,
-          'title': notification['title'],
-          'body': notification['body'],
+          if (notification['title'] != null) 'title': notification['title'],
+          if (notification['body'] != null) 'body': notification['body'],
         };
       }
       // Data-only message
@@ -585,8 +597,12 @@ class NotificationService {
       largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
     );
 
+    // iOS 14+ ignores presentAlert in the foreground; banner/list decide
+    // whether the alert is visible while the app is open.
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
+      presentBanner: true,
+      presentList: true,
       presentBadge: true,
       presentSound: true,
     );
@@ -597,7 +613,9 @@ class NotificationService {
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecond,
+      // Unique per alert: iOS replaces a notification that reuses an id, and
+      // millisecond (0-999) collided often enough to drop alerts.
+      DateTime.now().microsecondsSinceEpoch & 0x7fffffff,
       title,
       body,
       details,

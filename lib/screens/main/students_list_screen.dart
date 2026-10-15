@@ -160,6 +160,10 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
 
   void _updateStudentStatus(String id, StudentStatus status) async {
     if (_isUpdating) return;
+    if (status == StudentStatus.absent) {
+      final name = students.firstWhere((s) => s.id == id).name;
+      if (!await confirmAbsent(context, name) || !mounted) return;
+    }
 
     setState(() => _isUpdating = true);
     HapticFeedback.lightImpact();
@@ -175,11 +179,21 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
       final tripProvider = context.read<TripProvider>();
       final tripId = _trip?.id;
       if (tripId != null) {
-        await tripProvider.updateStudentStatus(
+        final ok = await tripProvider.updateStudentStatus(
           tripId: tripId,
           studentId: id,
           status: status.name,
         );
+        if (!mounted) return;
+        final notice = tripProvider.statusNotice;
+        if (!ok) {
+          AppSnackbar.error(
+            context,
+            tripProvider.errorMessage ?? 'Failed to update status',
+          );
+        } else if (notice != null) {
+          AppSnackbar.info(context, notice);
+        }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Failed to update student status: $e');
@@ -242,7 +256,8 @@ class _StudentsListScreenState extends State<StudentsListScreen> {
                   sliver: SliverList.list(
                     children: [
                       _buildHero(
-                        done: pickedCount + droppedCount,
+                        // Picked students are still on the bus.
+                        done: droppedCount + absentCount,
                         picked: pickedCount,
                         pending: pendingCount,
                         absent: absentCount,

@@ -5,6 +5,7 @@ import '../api/api.dart' as api;
 import '../models/student.dart';
 import '../models/trip.dart';
 import '../models/child.dart';
+import '../services/guardian_trip_notification_service.dart';
 import '../theme/app_colors.dart';
 
 class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -53,11 +54,16 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     // as possible; screens that need a guaranteed value await
     // ensurePreferencesLoaded().
     ensurePreferencesLoaded();
+    _alerts.unreadAlerts.addListener(_syncAlertBadge);
   }
+
+  final _alerts = GuardianTripNotificationService();
+  void _syncAlertBadge() => setUnreadAlertCount(_alerts.unreadAlerts.value);
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _alerts.unreadAlerts.removeListener(_syncAlertBadge);
     super.dispose();
   }
 
@@ -667,7 +673,7 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
     _clearError();
 
     try {
-      final student = await _studentService.createStudent(
+      final created = await _studentService.createStudent(
         fullname: fullname,
         schoolname: schoolname,
         classname: classname,
@@ -676,9 +682,16 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
         photo: photo,
         guardianPhoneNumber: guardianPhoneNumber,
       );
-      _apiStudents.add(student);
+      // The create reply rarely carries the record, so the guardian's list
+      // is the truth: show what the server has, and find the new child's id.
+      _apiStudents = await _studentService.getGuardianStudents();
       notifyListeners();
-      return student;
+      if (created.id.isNotEmpty) return created;
+      final name = fullname.trim().toLowerCase();
+      return _apiStudents
+              .where((s) => s.name.trim().toLowerCase() == name)
+              .lastOrNull ??
+          created;
     } on api.ApiException catch (e) {
       _setError(e.message);
       return null;
@@ -975,15 +988,8 @@ class AppProvider extends ChangeNotifier with WidgetsBindingObserver {
   ];
 
   // Notification badge counts
-  int _unreadChatCount = 0;
-  int get unreadChatCount => _unreadChatCount;
   int _unreadAlertCount = 0;
   int get unreadAlertCount => _unreadAlertCount;
-
-  void setUnreadChatCount(int count) {
-    _unreadChatCount = count;
-    notifyListeners();
-  }
 
   void setUnreadAlertCount(int count) {
     _unreadAlertCount = count;

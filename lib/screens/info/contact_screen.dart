@@ -8,19 +8,13 @@ import '../../widgets/ui/ui.dart';
 class ContactScreen extends StatelessWidget {
   const ContactScreen({super.key});
 
-  Future<void> _launchPhone(String phone) async {
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-  }
+  // No canLaunchUrl pre-check: iOS answers false for tel:/mailto: unless
+  // Info.plist lists them in LSApplicationQueriesSchemes.
+  Future<void> _launchPhone(String phone) =>
+      launchUrl(Uri.parse('tel:$phone')).catchError((_) => false);
 
-  Future<void> _launchEmail(String email) async {
-    final uri = Uri.parse('mailto:$email');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-  }
+  Future<void> _launchEmail(String email) =>
+      launchUrl(Uri.parse('mailto:$email')).catchError((_) => false);
 
   Future<void> _launchMaps(String address) async {
     // Try to launch using geo URI scheme for better map app support

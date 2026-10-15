@@ -66,7 +66,6 @@ class _ManageChildrenScreenState extends State<ManageChildrenScreen>
       title: 'My Children',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: 3,
       floatingActionButton: _buildSpeedDialFab(provider),
       body: Stack(
         children: [
@@ -1079,23 +1078,33 @@ class _AddChildFormState extends State<AddChildForm> {
       guardianPhoneNumber: guardianPhone,
     );
 
-    // Upload image after student is created (if image was selected)
-    if (student != null && _selectedImage != null && mounted) {
+    // Upload image after student is created (needs the server's id)
+    if (student != null && student.id.isNotEmpty && _selectedImage != null) {
       await provider.uploadStudentImage(
         studentId: student.id,
         imagePath: _selectedImage!.path,
       );
-
-      if (mounted) {
-        Navigator.pop(context); // Close loading dialog
-      }
     }
+    // Close the upload spinner on every path, not just success.
+    if (_selectedImage != null && mounted) Navigator.pop(context);
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (student != null && mounted) {
-      Navigator.pop(context);
-      AppSnackbar.success(context, '${student.name} added successfully!');
+    final name = _nameController.text.trim();
+    if (student == null) {
+      AppSnackbar.error(context, provider.errorMessage ?? "Couldn't add $name");
+      return;
+    }
+    final listed = provider.apiStudents.any((s) => s.id == student.id);
+    Navigator.pop(context);
+    if (listed) {
+      AppSnackbar.success(context, '$name added successfully!');
+    } else {
+      AppSnackbar.info(
+        context,
+        "$name was sent but isn't in your list yet. Pull to refresh shortly.",
+      );
     }
   }
 }

@@ -187,7 +187,7 @@ class GuardianNotificationService {
     String? stopName,
     String? eta,
   }) {
-    final appName = 'ShuleDrive';
+    final appName = 'Transfa';
     final timeStr = _formatTime(DateTime.now());
     
     switch (type) {

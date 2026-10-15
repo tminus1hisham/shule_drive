@@ -94,6 +94,28 @@ ScheduledMasterTrip? selectNextMasterTrip(
   );
 }
 
+/// [trips] minus those already run on [now]'s day. Each master trip runs at
+/// most once a day, so a run that started today (finished or still going)
+/// means its "starts in 5 min" reminder is stale. [runs] are (masterTripId,
+/// startTime) pairs from trip history; server times may be UTC.
+List<MasterTrip> withoutTripsRunToday(
+  List<MasterTrip> trips,
+  Iterable<({int? masterTripId, DateTime startTime})> runs, {
+  DateTime? now,
+}) {
+  final today = (now ?? DateTime.now()).toLocal();
+  final ranToday = {
+    for (final run in runs)
+      if (run.masterTripId != null &&
+          _sameDay(run.startTime.toLocal(), today))
+        run.masterTripId,
+  };
+  return trips.where((t) => !ranToday.contains(t.id)).toList();
+}
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
 /// Short human label for when a scheduled trip starts, e.g. "in 25 min",
 /// "in 2h 10m", "Starting now" or "Tomorrow".
 String formatNextTripCountdown(ScheduledMasterTrip next, {DateTime? now}) {

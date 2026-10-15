@@ -74,12 +74,13 @@ class StudentService {
         throw ApiException(message: 'School name is required');
       }
 
+      final regNumber = 'STD-${DateTime.now().microsecondsSinceEpoch}';
       final response = await _apiClient.post(
         Endpoints.createGuardianStudent,
         body: {
           'fullname': fullname,
           'guardianPhoneNumber': resolvedGuardianPhone,
-          'studentRegNumber': 'STD-${DateTime.now().microsecondsSinceEpoch}',
+          'studentRegNumber': regNumber,
           'schoolname': schoolname,
           'classname': classname ?? '',
           'route': route ?? pickupLocation ?? '',
@@ -87,11 +88,11 @@ class StudentService {
         },
       );
 
-      // Handle both wrapped ({"data": {...}}) and unwrapped ({...}) responses
-      final student = response is Map
-          ? Student.fromJson(
-              Map<String, dynamic>.from(response['data'] ?? response),
-            )
+      // Responses are undocumented: an empty body arrives as {} and some
+      // replies are a bare message. Only trust one that is a student.
+      final data = response is Map ? (response['data'] ?? response) : null;
+      final student = data is Map && data['fullname'] != null
+          ? Student.fromJson(Map<String, dynamic>.from(data))
           : Student(
               id: '',
               name: fullname,
@@ -100,7 +101,7 @@ class StudentService {
               guardianPhone: resolvedGuardianPhone,
               createdAt: DateTime.now(),
               route: route ?? pickupLocation,
-              studentRegNumber: 'STD-${DateTime.now().microsecondsSinceEpoch}',
+              studentRegNumber: regNumber,
             );
 
       // Clear students cache to force refresh
@@ -463,7 +464,14 @@ class StudentService {
         final bufferKey = '${BufferKeys.students()}_phone_$phone';
         final cached = await _buffer.getBuffer<List<dynamic>>(key: bufferKey);
         if (cached != null) {
-          cachedStudents.addAll(cached.map((s) => s as Student));
+          // In memory these are Students; after a restart, decoded maps.
+          cachedStudents.addAll(
+            cached.map(
+              (s) => s is Student
+                  ? s
+                  : Student.fromJson(Map<String, dynamic>.from(s as Map)),
+            ),
+          );
           debugPrint('  💾 Cache hit for $phone: ${cached.length} students');
         } else {
           phonesToFetch.add(phone);
@@ -553,10 +561,18 @@ class StudentService {
       // Add primary guardian if available
       if (student != null &&
           (student.guardianName != null || student.guardianPhone != null)) {
+        // Student records carry only the guardian's phone. When that's the
+        // signed-in guardian, show their own name instead of "Not Available".
+        final digits = RegExp(r'\D');
+        final isMe =
+            (student.guardianPhone ?? '').replaceAll(digits, '') ==
+            (await _tokenStorage.getUserPhone() ?? '').replaceAll(digits, '');
         allGuardians.add(
           Guardian.fromStudentGuardian(
             guardianId: student.guardianId,
-            guardianName: student.guardianName,
+            guardianName:
+                student.guardianName ??
+                (isMe ? await _tokenStorage.getUserName() : null),
             guardianPhone: student.guardianPhone,
             isPrimary: true,
           ),

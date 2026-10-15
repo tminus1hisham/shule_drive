@@ -17,7 +17,14 @@ class TripHistoryService {
   static const String _tripsKey = 'driver_trip_history';
 
   /// Last server copy of the driver's trips, for offline viewing.
-  static const String _serverTripsKey = 'server_trip_history';
+  // v2: v1 entries held one student per run (the summary endpoint).
+  static const String _serverTripsKey = 'server_trip_history_v2';
+
+  /// Runs per master trip whose full roster is fetched; older ones keep the
+  /// one-student summary row.
+  // ponytail: one request per run; ask the backend for a bulk read if
+  // history grows.
+  static const int _maxRunFetches = 15;
 
   // ==========================================================================
   // DRIVER HISTORY (SERVER + DEVICE)
@@ -58,15 +65,37 @@ class TripHistoryService {
       // let that wipe the saved copy.
       if (masterTrips.isEmpty) return cached;
 
+      final cachedById = {for (final h in cached) h.trip.id: h};
       final perMasterTrip = await Future.wait(
         masterTrips.map((masterTrip) async {
           try {
-            final rows = await service.getTripRunRows(masterTrip.id);
-            return _historyFromRunRows(
-              rows.where((row) => row['driverId']?.toString() == driverId),
-              masterTrip,
-              driverId,
+            // One summary row per run; the run's own rows hold its roster.
+            final summaries =
+                (await service.getTripRunRows(masterTrip.id))
+                    .where((row) => row['driverId']?.toString() == driverId)
+                    .toList()
+                  ..sort(
+                    (a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'),
+                  );
+            var fetches = 0;
+            final runs = await Future.wait(
+              summaries.map((summary) async {
+                final id = summary['tripUniqueIdentity']?.toString() ?? '';
+                final known = cachedById[id];
+                if (known != null && known.trip.isCompleted) return [known];
+                var rows = [summary];
+                if (id.isNotEmpty && fetches++ < _maxRunFetches) {
+                  try {
+                    final full = await service.getRunRows(id);
+                    if (full.isNotEmpty) rows = full;
+                  } catch (e) {
+                    debugPrint('⚠️ Trip run $id: $e');
+                  }
+                }
+                return _historyFromRunRows(rows, masterTrip, driverId);
+              }),
             );
+            return runs.expand((run) => run).toList();
           } catch (e) {
             debugPrint('⚠️ Trip runs for master trip ${masterTrip.id}: $e');
             return cached
@@ -142,11 +171,14 @@ class TripHistoryService {
     final localStudents = {
       for (final student in l.students) student.id: student,
     };
+    final serverIds = {for (final student in s.students) student.id};
     final students = s.students.isEmpty
         ? l.students
         : [
             for (final student in s.students)
               _furtherAlong(student, localStudents[student.id]),
+            // Added mid-trip: never on the server's run roster.
+            ...l.students.where((student) => !serverIds.contains(student.id)),
           ];
     final endedLocally = l.isCompleted && s.isActive;
 

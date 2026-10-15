@@ -200,13 +200,43 @@ class _TripSelectionScreenState extends State<TripSelectionScreen> {
     if (mounted) await _loadMasterTrips();
   }
 
+  /// The dashboard auto-opens this screen with pushReplacement, so there may
+  /// be nothing underneath; rebuild Home instead of letting back exit the app.
+  void _goHome() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      // fromTripEnd stops Home from bouncing straight back here.
+      navigator.pushReplacementNamed(
+        '/dashboard',
+        arguments: {'fromTripEnd': true},
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ready = !_isLoading && _error == null && _masterTrips.isNotEmpty;
 
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goHome();
+      },
+      child: _buildScaffold(ready),
+    );
+  }
+
+  Widget _buildScaffold(bool ready) {
     return MainScaffold(
       title: 'Select Trip',
-      showBackButton: false,
+      leading: IconButton(
+        icon: const Icon(Icons.home_rounded),
+        color: context.scheme.onSurface,
+        tooltip: 'Back to Home',
+        onPressed: _goHome,
+      ),
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop()),

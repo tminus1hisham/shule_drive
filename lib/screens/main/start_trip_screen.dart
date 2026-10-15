@@ -652,7 +652,7 @@ class _StartTripScreenState extends State<StartTripScreen> {
                 icon: Icons.notifications_none_rounded,
                 label: 'Notify',
                 color: c.accent,
-                onTap: _showNotifyOptions,
+                onTap: () => _showNotifyOptions(trip),
               ).enterList(3),
             ),
           ],
@@ -726,22 +726,42 @@ class _StartTripScreenState extends State<StartTripScreen> {
       '/chat-detail',
       arguments: {
         'tripId': trip.id,
+        'receiverPhone': 'trip_${trip.id}',
         'receiverName': trip.routeName,
         'receiverRole': 'Group',
-        'isGroupChat': true,
+        'isTripChat': true,
+        'memberPhones': {
+          for (final s in trip.students)
+            if (s.parentPhone?.isNotEmpty ?? false) s.parentPhone!,
+        }.toList(),
       },
     );
   }
 
-  void _showNotifyOptions() {
+  void _showNotifyOptions(api.Trip trip) {
     showAppBottomSheet<void>(
       context: context,
       builder: (context) {
         final c = context.colors;
         final options = [
-          (Icons.schedule_rounded, 'Running Late', c.warning),
-          (Icons.traffic_rounded, 'Traffic Delay', c.accent),
-          (Icons.check_circle_rounded, 'On Schedule', c.brand),
+          (
+            Icons.schedule_rounded,
+            'Running Late',
+            c.warning,
+            'The bus is running late.',
+          ),
+          (
+            Icons.traffic_rounded,
+            'Traffic Delay',
+            c.accent,
+            'Traffic is delaying the trip.',
+          ),
+          (
+            Icons.check_circle_rounded,
+            'On Schedule',
+            c.brand,
+            'The bus is on schedule.',
+          ),
         ];
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -759,16 +779,32 @@ class _StartTripScreenState extends State<StartTripScreen> {
                 iconColor: o.$3,
                 onTap: () {
                   Navigator.pop(context);
-                  AppSnackbar.success(
-                    this.context,
-                    'Notification sent to guardians',
-                  );
+                  _alertGuardians(trip, o.$2, o.$4);
                 },
               ).enterList(i),
           ],
         );
       },
     );
+  }
+
+  Future<void> _alertGuardians(
+    api.Trip trip,
+    String label,
+    String message,
+  ) async {
+    final sent = await context.read<TripProvider>().alertGuardians(
+      phones: trip.students.map((s) => s.parentPhone ?? ''),
+      title: '🚌 $label',
+      message: '$message (${trip.routeName})',
+      tripId: trip.id,
+    );
+    if (!mounted) return;
+    if (sent == 0) {
+      AppSnackbar.info(context, 'No guardian contacts on this trip');
+    } else {
+      AppSnackbar.success(context, '$label sent to $sent guardians');
+    }
   }
 
   Future<void> _confirmEndTrip(api.Trip trip) async {

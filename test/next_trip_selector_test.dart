@@ -177,4 +177,28 @@ void main() {
       );
     });
   });
+
+  group('withoutTripsRunToday', () {
+    final now = DateTime(2026, 10, 9, 19, 2);
+    final trips = [
+      _trip(id: 1, tripTime: '06:00 PM'),
+      _trip(id: 2, tripTime: '07:03 PM'),
+      _trip(id: 3, tripTime: '08:00 PM'),
+    ];
+
+    test('drops trips that already ran (or are running) today', () {
+      final left = withoutTripsRunToday(trips, [
+        (masterTripId: 2, startTime: DateTime(2026, 10, 9, 17, 57)),
+      ], now: now);
+      expect(left.map((t) => t.id), [1, 3]);
+    });
+
+    test("keeps trips whose only runs were on other days", () {
+      final left = withoutTripsRunToday(trips, [
+        (masterTripId: 2, startTime: DateTime(2026, 10, 8, 19, 5)),
+        (masterTripId: null, startTime: DateTime(2026, 10, 9, 8)),
+      ], now: now);
+      expect(left.map((t) => t.id), [1, 2, 3]);
+    });
+  });
 }

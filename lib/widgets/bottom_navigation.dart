@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/chat_provider.dart';
+import '../providers/trip_provider.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme_extension.dart';
 import 'ui/ui.dart';
@@ -23,6 +25,7 @@ class BottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final isDriver = context.watch<AuthProvider>().isDriver;
+    final unreadChats = context.watch<ChatProvider>().totalUnreadCount;
     final scheme = context.scheme;
     final colors = context.colors;
 
@@ -55,7 +58,7 @@ class BottomNavigation extends StatelessWidget {
                 Icons.chat_bubble_outline_rounded,
                 'Chat',
                 1,
-                badgeCount: provider.unreadChatCount,
+                badgeCount: unreadChats,
               ),
               // Only show center '+' button for drivers (taps index 4)
               if (isDriver) _buildCenterActionButton(context),
@@ -155,9 +158,13 @@ class BottomNavigation extends StatelessWidget {
   static const double _centerButtonSize = 56;
 
   Widget _buildCenterActionButton(BuildContext context) {
+    // Same button, two jobs (openDriverTrip): say which one it does now.
+    final live = context.select<TripProvider, bool>(
+      (p) => p.activeTrip != null,
+    );
     return Semantics(
       button: true,
-      label: 'Start trip',
+      label: live ? 'Open live trip' : 'Start trip',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -177,7 +184,11 @@ class BottomNavigation extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
+            child: Icon(
+              live ? Icons.map_rounded : Icons.add_rounded,
+              color: Colors.white,
+              size: live ? 28 : 32,
+            ),
           ),
         ),
       ),

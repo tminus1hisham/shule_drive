@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/services/trip_service.dart' show Trip;
 import '../../providers/auth_provider.dart';
+import '../../providers/trip_provider.dart';
 import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 import 'guardian_trips_screen.dart';
@@ -80,6 +82,16 @@ class _TripsScreenState extends State<TripsScreen> {
     }
   }
 
+  Future<void> _resumeTrip(Trip trip) async {
+    final navigator = Navigator.of(context);
+    await context.read<TripProvider>().resumeTrip(trip);
+    if (!mounted) return;
+    navigator.pushNamed(
+      '/osm-tracking',
+      arguments: {'tripId': trip.id, 'preloadedData': null},
+    );
+  }
+
   String _formatDate(DateTime date) {
     final months = [
       'Jan',
@@ -120,7 +132,6 @@ class _TripsScreenState extends State<TripsScreen> {
       title: 'Trip History',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: 3,
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop()),
@@ -389,6 +400,15 @@ class _TripsScreenState extends State<TripsScreen> {
           if (history.attendantName != null) ...[
             AppSpacing.vXs,
             meta(Icons.person_outline_rounded, 'Att: ${history.attendantName}'),
+          ],
+          if (trip.isActive) ...[
+            AppSpacing.vSm,
+            AppButton(
+              label: 'Resume Trip',
+              icon: Icons.play_arrow_rounded,
+              size: AppButtonSize.medium,
+              onPressed: () => _resumeTrip(trip),
+            ),
           ],
         ],
       ),

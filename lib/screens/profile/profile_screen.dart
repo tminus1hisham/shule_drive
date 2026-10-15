@@ -406,13 +406,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         '/contact',
         c.accent,
       ),
-      (
-        Icons.description_outlined,
-        'Terms of Service',
-        'Legal information',
-        '/terms',
-        c.textSecondary,
-      ),
+      // Terms of Service hidden until real Terms copy exists: the page only
+      // repeats the privacy policy (see terms_service_screen.dart).
       (
         Icons.privacy_tip_outlined,
         'Privacy Policy',
@@ -444,9 +439,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           AppListTile(
             icon: Icons.delete_outline_rounded,
             title: 'Delete Account',
-            subtitle: 'Remove your data',
+            // No delete endpoint exists; support removes accounts on request.
+            subtitle: 'Ask support to remove your data',
             destructive: true,
-            onTap: () {},
+            onTap: () => Navigator.pushNamed(context, '/contact'),
           ),
         ],
       ),

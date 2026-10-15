@@ -60,6 +60,9 @@ void main() {
         ),
       ),
     );
+    // The Access Denied entrance animation (flutter_animate) schedules a
+    // zero-delay timer; let it run before the tree is torn down.
+    await tester.pumpAndSettle();
 
     expect(find.text('Access Denied'), findsOneWidget);
     expect(find.text('Driver content'), findsNothing);

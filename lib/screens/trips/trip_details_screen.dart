@@ -71,6 +71,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   String _formatDate(DateTime date) {
+    date = date.toLocal();
     final months = [
       'Jan',
       'Feb',
@@ -89,6 +90,7 @@ class _TripDetailsScreenState extends State<TripDetailsScreen> {
   }
 
   String _formatTime(DateTime date) {
+    date = date.toLocal(); // server times are UTC
     final hour = date.hour > 12
         ? date.hour - 12
         : (date.hour == 0 ? 12 : date.hour);

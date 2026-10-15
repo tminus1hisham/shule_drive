@@ -23,7 +23,9 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   bool _isLoading = true;
   String? _error;
-  List<ChatConversation> _conversations = [];
+  /// Live list: build() watches ChatProvider, which the chat inbox updates.
+  List<ChatConversation> get _conversations =>
+      context.read<ChatProvider>().conversations;
   Timer? _refreshTimer;
 
   @override
@@ -61,12 +63,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
 
     try {
-      final chatProvider = context.read<ChatProvider>();
-      final conversations = await chatProvider.getConversations();
+      await context.read<ChatProvider>().getConversations(forceRefresh: true);
 
       if (mounted) {
         setState(() {
-          _conversations = conversations;
           _isLoading = false;
           _error = null;
         });
@@ -105,6 +105,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ChatProvider>();
     final c = context.colors;
     return MainScaffold(
       title: 'Messages',

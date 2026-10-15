@@ -22,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   String _completePhoneNumber = '';
+  String? _phoneEmptyError;
 
   /// Bumped on each failed sign-in so the form card shakes.
   int _failureShake = 0;
@@ -31,6 +32,18 @@ class _LoginScreenState extends State<LoginScreen> {
   DateTime? _lastAttemptTime;
   static const int _maxAttempts = 5;
   static const Duration _lockoutDuration = Duration(minutes: 5);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final notice = auth.signInNotice;
+      if (!mounted || notice == null) return;
+      auth.signInNotice = null;
+      AppSnackbar.info(context, notice);
+    });
+  }
 
   @override
   void dispose() {
@@ -57,7 +70,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    // IntlPhoneField only runs its validator on change, so an untouched
+    // empty field passed form validation silently.
+    final phoneEmpty = _phoneController.text.trim().isEmpty;
+    setState(
+      () => _phoneEmptyError = phoneEmpty
+          ? 'Please enter your phone number'
+          : null,
+    );
+    if (!_formKey.currentState!.validate() || phoneEmpty) return;
 
     if (_isLockedOut) {
       final remainingSeconds = _remainingLockoutSeconds;
@@ -154,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          Text('ShuleDrive', style: context.text.headlineSmall),
+          Text('Transfa', style: context.text.headlineSmall),
         ],
       ),
     );
@@ -240,7 +261,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildPhoneField(BuildContext context) {
     return IntlPhoneField(
       controller: _phoneController,
-      decoration: const InputDecoration(hintText: '712 345 678'),
+      decoration: InputDecoration(
+        hintText: '712 345 678',
+        errorText: _phoneEmptyError,
+      ),
       initialCountryCode: 'KE',
       disableLengthCheck: true,
       flagsButtonPadding: const EdgeInsets.only(left: AppSpacing.sm),
@@ -250,7 +274,10 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       dropdownTextStyle: context.text.bodyLarge,
       style: context.text.bodyLarge,
-      onChanged: (phone) => _completePhoneNumber = phone.completeNumber,
+      onChanged: (phone) {
+        _completePhoneNumber = phone.completeNumber;
+        if (_phoneEmptyError != null) setState(() => _phoneEmptyError = null);
+      },
       validator: (phone) {
         if (phone == null || phone.number.isEmpty) {
           return 'Please enter your phone number';

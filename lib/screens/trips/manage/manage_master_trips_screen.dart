@@ -43,6 +43,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
   // State
   MasterTrip? _editingTrip;
   bool _isCreatingNew = true;
+
+  /// The server answers 403 when a driver edits, deletes or removes students
+  /// from a master trip, so drivers only get create, view and add.
+  bool get _canManage => !context.read<AuthProvider>().isDriver;
   bool _isLoading = false;
   bool _isLoadingStudents = false;
   String? _errorMessage;
@@ -324,7 +328,10 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
       _selectedRoute = trip.route;
       // Use trip's driver if available, otherwise use JWT driver name
       _selectedDriver = trip.driverName ?? driverName;
-      _selectedBus = trip.numberPlate;
+      // Master trip rows carry no plate; fall back to the driver's bus.
+      _selectedBus =
+          trip.numberPlate ??
+          (_buses.isNotEmpty ? _buses.first.registrationNumber : null);
       _selectedDirection = trip.tripDirection == 'to_school'
           ? 'Pickup'
           : 'Dropoff';
@@ -360,6 +367,13 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
     setState(() => _isLoading = true);
 
     if (_isCreatingNew) {
+      if (_selectedRoute == null || _selectedBus == null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Pick a route and a bus first.';
+        });
+        return;
+      }
       // Create new trip
       final trip = await tripProvider.createMasterTrip(
         tripName: _tripNameController.text.trim(),
@@ -646,7 +660,7 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
                     dense: true,
                   ),
                   const Spacer(),
-                  if (!isSelected)
+                  if (!isSelected && _canManage)
                     IconButton(
                       onPressed: () => _deleteTrip(trip),
                       tooltip: 'Delete trip',
@@ -853,13 +867,15 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
                         ),
                       ),
               ),
-              AppSpacing.vXl,
-              AppButton(
-                label: _isCreatingNew ? 'Create Trip' : 'Update Trip',
-                icon: _isCreatingNew ? Icons.add_rounded : Icons.save_rounded,
-                loading: _isLoading,
-                onPressed: _saveTrip,
-              ),
+              if (_isCreatingNew || _canManage) ...[
+                AppSpacing.vXl,
+                AppButton(
+                  label: _isCreatingNew ? 'Create Trip' : 'Update Trip',
+                  icon: _isCreatingNew ? Icons.add_rounded : Icons.save_rounded,
+                  loading: _isLoading,
+                  onPressed: _saveTrip,
+                ),
+              ],
             ],
           ),
         ),
@@ -876,9 +892,17 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
+    // DropdownButton asserts its value matches exactly one item; a blank
+    // route/plate or a list that loads later would otherwise red-screen.
+    items = items.where((i) => i.trim().isNotEmpty).toSet().toList();
+    final wanted = value?.trim().toLowerCase();
+    final selected = items
+        .where((i) => i.trim().toLowerCase() == wanted)
+        .firstOrNull;
     return DropdownButtonFormField<String>(
-      key: key,
-      initialValue: value,
+      // Rebuild once the items arrive so a preselected value shows up.
+      key: ValueKey('$key-$selected'),
+      initialValue: selected,
       isExpanded: true,
       borderRadius: AppRadius.brMd,
       decoration: InputDecoration(
@@ -1018,14 +1042,15 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: () => _removeStudentFromTrip(student, tripProvider),
-            tooltip: 'Remove from trip',
-            icon: Icon(
-              Icons.remove_circle_outline_rounded,
-              color: c.error.withValues(alpha: 0.8),
+          if (_canManage)
+            IconButton(
+              onPressed: () => _removeStudentFromTrip(student, tripProvider),
+              tooltip: 'Remove from trip',
+              icon: Icon(
+                Icons.remove_circle_outline_rounded,
+                color: c.error.withValues(alpha: 0.8),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1081,24 +1106,18 @@ class _ManageMasterTripsScreenState extends State<ManageMasterTripsScreen> {
                 .map((s) => s.studentId.toString())
                 .toSet();
 
-            if (!showPhoneSearch) {
-              filteredStudents = filteredStudents
-                  .where(
-                    (s) =>
-                        !tripStudentIds.contains(s.id) &&
-                        !tripStudentIds.contains(
-                          int.tryParse(s.id)?.toString(),
-                        ),
-                  )
-                  .toList();
-            }
-
             // Use phone search results if available
             if (showPhoneSearch && _phoneSearchResults.isNotEmpty) {
-              filteredStudents = _phoneSearchResults
-                  .where((s) => !tripStudentIds.contains(s.id))
-                  .toList();
+              filteredStudents = _phoneSearchResults;
             }
+            // Both modes: never offer a student who is already on the trip.
+            filteredStudents = filteredStudents
+                .where(
+                  (s) =>
+                      !tripStudentIds.contains(s.id) &&
+                      !tripStudentIds.contains(int.tryParse(s.id)?.toString()),
+                )
+                .toList();
 
             Future<void> searchPhone() async {
               await _searchStudentsByPhone();

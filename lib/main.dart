@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,8 @@ import 'providers/trip_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/tracking_provider.dart';
 import 'providers/connectivity_provider.dart';
+import 'widgets/main_scaffold.dart' show tabTracker;
+import 'widgets/offline_gate.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/verify_reset_otp_screen.dart';
@@ -43,6 +46,7 @@ import 'screens/chat/user_list_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
 import 'screens/tracking/osm_tracking_screen.dart';
 
+import 'services/chat_service.dart';
 import 'services/token_storage.dart';
 import 'services/local_database_service.dart';
 import 'services/notification_service.dart';
@@ -56,7 +60,21 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 // APP ENTRY POINT
 // ============================================================================
 
-Future<void> main() async {
+// Plain print() is in 300+ places and, like debugPrint, survives release
+// builds; running the app in a zone that drops it keeps those logs off the
+// device log (iOS Console / logcat) without touching every call site.
+Future<void> main() => kReleaseMode
+    ? runZoned(
+        _main,
+        zoneSpecification: ZoneSpecification(print: (_, _, _, _) {}),
+      )
+    : _main();
+
+Future<void> _main() async {
+  // debugPrint isn't stripped from release builds and logs carry phone
+  // numbers, ids and server bodies; keep them off production logcat.
+  if (kReleaseMode) debugPrint = (String? message, {int? wrapWidth}) {};
+
   // Ensure Flutter binding is initialized
   final binding = WidgetsFlutterBinding.ensureInitialized();
 
@@ -145,14 +163,6 @@ void _initNonCriticalServices() {
       .catchError((e) {
         if (kDebugMode) print('⚠️ Offline sync init error: $e');
       });
-
-  // System UI style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
 }
 
 // ============================================================================
@@ -174,19 +184,39 @@ class ShuleDriveApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TripProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => TrackingProvider()),
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ConnectivityProvider()
+            ..initialize().catchError((e) {
+              if (kDebugMode) print('⚠️ Connectivity init error: $e');
+            }),
+        ),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           return MaterialApp(
-            title: 'ShuleDrive',
+            title: 'Transfa',
             debugShowCheckedModeBanner: false,
             themeMode: appProvider.themeMode,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             home: const SplashWithTransition(),
-            navigatorObservers: [routeObserver],
+            navigatorObservers: [routeObserver, tabTracker],
             onGenerateRoute: _buildPageRoute,
+            // Status bar for screens without an AppBar (AppBars set their
+            // own). iOS reads statusBarBrightness, Android the icon one.
+            builder: (context, child) {
+              final dark = Theme.of(context).brightness == Brightness.dark;
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: dark
+                      ? Brightness.light
+                      : Brightness.dark,
+                  statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+                ),
+                child: OfflineGate(child: child!),
+              );
+            },
           );
         },
       ),
@@ -459,13 +489,22 @@ Route _buildPageRoute(RouteSettings settings) {
       break;
     case '/chat-detail':
       final args = settings.arguments as Map<String, dynamic>?;
+      final receiverPhone = args?['receiverPhone'] as String?;
+      // A trip group opened from the chat list (or after re-login) arrives
+      // without the map's args; derive them so it stays a read-only-when-
+      // ended group instead of a sendable "User" chat.
+      final isGroup =
+          receiverPhone != null && ChatService.isGroup(receiverPhone);
       page = ChatScreen(
-        receiverPhone: args?['receiverPhone'] as String?,
+        receiverPhone: receiverPhone,
         receiverName: args?['receiverName'] as String?,
         receiverAvatar: args?['receiverAvatar'] as String?,
-        receiverRole: args?['receiverRole'] as String?,
-        tripId: args?['tripId']?.toString(),
-        isTripChat: args?['isTripChat'] as bool? ?? false,
+        receiverRole: isGroup ? 'Group' : args?['receiverRole'] as String?,
+        tripId:
+            args?['tripId']?.toString() ??
+            (isGroup ? receiverPhone.substring('trip_'.length) : null),
+        isTripChat: (args?['isTripChat'] as bool? ?? false) || isGroup,
+        memberPhones: (args?['memberPhones'] as List?)?.cast<String>(),
       );
       protected = true;
       break;
@@ -508,6 +547,12 @@ Route _buildPageRoute(RouteSettings settings) {
       transitionDuration: const Duration(milliseconds: 180),
       reverseTransitionDuration: const Duration(milliseconds: 180),
     );
+  }
+
+  // iOS users go back by swiping from the screen edge; only a
+  // MaterialPageRoute (Cupertino transition from the theme) has that gesture.
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return MaterialPageRoute(settings: settings, builder: (_) => page);
   }
 
   return PageRouteBuilder(
@@ -579,12 +624,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _initializeServices(AuthProvider authProvider) {
-    // Fire and forget - don't await
-    final connectivityProvider = context.read<ConnectivityProvider>();
-    connectivityProvider.initialize().catchError((e) {
-      if (kDebugMode) print('⚠️ Connectivity init error: $e');
-    });
-
     // Welcome notification after delay
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted && authProvider.isAuthenticated) {
@@ -608,7 +647,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         : '👋 Welcome back!';
 
     final body =
-        'Thank you for being a part of ShuleDrive. '
+        'Thank you for being a part of Transfa. '
         'Your $role dashboard is ready. Have a great day! 🚌';
 
     await NotificationService().showLocalNotification(

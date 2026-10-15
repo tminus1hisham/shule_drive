@@ -60,17 +60,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _pageController = PageController();
     _pageController.addListener(_onPageChanged);
 
-    // Floating animation for illustrations
+    // Floating + particle loops are bounded: run forever they repainted a
+    // full-screen painter every frame (high idle CPU, ANR on slow phones).
     _floatController = AnimationController(
       duration: const Duration(seconds: 3),
       vsync: this,
-    )..repeat(reverse: true);
+    )..repeat(reverse: true, count: 4);
 
-    // Particle animation
     _particleController = AnimationController(
       duration: const Duration(seconds: 10),
       vsync: this,
-    )..repeat();
+    )..repeat(count: 2);
 
     // Scale animation for cards
     _scaleController = AnimationController(

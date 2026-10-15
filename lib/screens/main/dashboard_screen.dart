@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
 import '../../api/services/trip_service.dart';
 import '../../models/master_trip.dart';
+import '../../services/trip_history_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../utils/next_trip_selector.dart';
@@ -326,6 +327,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final driverId = authProvider.currentUser?.id;
     if (driverId == null || driverId.isEmpty) return;
+    // A running trip already has the driver's attention; the timer is also
+    // restarted when returning from the live map, so check here.
+    if (_scheduledTripProvider?.activeTrip != null) return;
 
     try {
       final tripService = TripService();
@@ -333,14 +337,24 @@ class _DashboardScreenState extends State<DashboardScreen>
         driverId,
         onRefresh: (_) {},
       );
+      final history = await TripHistoryService().getCachedDriverTripHistory(
+        driverId,
+      );
       if (!_canRunScheduledWork) return;
 
       final now = DateTime.now();
+      final pending = withoutTripsRunToday(
+        masterTrips,
+        history.map(
+          (h) => (masterTripId: h.trip.masterTripId, startTime: h.trip.startTime),
+        ),
+        now: now,
+      );
 
       // Keep the idle dashboard's "next trip" card in step with the clock.
-      _updateNextScheduledTrip(masterTrips, now);
+      _updateNextScheduledTrip(pending.isEmpty ? masterTrips : pending, now);
 
-      for (final trip in masterTrips) {
+      for (final trip in pending) {
         // Skip already-prompted trips
         if (_promptedTripIds.contains(trip.id)) continue;
 
@@ -692,7 +706,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
 
                   SliverToBoxAdapter(
-                    child: _buildQuickActions(isDriver).enterList(3),
+                    child: _buildQuickActions(
+                      isDriver,
+                      hasActiveTrip: hasActiveTrip,
+                    ).enterList(3),
                   ),
 
                   const SliverPadding(
@@ -761,24 +778,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  /// Navigate to the start-trip flow, but never while a trip is running.
-  /// If a trip is active, redirect to the live trip screen instead.
-  void _goToStartTrip() {
-    final activeTrip = context.read<TripProvider>().activeTrip;
-    if (activeTrip != null) {
-      AppSnackbar.info(
-        context,
-        'A trip is already in progress. End it before starting a new one.',
-      );
-      Navigator.pushNamed(
-        context,
-        '/osm-tracking',
-        arguments: {'tripId': activeTrip.id, 'preloadedData': null},
-      );
-      return;
-    }
-    Navigator.pushNamed(context, '/start-trip');
-  }
+  void _goToStartTrip() => openDriverTrip(context);
 
   void _handleNavigation(int index, bool isDriver) {
     switch (index) {
@@ -842,7 +842,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: Text(
-              'ShuleDrive',
+              'Transfa',
               style: context.text.titleLarge?.copyWith(fontSize: 18),
             ),
           ),
@@ -1429,13 +1429,22 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildGuardianActiveTrip(TripProvider tripProvider) {
     final trip = tripProvider.activeTrip!;
     final guardianChildren = trip.students.toList();
+    void openTracking() => Navigator.pushNamed(
+      context,
+      '/osm-tracking',
+      arguments: {
+        'tripId': trip.id,
+        'busId': trip.vehicleId,
+        'routeId': trip.routeId,
+      },
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Live tracking hero — tappable to open the unified trip view
         GradientHeroCard(
-          onTap: () => Navigator.pushNamed(context, '/start-trip'),
+          onTap: openTracking,
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             children: [
@@ -1491,15 +1500,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       label: 'Track',
                       icon: Icons.map_outlined,
                       variant: AppButtonVariant.onBrand,
-                      onPressed: () => Navigator.pushNamed(
-                        context,
-                        '/osm-tracking',
-                        arguments: {
-                          'tripId': trip.id,
-                          'busId': trip.vehicleId,
-                          'routeId': trip.routeId,
-                        },
-                      ),
+                      onPressed: openTracking,
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -1507,7 +1508,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: SizedBox(
                       height: 52,
                       child: FilledButton.icon(
-                        onPressed: () => _openTripChat(context, trip),
+                        onPressed: () => openDriverChat(context, trip),
                         icon: const Icon(Icons.chat_bubble_outline, size: 20),
                         label: const Text('Chat'),
                         style: FilledButton.styleFrom(
@@ -1586,7 +1587,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       statusIcon = Icons.schedule_rounded;
     }
 
-    final time = student.pickupTime;
+    final time = student.status == 'dropped'
+        ? student.dropoffTime ?? student.pickupTime
+        : student.pickupTime;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -1646,15 +1649,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Compact action dock. One glass surface keeps all four destinations
   /// visible without letting shortcuts dominate the page.
-  Widget _buildQuickActions(bool isDriver) {
+  Widget _buildQuickActions(bool isDriver, {bool hasActiveTrip = false}) {
     final colors = context.colors;
 
     final actions = isDriver
         ? <_QuickAction>[
+            // _goToStartTrip opens the live map when a trip is running.
             _QuickAction(
-              icon: Icons.play_circle_outline_rounded,
-              label: 'Start Trip',
-              subtitle: 'Begin a new journey',
+              icon: hasActiveTrip
+                  ? Icons.map_outlined
+                  : Icons.play_circle_outline_rounded,
+              label: hasActiveTrip ? 'Live Trip' : 'Start Trip',
+              subtitle: hasActiveTrip
+                  ? 'Back to your route'
+                  : 'Begin a new journey',
               tint: colors.brand,
               onTap: _goToStartTrip,
             ),
@@ -1814,20 +1822,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         AppSnackbar.error(context, 'Error ending trip: $e');
       }
     }
-  }
-
-  void _openTripChat(BuildContext context, Trip trip) {
-    Navigator.pushNamed(
-      context,
-      '/chat-detail',
-      arguments: {
-        'tripId': trip.id,
-        'receiverId': trip.vehicleId, // Use vehicleId as receiver identifier
-        'receiverName': 'Driver - ${trip.routeName}',
-        'receiverRole': 'Driver',
-        'isTripChat': true,
-      },
-    );
   }
 }
 

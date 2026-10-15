@@ -17,6 +17,7 @@ import '../../config/map_config.dart';
 import '../../services/notification_service.dart';
 import '../../mqtt_client.dart';
 import '../../utils/student_trip_logic.dart';
+import '../../utils/location_settings.dart';
 import '../../widgets/main_scaffold.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
@@ -133,6 +134,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
       _recomputeCounts();
     });
   }
+
+  List<String> get _statuses => _preloadedStudents.isNotEmpty
+      ? [for (final s in _preloadedStudents) '${s['status']}']
+      : [...?_activeTrip?.students.map((s) => s.status)];
 
   void _recomputeCounts() {
     if (_preloadedStudents.isNotEmpty) {
@@ -387,10 +392,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
       _locationSubscription =
           geo.Geolocator.getPositionStream(
-            locationSettings: const geo.LocationSettings(
-              accuracy: geo.LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
+            locationSettings: driverLocationSettings(),
           ).listen(
             _onPositionUpdate,
             onError: (error) => debugPrint('❌ Location stream error: $error'),
@@ -502,7 +504,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     final isReturnTrip = isReturnTripDirection(_activeTrip?.tripDirection);
     if (isReturnTrip) {
-      return _firstStudentWithStatus(students, 'picked');
+      return _firstStudentWithStatus(students, 'picked') ??
+          _firstStudentWithStatus(students, 'pending');
     }
 
     return _firstStudentWithStatus(students, 'pending') ??
@@ -522,10 +525,6 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
   }
 
   StudentTripActionMode _actionModeForStudent(Map<String, dynamic> student) {
-    if (isReturnTripDirection(_activeTrip?.tripDirection)) {
-      return StudentTripActionMode.dropoff;
-    }
-
     final status = (student['status'] ?? 'pending').toString();
     return status == 'picked'
         ? StudentTripActionMode.dropoff
@@ -1710,6 +1709,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         'receiverName': _activeTrip?.routeName ?? 'Trip Chat',
         'receiverRole': 'Group',
         'isTripChat': true,
+        'memberPhones': _guardianPhones(),
       },
     );
   }
@@ -1728,9 +1728,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
 
     Navigator.pushNamed(
       context,
-      '/chat',
+      '/chat-detail',
       arguments: {
-        'receiverId': guardianId ?? guardianPhone,
         'receiverName': student['guardianName'] ?? 'Guardian of $studentName',
         'receiverPhone': guardianPhone,
         'receiverAvatar': null,
@@ -1783,7 +1782,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                 iconColor: o.$3,
                 onTap: () {
                   Navigator.pop(context);
-                  _sendBulkMessage(o.$4);
+                  _sendBulkMessage(o.$4, title: '🚌 ${o.$2}');
                 },
               ).enterList(i),
             AppListTile(
@@ -1815,25 +1814,29 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     );
   }
 
-  Future<void> _sendBulkMessage(String message) async {
-    final students = _buildStudentListFromStops();
-    final guardianContacts = <String>{};
+  List<String> _guardianPhones() => {
+    for (final student in _buildStudentListFromStops())
+      if ((student['guardianPhone'] as String?)?.isNotEmpty ?? false)
+        student['guardianPhone'] as String,
+  }.toList();
 
-    for (final student in students) {
-      final phone = student['guardianPhone'] as String?;
-      if (phone != null && phone.isNotEmpty) guardianContacts.add(phone);
-    }
-
-    if (guardianContacts.isEmpty) {
-      AppSnackbar.info(context, 'No guardian contacts available');
-
-      return;
-    }
-
-    AppSnackbar.success(
-      context,
-      'Alert sent to ${guardianContacts.length} guardians',
+  Future<void> _sendBulkMessage(
+    String message, {
+    String title = '🚌 Message from your driver',
+  }) async {
+    final route = _activeTrip?.routeName;
+    final sent = await context.read<TripProvider>().alertGuardians(
+      phones: _guardianPhones(),
+      title: title,
+      message: route == null || route.isEmpty ? message : '$message ($route)',
+      tripId: _tripId ?? _activeTrip?.id,
     );
+    if (!mounted) return;
+    if (sent == 0) {
+      AppSnackbar.info(context, 'No guardian contacts available');
+    } else {
+      AppSnackbar.success(context, 'Alert sent to $sent guardians');
+    }
   }
 
   Future<void> _completeTrip() async {
@@ -1846,8 +1849,10 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
         builder: (context) => _CompleteTripDialog(
           tripName: _activeTrip?.routeName ?? 'Trip',
           totalStudents: _totalCount,
-          pickedCount: _pickedCount,
-          absentCount: _totalCount - _pickedCount,
+          pickedCount: _statuses
+              .where((s) => s == 'picked' || s == 'dropped')
+              .length,
+          absentCount: _statuses.where((s) => s == 'absent').length,
         ),
       );
 
@@ -1906,6 +1911,9 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
     final droppedCount = _preloadedStudents
         .where((s) => s['status'] == 'dropped')
         .length;
+    // Dropped students were picked first; count them as picked up.
+    final pickedUp = _pickedCount + droppedCount;
+    final endedAt = TimeOfDay.now();
 
     await showDialog(
       context: context,
@@ -1962,7 +1970,7 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                         Expanded(
                           child: StatTile(
                             icon: Icons.check_circle_rounded,
-                            value: '$_pickedCount',
+                            value: '$pickedUp',
                             label: 'Picked',
                             color: c.brand,
                           ),
@@ -1995,7 +2003,8 @@ class _ActiveTripScreenState extends State<ActiveTripScreen> {
                     ).enter(delay: const Duration(milliseconds: 200)),
                     AppSpacing.vMd,
                     Text(
-                      '${_totalCount > 0 ? (_pickedCount / _totalCount * 100).toInt() : 0}% pickup rate',
+                      'Ended at ${endedAt.format(context)} · '
+                      '${_totalCount > 0 ? (pickedUp / _totalCount * 100).toInt() : 0}% pickup rate',
                       style: context.text.bodySmall?.copyWith(
                         color: c.textSecondary,
                       ),

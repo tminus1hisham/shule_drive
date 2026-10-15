@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
@@ -22,7 +21,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
-  String _completePhoneNumber = '';
   File? _selectedImage;
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -31,9 +29,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     final userData = context.read<AuthProvider>().userData;
     _nameController = TextEditingController(text: userData['name']);
-    _phoneController = TextEditingController(text: userData['phone']);
+    final phone = (userData['phone'] ?? '').toString();
+    _phoneController = TextEditingController(
+      text: phone.isEmpty || phone.startsWith('+') ? phone : '+$phone',
+    );
     _emailController = TextEditingController(text: userData['email'] ?? '');
-    _completePhoneNumber = userData['phone'] ?? '';
   }
 
   @override
@@ -231,7 +231,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final success = await authProvider.updateUserProfile(
       name: _nameController.text.trim(),
-      phone: _completePhoneNumber.isNotEmpty ? _completePhoneNumber : null,
       email: _emailController.text.trim().isNotEmpty
           ? _emailController.text.trim()
           : null,
@@ -344,22 +343,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       textInputAction: TextInputAction.next,
                     ),
                     AppSpacing.vMd,
-                    Text('Phone Number', style: context.text.titleSmall),
-                    AppSpacing.vXs,
-                    IntlPhoneField(
+                    // Read-only: the phone is the login id and chat inbox,
+                    // and there's no server endpoint to change it.
+                    AppTextField(
+                      label: 'Phone Number',
                       controller: _phoneController,
-                      decoration: const InputDecoration(
-                        hintText: '712 345 678',
-                      ),
-                      style: context.text.bodyLarge,
-                      dropdownTextStyle: context.text.bodyLarge,
-                      initialCountryCode: 'KE',
-                      disableLengthCheck: true,
-                      onChanged: (phone) {
-                        _completePhoneNumber = phone.completeNumber;
-                      },
+                      prefixIcon: Icons.phone_outlined,
+                      enabled: false,
                     ),
-                    AppSpacing.vXs,
+                    AppSpacing.vMd,
                     AppTextField(
                       label: 'Email',
                       controller: _emailController,

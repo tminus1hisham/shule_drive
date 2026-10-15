@@ -21,6 +21,9 @@ class ChatScreen extends StatefulWidget {
   final String? tripId;
   final bool isTripChat;
 
+  /// Guardians a `trip_…` group chat delivers to.
+  final List<String>? memberPhones;
+
   const ChatScreen({
     super.key,
     this.receiverPhone,
@@ -29,6 +32,7 @@ class ChatScreen extends StatefulWidget {
     this.receiverRole,
     this.tripId,
     this.isTripChat = false,
+    this.memberPhones,
   });
 
   @override
@@ -137,7 +141,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final chatProvider = context.read<ChatProvider>();
       // Initialize chat using phone numbers
-      await chatProvider.initialize(currentUserPhone, widget.receiverPhone!);
+      await chatProvider.initialize(
+        currentUserPhone,
+        widget.receiverPhone!,
+        memberPhones: widget.memberPhones,
+      );
 
       if (mounted) {
         setState(() => _isInitializing = false);
@@ -192,8 +200,17 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  late final ChatProvider _chatProvider = context.read<ChatProvider>();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chatProvider; // resolve while the context is still active
+  }
+
   @override
   void dispose() {
+    _chatProvider.leaveChat();
     _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _scrollController.dispose();

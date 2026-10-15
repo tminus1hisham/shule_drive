@@ -97,18 +97,6 @@ flutter:
     - assets/dark_chat_bg.jpg
     - .env
 
-flutter_launcher_icons:
-  android: true
-  ios: true
-  remove_alpha_ios: true
-  image_path: "images/logo.png"
-
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
-
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
-
   # Custom fonts. Inter (UI/body) and Plus Jakarta Sans (display headings).
   # Both are variable fonts — Flutter maps FontWeight to the `wght` axis,
   # so a single asset per family covers all weights.
@@ -120,5 +108,8 @@ flutter_launcher_icons:
       fonts:
         - asset: assets/fonts/PlusJakartaSans.ttf
 
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "images/logo.png"

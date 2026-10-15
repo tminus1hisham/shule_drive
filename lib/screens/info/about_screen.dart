@@ -20,7 +20,6 @@ class AboutScreen extends StatelessWidget {
       title: 'About Us',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: 3,
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop()),
@@ -68,7 +67,7 @@ class AboutScreen extends StatelessWidget {
                         style: body,
                         children: [
                           TextSpan(
-                            text: 'ShuleDrive ',
+                            text: 'Transfa ',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: c.brand,
@@ -88,7 +87,7 @@ class AboutScreen extends StatelessWidget {
                     ),
                     AppSpacing.vMd,
                     Text(
-                      'With a focus on safety, transparency, and communication, ShuleDrive transforms the daily school commute into a seamless experience for everyone involved.',
+                      'With a focus on safety, transparency, and communication, Transfa transforms the daily school commute into a seamless experience for everyone involved.',
                       style: body,
                     ),
                   ],

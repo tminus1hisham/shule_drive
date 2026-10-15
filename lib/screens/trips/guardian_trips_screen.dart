@@ -228,12 +228,25 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
         return;
       }
 
-      // Get all trips from history service
-      // Note: In a real implementation, you might want to add a specific
-      // API endpoint for guardian trip history. For now, we simulate with local data.
-      final allTrips = await _historyService.getAllTripsForGuardian(
-        guardianPhone,
-      );
+      // The server keeps a row per child per run; finished runs are the
+      // history. Falls back to this phone's saved trips when offline.
+      List<TripHistory> allTrips;
+      try {
+        final rows = await TripService().getGuardianRunRows(guardianPhone);
+        allTrips = [
+          for (final trip in TripService.tripsFromRunRows(rows))
+            if (!trip.isActive)
+              TripHistory(
+                trip: trip,
+                driverId: '',
+                driverName: '',
+                loggedAt: trip.startTime,
+              ),
+        ];
+      } catch (e) {
+        debugPrint('⚠️ Guardian history from server failed: $e');
+        allTrips = await _historyService.getAllTripsForGuardian(guardianPhone);
+      }
 
       // Group trips by trip ID and filter for this guardian's students
       final Map<String, GuardianTripHistoryEntry> tripMap = {};
@@ -379,7 +392,6 @@ class _GuardianTripsScreenState extends State<GuardianTripsScreen>
       title: 'My Trips',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: 3,
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop()),

@@ -230,7 +230,8 @@ class NextStudentTripActionCard extends StatelessWidget {
     final pickedCount = roster.where((s) => s.status == 'picked').length;
     final droppedCount = roster.where((s) => s.status == 'dropped').length;
     final absentCount = roster.where((s) => s.status == 'absent').length;
-    final handledCount = pickedCount + droppedCount + absentCount;
+    // A picked student is still on the bus; only off-the-bus counts as done.
+    final handledCount = droppedCount + absentCount;
     final primaryTarget = target ?? roster.first;
 
     return Column(
@@ -301,35 +302,38 @@ class NextStudentTripActionCard extends StatelessWidget {
   bool get _hasTripActions =>
       onChat != null || onStudents != null || onNotify != null;
 
+  /// Only actions the viewer may use are shown; a guardian gets Chat alone
+  /// rather than greyed-out driver buttons.
   Widget _buildTripActions({bool compact = false}) {
+    final buttons = [
+      if (onChat != null)
+        _TripActionButton(
+          icon: Icons.chat_bubble_outline,
+          label: 'Chat',
+          onPressed: onChat,
+          compact: compact,
+        ),
+      if (onStudents != null)
+        _TripActionButton(
+          icon: Icons.people_outline,
+          label: 'Students',
+          onPressed: onStudents,
+          compact: compact,
+        ),
+      if (onNotify != null)
+        _TripActionButton(
+          icon: Icons.notifications_none,
+          label: 'Notify',
+          onPressed: onNotify,
+          compact: compact,
+        ),
+    ];
     return Row(
       children: [
-        Expanded(
-          child: _TripActionButton(
-            icon: Icons.chat_bubble_outline,
-            label: 'Chat',
-            onPressed: onChat,
-            compact: compact,
-          ),
-        ),
-        AppSpacing.hXs,
-        Expanded(
-          child: _TripActionButton(
-            icon: Icons.people_outline,
-            label: 'Students',
-            onPressed: onStudents,
-            compact: compact,
-          ),
-        ),
-        AppSpacing.hXs,
-        Expanded(
-          child: _TripActionButton(
-            icon: Icons.notifications_none,
-            label: 'Notify',
-            onPressed: onNotify,
-            compact: compact,
-          ),
-        ),
+        for (var i = 0; i < buttons.length; i++) ...[
+          if (i > 0) AppSpacing.hXs,
+          Expanded(child: buttons[i]),
+        ],
       ],
     );
   }
@@ -678,8 +682,13 @@ class _StudentTripActionRow extends StatelessWidget {
           header,
           SizedBox(height: compact ? AppSpacing.xs : 10),
           distance,
-          SizedBox(height: compact ? 10 : AppSpacing.sm),
-          actions,
+          // View-only (e.g. a guardian): no buttons rather than dead ones.
+          if (onPickedUp != null ||
+              onDroppedOff != null ||
+              onAbsent != null) ...[
+            SizedBox(height: compact ? 10 : AppSpacing.sm),
+            actions,
+          ],
         ],
       ),
     );

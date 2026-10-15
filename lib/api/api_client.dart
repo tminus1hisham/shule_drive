@@ -1,4 +1,6 @@
 import 'dart:async';
+// api_exceptions' TimeoutException shadows dart:async's; name the real one.
+import 'dart:async' as dart_async show TimeoutException;
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -120,14 +122,22 @@ class ApiClient {
   dynamic _handleResponse(http.Response response) {
     final statusCode = response.statusCode;
 
-    debugPrint(
-      '📥 API Response: status=$statusCode, body=${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '📥 API Response: status=$statusCode, body=${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
+      );
+    }
 
     // Handle empty response body
     if (response.body.isEmpty) {
       if (statusCode >= 200 && statusCode < 300) {
         return {}; // Return empty map for successful empty responses
+      } else if (statusCode == HttpStatus.forbidden) {
+        // The server's role checks answer 403 with no body.
+        throw ForbiddenException(
+          message:
+              "You don't have permission to do this. Ask your school admin.",
+        );
       } else {
         throw ServerException(
           message: 'Server returned empty response (status: $statusCode)',
@@ -218,8 +228,9 @@ class ApiClient {
   Exception _handleException(dynamic error, {String? endpoint}) {
     if (error is SocketException) {
       return NetworkException();
-    } else if (error is TimeoutException) {
-      // Client-side timeout (Flutter app timed out waiting for server)
+    } else if (error is dart_async.TimeoutException) {
+      // Client-side timeout from .timeout(): without this the raw
+      // "TimeoutException after 0:00:30…" text reached the user.
       return TimeoutException();
     } else if (error is ApiException) {
       return error;
@@ -284,9 +295,14 @@ class ApiClient {
       final uri = Uri.parse('$baseUrl$endpoint');
       final headers = await _getHeaders(requiresAuth: requiresAuth);
 
-      // Debug logging (remove in production)
-      debugPrint('API Request: POST $uri');
-      debugPrint('Request Body: $body');
+      // debugPrint also prints in release builds; bodies carry passwords
+      // and tokens, so log them in debug only and never the password.
+      if (kDebugMode) {
+        debugPrint('API Request: POST $uri');
+        debugPrint(
+          'Request Body: ${body?.map((k, v) => MapEntry(k, k.toLowerCase().contains('password') ? '***' : v))}',
+        );
+      }
 
       final response = await _client
           .post(
@@ -298,8 +314,10 @@ class ApiClient {
             const Duration(milliseconds: ApiConstants.connectionTimeout),
           );
 
-      debugPrint('Response Status: ${response.statusCode}');
-      debugPrint('Response Body: ${response.body}');
+      if (kDebugMode) {
+        debugPrint('Response Status: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body}');
+      }
 
       return _handleResponse(response);
     } catch (e) {

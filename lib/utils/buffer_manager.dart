@@ -59,10 +59,13 @@ class BufferManager {
     }
   }
 
-  /// Get data from buffer
+  /// Get data from buffer. Typed data (e.g. `List<MasterTrip>`) is stored as
+  /// JSON, so reading it back from disk needs [decode]; without it only
+  /// String / `List<String>` / `List<dynamic>` survive an app restart.
   Future<T?> getBuffer<T>({
     required String key,
     bool checkExpiry = true,
+    T Function(dynamic json)? decode,
   }) async {
     await init();
 
@@ -114,6 +117,18 @@ class BufferManager {
               return data as T?;
             } catch (e) {
               debugPrint('BufferManager: Failed to parse JSON for key: $key');
+            }
+          }
+        } else if (decode != null) {
+          final jsonString = _prefs?.getString('buffer_$key');
+          if (jsonString != null) {
+            try {
+              final data = decode(jsonDecode(jsonString));
+              _memoryCache[key] = data;
+              if (expiry != null) _cacheTimestamps[key] = expiry;
+              return data;
+            } catch (e) {
+              debugPrint('BufferManager: Failed to decode $T for key: $key');
             }
           }
         } else {

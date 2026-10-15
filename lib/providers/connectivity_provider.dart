@@ -16,12 +16,17 @@ class ConnectivityProvider extends ChangeNotifier {
   List<ConnectivityResult> _connectionStatus = [ConnectivityResult.none];
   bool _isOnline = false;
   bool _isSyncing = false;
+  bool _hasChecked = false;
   
   // Getters
   List<ConnectivityResult> get connectionStatus => _connectionStatus;
   bool get isOnline => _isOnline;
   bool get isOffline => !_isOnline;
   bool get isSyncing => _isSyncing;
+
+  /// Offline after the first real check; avoids flashing the offline prompt
+  /// before connectivity is known.
+  bool get showOfflinePrompt => _hasChecked && !_isOnline;
   
   // Connection type info - check if any connection matches
   bool get isWifi => _connectionStatus.contains(ConnectivityResult.wifi);
@@ -50,6 +55,7 @@ class ConnectivityProvider extends ChangeNotifier {
   /// Update connection status
   Future<void> _updateConnectionStatus(List<ConnectivityResult> results) async {
     _connectionStatus = results;
+    _hasChecked = true;
     
     // Check if we have any connection (not just none)
     final hasConnection = results.isNotEmpty && 

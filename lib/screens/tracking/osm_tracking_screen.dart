@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:provider/provider.dart';
 import '../../config/map_config.dart';
+import '../../mqtt_client.dart' show MqttService;
 import '../../services/mapbox_service.dart';
 import '../../api/services/student_service.dart' as student_api;
 import '../../api/services/trip_service.dart';
@@ -13,13 +15,15 @@ import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/trip_provider.dart';
+import '../../services/guardian_trip_notification_service.dart';
 import '../../utils/student_trip_logic.dart';
+import '../../utils/location_settings.dart';
 import '../../widgets/add_trip_student_sheet.dart';
+import '../../widgets/main_scaffold.dart' show openDriverChat;
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
 import '../../widgets/next_student_trip_action_card.dart';
 import '../../widgets/ui/ui.dart';
-
 
 /// Mapbox Tracking Screen - Real-time trip tracking with Mapbox native SDK
 ///
@@ -67,6 +71,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   geo.Position? _currentPosition;
   geo.Position? _previousPosition;
   StreamSubscription<geo.Position>? _positionStream;
+  StreamSubscription<GuardianStudentStatusEvent>? _guardianStatusSub;
+
+  /// Guardians follow the bus over MQTT instead of their own GPS.
+  String? _busTopic;
+  DateTime? _lastLocationPublish;
 
   // Animation for smooth bus movement
   late AnimationController _animationController;
@@ -132,7 +141,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     )..addListener(_onAnimationUpdate);
 
     final auth = context.read<AuthProvider>();
-    if (!auth.isDriver) _guardianPhone = auth.userPhone ?? '';
+    if (!auth.isDriver) {
+      _guardianPhone = auth.userPhone ?? '';
+      // A guardian's TripProvider only refreshes on its dashboard poll, so
+      // apply the driver's live pick/drop/absent events here directly.
+      _guardianStatusSub = GuardianTripNotificationService().updates.listen(
+        _onGuardianStatusEvent,
+      );
+    }
 
     _initializeMapbox();
     _loadPreloadedData();
@@ -140,10 +156,12 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       if (!mounted) return;
       _tripProvider = context.read<TripProvider>();
       _tripProvider?.addListener(_onTripProviderChanged);
+      // GPS doesn't depend on the roster; don't queue it behind a network
+      // fallback (_loadProviderTripData may fetch the master trip).
+      unawaited(_initializeLocation());
       await _loadProviderTripData();
       _syncRosterToProvider();
       _onTripProviderChanged();
-      await _initializeLocation();
       _loadTripData();
     });
   }
@@ -151,9 +169,14 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   @override
   void dispose() {
     _tripProvider?.removeListener(_onTripProviderChanged);
+    _guardianStatusSub?.cancel();
     _animationController.stop();
     _animationController.dispose();
     _positionStream?.cancel();
+    final busTopic = _busTopic;
+    if (busTopic != null) {
+      MqttService().unsubscribe(busTopic, _onBusLocationMessage);
+    }
     _hasPendingBusUpdate = false;
     _busAnnotation = null;
     _pointAnnotationManager = null;
@@ -162,6 +185,15 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     _mapboxMap = null;
     // MapWidget owns the MapboxMap and disposes it with its platform view.
     super.dispose();
+  }
+
+  void _onGuardianStatusEvent(GuardianStudentStatusEvent event) {
+    final id = int.tryParse(event.studentId);
+    final tripId = event.tripId;
+    if (!mounted || id == null) return;
+    if (tripId != null && tripId.isNotEmpty && tripId != _activeTripId) return;
+    setState(() => _studentStatusUpdates[id] = event.status);
+    _updateMarkers();
   }
 
   /// Mirror status changes made elsewhere (e.g. picks on the students-list
@@ -202,17 +234,29 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     );
   }
 
+  // Run rows (the resume path's _trip) carry a blank direction; fall through
+  // so a fresh start and a resume agree.
   String? get _tripDirection =>
-      _trip?.tripDirection ?? _preloadedData?.masterTrip.tripDirection;
+      _nonEmpty(_trip?.tripDirection) ??
+      _nonEmpty(_preloadedData?.masterTrip.tripDirection) ??
+      _nonEmpty(_providerTrip?.tripDirection);
 
   String? get _activeTripId {
     final id = widget.tripId ?? _trip?.id ?? _tripProvider?.activeTrip?.id;
     return id == null || id.trim().isEmpty ? null : id;
   }
 
+  /// The provider's copy of this trip. After an app restart it is restored
+  /// before this screen fetches its own, so labels can use it meanwhile.
+  Trip? get _providerTrip {
+    final trip = _tripProvider?.activeTrip;
+    return trip != null && trip.id == _activeTripId ? trip : null;
+  }
+
   String get _routeName =>
       _trip?.routeName ??
       _preloadedData?.masterTrip.tripName ??
+      _nonEmpty(_providerTrip?.routeName) ??
       _preloadedData?.masterTrip.route ??
       'Live Tracking';
 
@@ -220,7 +264,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     final vehicleNumber =
         _trip?.vehicleNumber ??
         _preloadedData?.vehicle?.registrationNumber ??
-        _preloadedData?.masterTrip.numberPlate;
+        _preloadedData?.masterTrip.numberPlate ??
+        _providerTrip?.vehicleNumber;
     if (vehicleNumber != null && vehicleNumber.isNotEmpty) {
       return vehicleNumber;
     }
@@ -233,7 +278,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   String? get _numberPlate =>
       _trip?.vehicleNumber ??
       _preloadedData?.vehicle?.registrationNumber ??
-      _preloadedData?.masterTrip.numberPlate;
+      _preloadedData?.masterTrip.numberPlate ??
+      _providerTrip?.vehicleNumber;
+
+  static String? _nonEmpty(String? v) => v == null || v.isEmpty ? null : v;
 
   int? get _resolvedMasterTripId {
     return _trip?.masterTripId ??
@@ -369,6 +417,11 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   Future<void> _initializeLocation() async {
+    // A guardian's phone is not on the bus: show where the driver is.
+    if (_guardianPhone != null) {
+      _followBusOverMqtt();
+      return;
+    }
     try {
       bool serviceEnabled = await geo.Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -382,36 +435,111 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           await geo.Geolocator.checkPermission();
       if (permission == geo.LocationPermission.denied) {
         permission = await geo.Geolocator.requestPermission();
-        if (permission == geo.LocationPermission.denied) {
-          setState(() {
-            _errorMessage = 'Location permissions denied';
-          });
-          return;
-        }
+      }
+      if (permission == geo.LocationPermission.denied ||
+          permission == geo.LocationPermission.deniedForever) {
+        setState(() {
+          _errorMessage = 'Location permissions denied';
+        });
+        return;
       }
 
-      final position = await geo.Geolocator.getCurrentPosition();
-      setState(() {
-        _currentPosition = position;
-        _previousPosition = position;
-      });
-      await _updateDriverMarker();
-      _maybeShowNextStudentProximityPrompt();
-      _followBusCamera(position);
-
+      // Subscribe first: awaiting a fresh fix (getCurrentPosition has no
+      // time limit) left the stream unsubscribed, so the bus never moved or
+      // published when GPS was slow to lock.
       _positionStream = geo.Geolocator.getPositionStream(
-        locationSettings: const geo.LocationSettings(
-          accuracy: geo.LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      ).listen(_onLocationUpdate);
+        locationSettings: driverLocationSettings(),
+      ).listen(
+        _onLocationUpdate,
+        onError: (Object e) => debugPrint('📍 GPS stream error: $e'),
+      );
+      final last = await geo.Geolocator.getLastKnownPosition();
+      if (last != null && _currentPosition == null) _onLocationUpdate(last);
     } catch (e) {
-      developer.log('Location init error: $e', name: 'TrackingScreen');
+      debugPrint('📍 Location init error: $e');
     }
+  }
+
+  /// Subscribe to the driver's published GPS. The plate can arrive after
+  /// the first call (trip still loading), so this is retried from
+  /// [_loadTripData].
+  void _followBusOverMqtt() {
+    final plate = _numberPlate;
+    if (_busTopic != null || plate == null || plate.isEmpty) return;
+    _busTopic = 'driver/$plate/location';
+    MqttService().subscribe(_busTopic!, _onBusLocationMessage).catchError((e) {
+      developer.log(
+        'Bus location subscribe failed: $e',
+        name: 'TrackingScreen',
+      );
+    });
+  }
+
+  void _onBusLocationMessage(String topic, String message) {
+    try {
+      final data = jsonDecode(message) as Map<String, dynamic>;
+      final tripId = data['tripId']?.toString();
+      if (tripId != null && tripId.isNotEmpty && tripId != _activeTripId) {
+        return; // the same bus on another run
+      }
+      final position = geo.Position(
+        latitude: (data['latitude'] as num).toDouble(),
+        longitude: (data['longitude'] as num).toDouble(),
+        timestamp:
+            DateTime.tryParse(data['timestamp']?.toString() ?? '') ??
+            DateTime.now(),
+        accuracy: 0,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: (data['heading'] as num?)?.toDouble() ?? 0,
+        headingAccuracy: 0,
+        // Published in km/h.
+        speed: ((data['speed'] as num?)?.toDouble() ?? 0) / 3.6,
+        speedAccuracy: 0,
+      );
+      if (_currentPosition == null) {
+        setState(() {
+          _currentPosition = position;
+          _previousPosition = position;
+        });
+        _updateDriverMarker();
+        _followBusCamera(position);
+      } else {
+        _onLocationUpdate(position);
+      }
+    } catch (e) {
+      developer.log('Bad bus location: $e', name: 'TrackingScreen');
+    }
+  }
+
+  /// Driver only: share the bus position with guardians, at most every 5 s.
+  void _publishBusLocation(geo.Position position) {
+    final plate = _numberPlate;
+    final now = DateTime.now();
+    if (_guardianPhone != null || plate == null || plate.isEmpty) return;
+    if (_lastLocationPublish != null &&
+        now.difference(_lastLocationPublish!) < const Duration(seconds: 5)) {
+      return;
+    }
+    final mqtt = MqttService();
+    if (!mqtt.isConnected) return;
+    _lastLocationPublish = now;
+    mqtt
+        .publishJson('driver/$plate/location', {
+          'busId': plate,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'heading': position.heading,
+          'speed': position.speed * 3.6,
+          'timestamp': now.toUtc().toIso8601String(),
+          'tripId': _activeTripId,
+        })
+        .catchError((_) {});
   }
 
   void _onLocationUpdate(geo.Position position) {
     if (!mounted) return;
+    _publishBusLocation(position);
 
     setState(() {
       _previousPosition = _currentPosition ?? position;
@@ -655,6 +783,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
           _errorMessage = null;
           _isLoading = false;
         });
+        if (_guardianPhone != null) _followBusOverMqtt();
         if (fetchedStudents.isEmpty) {
           await _loadMasterTripStudentsFallback(_resolvedMasterTripId);
         }
@@ -855,16 +984,13 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     if (!mounted || manager == null) return;
     if (student.latitude == 0 && student.longitude == 0) return;
 
-    String emoji;
-    if (student.isStudentDropped) {
-      emoji = '🏠';
-    } else if (student.isStudentPicked) {
-      emoji = '✅';
-    } else if (!student.isStudentActive) {
-      emoji = '❌';
-    } else {
-      emoji = '👤';
-    }
+    // Live status (picks made this session), not the roster's load-time flags.
+    final emoji = switch (_getStudentStatus(student)) {
+      'dropped' => '🏠',
+      'picked' => '✅',
+      'absent' => '❌',
+      _ => '👤',
+    };
 
     await manager.create(
       PointAnnotationOptions(
@@ -887,11 +1013,12 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   /// Nearest student still needing an action (list order when GPS or their
-  /// coordinates are unknown). Return trips: picked students to drop.
-  /// Otherwise: waiting students to pick, then picked ones.
+  /// coordinates are unknown). Return trips: picked students to drop, then
+  /// any still waiting to board at school. Otherwise: waiting students to
+  /// pick, then picked ones.
   TripStudent? _nextActionableStudent() {
     final statuses = isReturnTripDirection(_tripDirection)
-        ? const ['picked']
+        ? const ['picked', 'pending']
         : const ['pending', 'picked'];
     for (final status in statuses) {
       final candidates = _students
@@ -903,11 +1030,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     return null;
   }
 
+  /// The action follows the student's status, not the trip direction: on a
+  /// return trip a student who hasn't boarded yet still needs picking (or
+  /// marking absent) before they can be dropped.
   StudentTripActionMode _actionModeForStudent(TripStudent student) {
-    if (isReturnTripDirection(_tripDirection)) {
-      return StudentTripActionMode.dropoff;
-    }
-
     return _getStudentStatus(student) == 'picked'
         ? StudentTripActionMode.dropoff
         : StudentTripActionMode.pickup;
@@ -999,6 +1125,8 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     if (!mounted || _isUpdatingStudentStatus || _currentPosition == null) {
       return;
     }
+    // Guardians watch; only the driver acts on students.
+    if (_guardianPhone != null) return;
 
     final student = _nextActionableStudent();
     if (student == null) return;
@@ -1115,7 +1243,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
   Future<void> _updateStudentStatus(TripStudent student, String status) async {
     final tripId = _activeTripId;
-    if (tripId == null || _isUpdatingStudentStatus) return;
+    // Every pick/drop/absent button on this screen lands here; guardians
+    // view the same screen and must never change a student's status.
+    if (tripId == null || _isUpdatingStudentStatus || _guardianPhone != null) {
+      return;
+    }
+    // Absent alerts the guardian immediately and has no undo endpoint.
+    if (status == 'absent' &&
+        !await confirmAbsent(context, student.fullname)) {
+      return;
+    }
+    if (!mounted) return;
 
     setState(() {
       _isUpdatingStudentStatus = true;
@@ -1150,7 +1288,10 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
 
       if (!mounted) return;
       final message = '${student.fullname} ${_statusMessage(status)}';
-      if (status == 'absent') {
+      final notice = tripProvider.statusNotice;
+      if (notice != null) {
+        AppSnackbar.info(context, notice);
+      } else if (status == 'absent') {
         AppSnackbar.info(context, message);
       } else {
         AppSnackbar.success(context, message);
@@ -1293,13 +1434,18 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       id: student.id,
       masterTripId: masterTripId,
       name: student.name,
-      parentPhone: phone,
+      // The server's copy, so later picks send what the server stored.
+      parentPhone: added.guardianPhoneNumber.isNotEmpty
+          ? added.guardianPhoneNumber
+          : phone,
       route: _routeName,
       latitude: position.latitude,
       longitude: position.longitude,
       status: 'pending',
       photo: student.photo,
-      studentRegNumber: student.studentRegNumber,
+      studentRegNumber: added.studentRegNumber.isNotEmpty
+          ? added.studentRegNumber
+          : student.studentRegNumber,
       className: student.className,
       schoolName: student.schoolName,
     );
@@ -1329,6 +1475,17 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
   }
 
   void _openTripChat() {
+    // A guardian's roster is only their own children, so the group below
+    // would fan out to their own inbox. They talk to the driver instead.
+    if (_guardianPhone != null) {
+      final trip = [_providerTrip, _trip]
+          .whereType<Trip>()
+          .where((t) => t.driverPhone != null)
+          .firstOrNull;
+      if (trip != null) return openDriverChat(context, trip);
+      AppSnackbar.info(context, "The driver's contact isn't available yet");
+      return;
+    }
     final tripId = widget.tripId;
     Navigator.pushNamed(
       context,
@@ -1339,6 +1496,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
         'receiverName': _routeName,
         'receiverRole': 'Group',
         'isTripChat': true,
+        'memberPhones': _guardianPhones(),
       },
     );
   }
@@ -1357,9 +1515,24 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
       builder: (context) {
         final c = context.colors;
         final options = [
-          (Icons.schedule_rounded, 'Running Late', 'Running late', c.warning),
-          (Icons.traffic_rounded, 'Traffic Delay', 'Traffic delay', c.accent),
-          (Icons.check_circle_rounded, 'On Schedule', 'On schedule', c.brand),
+          (
+            Icons.schedule_rounded,
+            'Running Late',
+            'The bus is running late.',
+            c.warning,
+          ),
+          (
+            Icons.traffic_rounded,
+            'Traffic Delay',
+            'Traffic is delaying the trip.',
+            c.accent,
+          ),
+          (
+            Icons.check_circle_rounded,
+            'On Schedule',
+            'The bus is on schedule.',
+            c.brand,
+          ),
         ];
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -1377,7 +1550,7 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
                 iconColor: o.$4,
                 onTap: () {
                   Navigator.pop(context);
-                  _showNotificationSent(o.$3);
+                  _alertGuardians(o.$2, o.$3);
                 },
               ).enterList(i),
           ],
@@ -1386,17 +1559,25 @@ class _OsmTrackingScreenState extends State<OsmTrackingScreen>
     );
   }
 
-  void _showNotificationSent(String label) {
-    final guardians = _students
-        .map((s) => s.guardianPhoneNumber)
-        .where((phone) => phone.isNotEmpty)
-        .toSet()
-        .length;
+  List<String> _guardianPhones() => _students
+      .map((s) => s.guardianPhoneNumber)
+      .where((phone) => phone.isNotEmpty)
+      .toSet()
+      .toList();
 
-    AppSnackbar.success(
-      context,
-      '$label notification sent to $guardians guardians',
+  Future<void> _alertGuardians(String label, String message) async {
+    final sent = await context.read<TripProvider>().alertGuardians(
+      phones: _guardianPhones(),
+      title: '🚌 $label',
+      message: '$message ($_routeName)',
+      tripId: _activeTripId,
     );
+    if (!mounted) return;
+    if (sent == 0) {
+      AppSnackbar.info(context, 'No guardian contacts on this trip');
+    } else {
+      AppSnackbar.success(context, '$label sent to $sent guardians');
+    }
   }
 
   void _showTripCompletionError(String? message) {

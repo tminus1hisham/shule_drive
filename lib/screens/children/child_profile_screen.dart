@@ -236,7 +236,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
       title: 'Child Profile',
       showBackButton: true,
       showBottomNav: true,
-      bottomNavIndex: 3,
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop()),
@@ -408,12 +407,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
             ],
           ),
         ).enterList(2),
-        AppSpacing.vXl,
-
-        AppButton(
-          label: 'Save Changes',
-          onPressed: () => Navigator.pop(context),
-        ).enterList(3),
         AppSpacing.vLg,
       ],
     );

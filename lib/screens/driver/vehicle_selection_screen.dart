@@ -6,7 +6,10 @@ import '../../widgets/ui/ui.dart';
 import 'package:flutter/services.dart';
 import '../../models/master_trip.dart';
 import '../../models/preloaded_trip_data.dart';
+import 'package:provider/provider.dart';
 import '../../api/services/bus_service.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/trip_history_service.dart';
 import '../../widgets/main_scaffold.dart';
 
 /// Vehicle Selection Screen
@@ -45,6 +48,22 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
     _loadVehicles();
   }
 
+  /// Plate of the most recent run of this master trip in the driver's history.
+  Future<String?> _lastRunPlate() async {
+    final tripId = widget.masterTrip?.id;
+    final driverId = context.read<AuthProvider>().currentUser?.id;
+    if (tripId == null || driverId == null) return null;
+    final runs = (await TripHistoryService().getCachedDriverTripHistory(
+      driverId,
+    )).map((h) => h.trip).where(
+      (t) => t.masterTripId == tripId && (t.vehicleNumber ?? '').isNotEmpty,
+    );
+    if (runs.isEmpty) return null;
+    return runs
+        .reduce((a, b) => a.startTime.isAfter(b.startTime) ? a : b)
+        .vehicleNumber;
+  }
+
   Future<void> _loadVehicles() async {
     setState(() {
       _isLoading = true;
@@ -56,6 +75,11 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
       debugPrint('🚗 VehicleSelection: Fetching driver assigned vehicles');
 
       final buses = await busService.getBusesByUser();
+      // The server's master-trip record has no plate; fall back to the bus
+      // this trip last ran with. That's only a guess, so the driver confirms.
+      final assignedPlate = widget.masterTrip?.numberPlate;
+      final plate = assignedPlate ?? await _lastRunPlate();
+      final guessed = assignedPlate == null && plate != null;
 
       if (mounted) {
         debugPrint('🚗 VehicleSelection: Final vehicle count: ${buses.length}');
@@ -63,24 +87,18 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
           _vehicles = buses;
           _isLoading = false;
 
-          // Pre-select if master trip has a vehicle assigned
-          if (widget.masterTrip?.numberPlate != null && buses.isNotEmpty) {
-            try {
-              _selectedVehicle = buses.firstWhere(
-                (v) =>
-                    v.registrationNumber.toLowerCase() ==
-                    widget.masterTrip!.numberPlate!.toLowerCase(),
-              );
-              debugPrint(
-                '🚗 Pre-selected vehicle: ${_selectedVehicle?.registrationNumber}',
-              );
-            } catch (e) {
-              // No matching vehicle found
-              _selectedVehicle = null;
-              debugPrint(
-                '🚗 No matching vehicle found for: ${widget.masterTrip?.numberPlate}',
-              );
-            }
+          if (plate != null) {
+            _selectedVehicle = buses
+                .where(
+                  (v) =>
+                      v.registrationNumber.toLowerCase() ==
+                      plate.toLowerCase(),
+                )
+                .firstOrNull;
+            debugPrint(
+              '🚗 Pre-selected vehicle for $plate: '
+              '${_selectedVehicle?.registrationNumber ?? 'none matched'}',
+            );
           }
 
           // If there is only one vehicle and none was selected by master trip, select it
@@ -92,8 +110,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
           }
         });
 
-        // Auto-advance if a vehicle is already selected
-        if (_selectedVehicle != null) {
+        // Auto-advance if a vehicle is already selected (not on a guess)
+        if (_selectedVehicle != null && !(guessed && buses.length > 1)) {
           // Add a small delay for visualization
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) _onConfirm();

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/services/user_service.dart';
+import '../../services/guardian_trip_notification_service.dart';
 
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme_extension.dart';
@@ -59,6 +60,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _error;
   List<NotificationItem> _notifications = [];
   final UserService _userService = UserService();
+  static const _localPrefix = 'local_';
 
   List<NotificationItem> get filteredNotifications {
     if (_tab == 0) return _notifications;
@@ -84,27 +86,49 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     try {
-      // Fetch real notifications from API
+      // The service answers failures with [] (or a stale cache); without
+      // this flag a 403 looked like "No notifications yet".
+      var loadFailed = false;
       final apiNotifications = await _userService.getNotifications(
         page: 1,
         limit: 50,
+        onFallback: () => loadFailed = true,
       );
+      // Trip alerts this device received live (the server list 403s for
+      // guardians). Opening the screen clears the Alerts badge.
+      final alerts = GuardianTripNotificationService();
+      final localAlerts = await alerts.alertHistory();
+      unawaited(alerts.markAlertsRead());
+      if (loadFailed && apiNotifications.isEmpty && localAlerts.isEmpty) {
+        throw Exception("Couldn't reach the server");
+      }
 
       // Convert API notifications to UI notification items
-      final notifications = apiNotifications
-          .map(
-            (n) => NotificationItem(
-              id: n.id,
-              title: n.title,
-              message: n.body,
-              timestamp: n.createdAt,
-              type: _mapNotificationType(n.type),
-              isRead: n.isRead,
-              actionRoute: n.tripId != null ? '/trips' : null,
-              actionData: n.tripId != null ? {'tripId': n.tripId} : null,
-            ),
-          )
-          .toList();
+      final notifications = [
+        ...apiNotifications.map(
+          (n) => NotificationItem(
+            id: n.id,
+            title: n.title,
+            message: n.body,
+            timestamp: n.createdAt,
+            type: _mapNotificationType(n.type),
+            isRead: n.isRead,
+            actionRoute: n.tripId != null ? '/trips' : null,
+            actionData: n.tripId != null ? {'tripId': n.tripId} : null,
+          ),
+        ),
+        for (final (i, a) in localAlerts.indexed)
+          NotificationItem(
+            id: '$_localPrefix$i',
+            title: a['title']?.toString() ?? '',
+            message: a['body']?.toString() ?? '',
+            timestamp:
+                DateTime.tryParse(a['at']?.toString() ?? '') ?? DateTime.now(),
+            type: NotificationType.trip,
+            isRead: a['read'] == true,
+            actionRoute: '/trips',
+          ),
+      ]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       if (mounted) {
         setState(() {
@@ -171,7 +195,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
     });
 
-    // Call API to mark as read
+    // Device-side alerts have no server record (marked read on open).
+    if (id.startsWith(_localPrefix)) return;
     try {
       await _userService.markNotificationRead(id);
     } catch (e) {
